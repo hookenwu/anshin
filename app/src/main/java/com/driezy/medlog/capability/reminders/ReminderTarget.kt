@@ -12,23 +12,16 @@ package com.driezy.medlog.capability.reminders
  *
  * 后两种都由重排流程作废并重建，因此不需要数据迁移（见 `AlarmScheduler.retireLegacyProjections`）。
  */
-data class ReminderTarget(
-    val recipientId: Long,
-    val type: ReminderTargetType,
-    val id: Long,
-) {
+data class ReminderTarget(val recipientId: Long, val type: ReminderTargetType, val id: Long) {
     /** 登记项序列化：`<recipientId>:<type>:<id>`。 */
     fun serialize(): String = "$recipientId:${type.key}:$id"
 
     /** 该目标第 [slotIndex] 个时间槽的 requestCode（用药沿用改造前的取值）。 */
-    fun slotRequestCode(slotIndex: Int): Int =
-        type.codeBase + (id * SLOT_STRIDE).toInt() + slotIndex
+    fun slotRequestCode(slotIndex: Int): Int = type.codeBase + (id * SLOT_STRIDE).toInt() + slotIndex
 
-    fun earlyReminderRequestCode(slotIndex: Int): Int =
-        slotRequestCode(slotIndex) + EARLY_REMINDER_CODE_OFFSET
+    fun earlyReminderRequestCode(slotIndex: Int): Int = slotRequestCode(slotIndex) + EARLY_REMINDER_CODE_OFFSET
 
-    fun followUpRequestCode(slotIndex: Int): Int =
-        slotRequestCode(slotIndex) + FOLLOW_UP_CODE_OFFSET
+    fun followUpRequestCode(slotIndex: Int): Int = slotRequestCode(slotIndex) + FOLLOW_UP_CODE_OFFSET
 
     companion object {
         /** 单个目标可占用的 requestCode 数量（100 个时间槽）。 */
