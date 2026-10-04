@@ -133,7 +133,7 @@ class AlarmScheduler @Inject constructor(
      * 在每次触发后调度下一次时使用。
      */
     fun scheduleAlarmSlot(medication: Medication, timeIndex: Int, triggerAtMs: Long) {
-        registerProjection(medication.id, medication.careRecipientId)
+        registerProjection(medicationTarget(medication))
         val requestCode = (medication.id * 100 + timeIndex).toInt()
         val intent = PendingIntent.getBroadcast(
             context,
@@ -205,20 +205,20 @@ class AlarmScheduler @Inject constructor(
         cancelEarlyReminderAlarms(medicationId)
         // 一并取消漏服再提醒闹钟
         cancelFollowUpAlarms(medicationId)
-        unregisterProjection(medicationId, recipientId)
+        unregisterProjection(ReminderTarget(recipientId, ReminderTargetType.MEDICATION, medicationId))
     }
 
     /**
-     * 只取消该成员已登记的闹钟，返回被取消的药品 id（供调用方同步清理通知）。
+     * 只取消该成员已登记的闹钟，返回被取消的目标（调用方据此按类型清理通知）。
      *
-     * 这是阶段 1 的关键改动：重排一位成员不再清掉其他成员的闹钟。
+     * 阶段 1 的关键改动：重排一位成员不再清掉其他成员的闹钟。
+     * 旧格式登记项（阶段 1 的 `<成员>:<药品>`、阶段 0 的裸 id）一并识别，不会漏掉残留闹钟。
      */
     @Synchronized
-    fun cancelAlarmsFor(recipientId: Long): Set<Long> {
-        val owned = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty()
-            .mapNotNull { entry -> entry.toOwnedMedication(recipientId) }
-        owned.forEach { medicationId -> cancelAllAlarms(medicationId, recipientId) }
-        return owned.toSet()
+    fun cancelAlarmsFor(recipientId: Long): List<ReminderTarget> {
+        val owned = registeredTargets().filter { it.recipientId == recipientId }
+        owned.forEach(::cancelTargetAlarms)
+        return owned
     }
 
     /**
@@ -226,43 +226,45 @@ class AlarmScheduler @Inject constructor(
      * 这些条目无法判定归属，且会被紧随其后的重排重新登记，因此一次性作废是安全的。
      */
     @Synchronized
-    fun cancelUnattributedAlarms(): Set<Long> {
-        val unattributed = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty()
-            .mapNotNull { entry -> entry.takeIf { ':' !in it }?.toLongOrNull() }
-        unattributed.forEach { medicationId ->
-            cancelAllAlarms(medicationId, ActiveRecipientStore.NO_RECIPIENT)
-        }
-        return unattributed.toSet()
+    fun cancelUnattributedAlarms(): List<ReminderTarget> {
+        val unattributed = registeredTargets()
+            .filter { it.recipientId == ActiveRecipientStore.NO_RECIPIENT }
+        unattributed.forEach(::cancelTargetAlarms)
+        return unattributed
     }
 
-    /** 全量清理（删除/导入/恢复等场景）：返回被取消的药品 id。 */
-    fun cancelAllKnownAlarms(): Set<Long> {
-        val entries = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet())
-            .orEmpty()
-        val owned = entries.mapNotNull { entry ->
-            val parts = entry.split(':')
-            when (parts.size) {
-                2 -> parts[0].toLongOrNull()?.let { recipientId -> recipientId to parts[1].toLongOrNull() }
-                else -> parts[0].toLongOrNull()?.let { medicationId ->
-                    ActiveRecipientStore.NO_RECIPIENT to medicationId
-                }
+    /** 全量清理（删除/导入/恢复等场景）：返回被取消的目标。 */
+    @Synchronized
+    fun cancelAllKnownAlarms(): List<ReminderTarget> {
+        val targets = registeredTargets()
+        targets.forEach(::cancelTargetAlarms)
+        return targets
+    }
+
+    /** 当前登记的全部目标；旧格式（阶段 1 的两段式、阶段 0 的裸 id）一并识别。 */
+    @Synchronized
+    private fun registeredTargets(): List<ReminderTarget> =
+        projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty()
+            .mapNotNull { entry ->
+                ReminderTarget.parse(entry)
+                    ?: ReminderTarget.parseLegacyRecipientKey(entry)
+                    ?: entry.toLongOrNull()?.let { id ->
+                        ReminderTarget(ActiveRecipientStore.NO_RECIPIENT, ReminderTargetType.MEDICATION, id)
+                    }
             }
-        }.mapNotNull { (recipientId, medicationId) ->
-            medicationId?.let { recipientId to it }
+
+    /** 取消某个目标的闹钟并撤销登记。 */
+    private fun cancelTargetAlarms(target: ReminderTarget) {
+        when (target.type) {
+            ReminderTargetType.MEDICATION -> cancelAllAlarms(target.id, target.recipientId)
+            // 照护事项的排期/取消在 T3 接入提醒通道时补齐
+            ReminderTargetType.CARE_TASK -> Unit
         }
-        val ids = owned.map { it.second }.toSet()
-        owned.forEach { (recipientId, medicationId) -> cancelAllAlarms(medicationId, recipientId) }
-        return ids
     }
 
-    /** 登记项 → 该成员名下的药品 id（`<recipientId>:<medicationId>`；旧格式仅归入"无成员"）。 */
-    private fun String.toOwnedMedication(recipientId: Long): Long? {
-        val parts = split(':')
-        return when (parts.size) {
-            2 -> parts[1].toLongOrNull()?.takeIf { parts[0].toLongOrNull() == recipientId }
-            else -> parts[0].toLongOrNull()?.takeIf { recipientId == ActiveRecipientStore.NO_RECIPIENT }
-        }
-    }
+    /** 药品的提醒目标。 */
+    private fun medicationTarget(medication: Medication) =
+        ReminderTarget(medication.careRecipientId, ReminderTargetType.MEDICATION, medication.id)
 
     /**
      * 取消某药品的所有提前预告闹钟。
@@ -311,23 +313,24 @@ class AlarmScheduler @Inject constructor(
     }
 
     @Synchronized
-    private fun registerProjection(medicationId: Long, recipientId: Long) {
+    private fun registerProjection(target: ReminderTarget) {
         val ids = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty().toMutableSet()
-        if (ids.add(projectionKey(recipientId, medicationId))) {
+        if (ids.add(target.serialize())) {
             projectionRegistry.edit { putStringSet(REGISTERED_MEDICATION_IDS, ids) }
         }
     }
 
     @Synchronized
-    private fun unregisterProjection(medicationId: Long, recipientId: Long) {
+    private fun unregisterProjection(target: ReminderTarget) {
         val ids = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty().toMutableSet()
-        if (ids.remove(projectionKey(recipientId, medicationId))) {
+        // 三种写法都清掉：本版三段式、阶段 1 两段式、阶段 0 裸 id
+        val removed = ids.remove(target.serialize()) or
+            ids.remove("${target.recipientId}:${target.id}") or
+            ids.remove(target.id.toString())
+        if (removed) {
             projectionRegistry.edit { putStringSet(REGISTERED_MEDICATION_IDS, ids) }
         }
     }
-
-    /** 登记项格式：`<recipientId>:<medicationId>`；阶段 0 的裸 id 由 [cancelUnattributedAlarms] 一次性作废。 */
-    private fun projectionKey(recipientId: Long, medicationId: Long): String = "$recipientId:$medicationId"
 
     /**
      * 调度漏服再提醒闹钟。
@@ -349,7 +352,7 @@ class AlarmScheduler @Inject constructor(
         delayMs: Long,
         triggerAtMs: Long,
     ) {
-        registerProjection(medication.id, medication.careRecipientId)
+        registerProjection(medicationTarget(medication))
         val requestCode = (medication.id * 100 + timeIndex).toInt() + FOLLOW_UP_CODE_OFFSET
         val intent = PendingIntent.getBroadcast(
             context,

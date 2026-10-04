@@ -105,7 +105,9 @@ class AndroidReminderReconcilerTest {
 
     @Test
     fun `full reconciliation removes projections for ids no longer in database`() = runTest {
-        whenever(alarms.cancelUnattributedAlarms()).thenReturn(setOf(91L))
+        whenever(alarms.cancelUnattributedAlarms()).thenReturn(
+            listOf(ReminderTarget(0L, ReminderTargetType.MEDICATION, 91L)),
+        )
         whenever(careRecipients.getRecipients()).thenReturn(emptyList())
 
         reconciler.reconcileAll(ReminderReconcileReason.DATA_RESTORED)

@@ -45,13 +45,12 @@ class AndroidReminderReconciler @Inject constructor(
     override suspend fun reconcileAll(reason: ReminderReconcileReason) {
         alarmScheduler.refreshRecipientCaches()
         // 阶段 0 遗留的、无法判定归属的登记项一次性作废（紧随其后的重排会重建）
-        alarmScheduler.cancelUnattributedAlarms().forEach(notificationHelper::cancelAllReminderNotifications)
+        alarmScheduler.cancelUnattributedAlarms().cancelNotifications()
         val recipientIds = careRecipients.getRecipients()
             .map { it.id }
             .ifEmpty { listOf(ActiveRecipientStore.NO_RECIPIENT) }
         recipientIds.forEach { recipientId ->
-            alarmScheduler.cancelAlarmsFor(recipientId)
-                .forEach(notificationHelper::cancelAllReminderNotifications)
+            alarmScheduler.cancelAlarmsFor(recipientId).cancelNotifications()
             // 用"含归档"的整份清单做清理：归档药品的残留通知也要收掉（改造前就是这么做的）
             medications.getAllMedicationsFor(recipientId).forEach { medication ->
                 notificationHelper.cancelAllReminderNotifications(medication.id)
@@ -61,6 +60,12 @@ class AndroidReminderReconciler @Inject constructor(
             }
         }
         widgetRefresher.refreshAll()
+    }
+
+    /** 被取消的目标里只有用药有通知要收；照护事项的通知在 T3 接入提醒通道时补齐。 */
+    private fun List<ReminderTarget>.cancelNotifications() {
+        filter { it.type == ReminderTargetType.MEDICATION }
+            .forEach { notificationHelper.cancelAllReminderNotifications(it.id) }
     }
 
     private suspend fun schedule(medication: com.driezy.medlog.data.model.Medication) {
