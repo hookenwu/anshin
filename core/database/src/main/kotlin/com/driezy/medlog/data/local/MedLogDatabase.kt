@@ -8,6 +8,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.driezy.medlog.data.model.AiAnalysisCacheEntry
 import com.driezy.medlog.data.model.AiUsageEvent
 import com.driezy.medlog.data.model.CareRecipient
+import com.driezy.medlog.data.model.CareTask
+import com.driezy.medlog.data.model.CareTaskLog
 import com.driezy.medlog.data.model.HealthRecord
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
@@ -17,6 +19,8 @@ import com.driezy.medlog.data.model.SymptomLog
 @Database(
     entities = [
         CareRecipient::class,
+        CareTask::class,
+        CareTaskLog::class,
         Medication::class,
         MedicationLog::class,
         MedicationPlanRevision::class,
@@ -31,6 +35,8 @@ import com.driezy.medlog.data.model.SymptomLog
 @TypeConverters(Converters::class)
 abstract class MedLogDatabase : RoomDatabase() {
     abstract fun careRecipientDao(): CareRecipientDao
+    abstract fun careTaskDao(): CareTaskDao
+    abstract fun careTaskLogDao(): CareTaskLogDao
     abstract fun medicationDao(): MedicationDao
     abstract fun medicationLogDao(): MedicationLogDao
     abstract fun symptomLogDao(): SymptomLogDao
@@ -41,6 +47,87 @@ abstract class MedLogDatabase : RoomDatabase() {
     companion object {
         /** 迁移兼容档案名：v18 及更早版本没有成员概念，历史数据统一归入该档案。 */
         private const val LEGACY_RECIPIENT_NAME = "本人"
+
+        /**
+         * v19 → v20：新增照护事项两张表（CareTask / CareTaskLog）。
+         *
+         * 纯新增，不改任何既有列：两表分别挂 CareRecipient / CareTask 外键（CASCADE），
+         * 日志唯一键 (careTaskId, scheduledTimeMs) 复用用药的防重方式。
+         */
+        val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `care_tasks` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `careRecipientId` INTEGER NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `category` TEXT NOT NULL,
+                        `completionMode` TEXT NOT NULL,
+                        `defaultDurationMinutes` INTEGER,
+                        `scheduleKind` TEXT NOT NULL,
+                        `timePeriods` TEXT NOT NULL,
+                        `reminderTimes` TEXT NOT NULL,
+                        `intervalHours` INTEGER NOT NULL,
+                        `frequencyType` TEXT NOT NULL,
+                        `frequencyInterval` INTEGER NOT NULL,
+                        `frequencyDays` TEXT NOT NULL,
+                        `startDate` INTEGER NOT NULL,
+                        `endDate` INTEGER,
+                        `notes` TEXT NOT NULL,
+                        `isArchived` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        FOREIGN KEY(`careRecipientId`) REFERENCES `care_recipients`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_tasks_careRecipientId` " +
+                        "ON `care_tasks` (`careRecipientId`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_tasks_isArchived` ON `care_tasks` (`isArchived`)",
+                )
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `care_task_logs` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `careTaskId` INTEGER NOT NULL,
+                        `scheduledTimeMs` INTEGER NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `actualStartMs` INTEGER,
+                        `actualEndMs` INTEGER,
+                        `actualDurationMinutes` INTEGER,
+                        `postureNote` TEXT,
+                        `notes` TEXT NOT NULL,
+                        `createdAtMs` INTEGER NOT NULL,
+                        `updatedAtMs` INTEGER,
+                        `revisionType` TEXT NOT NULL,
+                        FOREIGN KEY(`careTaskId`) REFERENCES `care_tasks`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_task_logs_careTaskId` " +
+                        "ON `care_task_logs` (`careTaskId`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_task_logs_scheduledTimeMs` " +
+                        "ON `care_task_logs` (`scheduledTimeMs`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_task_logs_revisionType` " +
+                        "ON `care_task_logs` (`revisionType`)",
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_care_task_logs_careTaskId_scheduledTimeMs` " +
+                        "ON `care_task_logs` (`careTaskId`, `scheduledTimeMs`)",
+                )
+            }
+        }
 
         /**
          * v18 → v19：引入一级实体 CareRecipient。

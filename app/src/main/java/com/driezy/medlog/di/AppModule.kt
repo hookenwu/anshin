@@ -29,6 +29,8 @@ import com.driezy.medlog.data.repository.AiPreferences
 import com.driezy.medlog.data.repository.AppearancePreferences
 import com.driezy.medlog.data.repository.CareRecipientRepository
 import com.driezy.medlog.data.repository.CareRecipientRepositoryImpl
+import com.driezy.medlog.data.repository.CareTaskRepository
+import com.driezy.medlog.data.repository.CareTaskRepositoryImpl
 import com.driezy.medlog.data.repository.DrugRepository
 import com.driezy.medlog.data.repository.DrugRepositoryImpl
 import com.driezy.medlog.data.repository.FeaturePreferences
@@ -92,6 +94,7 @@ object DatabaseModule {
             MedLogDatabase.MIGRATION_16_17,
             MedLogDatabase.MIGRATION_17_18,
             MedLogDatabase.MIGRATION_18_19,
+            MedLogDatabase.MIGRATION_19_20,
         )
         .build()
 
@@ -160,6 +163,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindCareRecipientRepository(impl: CareRecipientRepositoryImpl): CareRecipientRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCareTaskRepository(impl: CareTaskRepositoryImpl): CareTaskRepository
 
     @Binds
     @Singleton

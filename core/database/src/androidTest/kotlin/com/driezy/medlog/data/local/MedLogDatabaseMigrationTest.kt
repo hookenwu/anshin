@@ -47,6 +47,7 @@ class MedLogDatabaseMigrationTest {
             MedLogDatabase.MIGRATION_16_17,
             MedLogDatabase.MIGRATION_17_18,
             MedLogDatabase.MIGRATION_18_19,
+            MedLogDatabase.MIGRATION_19_20,
         ).use { database ->
             database.query("SELECT name, intervalHours, refillReminderDays FROM medications WHERE id = 1").use {
                 check(it.moveToFirst())
@@ -94,6 +95,7 @@ class MedLogDatabaseMigrationTest {
             MedLogDatabase.MIGRATION_16_17,
             MedLogDatabase.MIGRATION_17_18,
             MedLogDatabase.MIGRATION_18_19,
+            MedLogDatabase.MIGRATION_19_20,
         ).use { database ->
             database.query(
                 "SELECT id, type, value, secondaryValue, timestamp, notes FROM health_records WHERE id = 7",
@@ -134,6 +136,7 @@ class MedLogDatabaseMigrationTest {
             MedLogDatabase.MIGRATION_16_17,
             MedLogDatabase.MIGRATION_17_18,
             MedLogDatabase.MIGRATION_18_19,
+            MedLogDatabase.MIGRATION_19_20,
         ).use { database ->
             database.query(
                 "SELECT COUNT(*), MAX(id) FROM medication_logs WHERE medicationId = 42 AND scheduledTimeMs = 1717000000000",
@@ -229,6 +232,7 @@ class MedLogDatabaseMigrationTest {
             MedLogDatabase.MIGRATION_16_17,
             MedLogDatabase.MIGRATION_17_18,
             MedLogDatabase.MIGRATION_18_19,
+            MedLogDatabase.MIGRATION_19_20,
         ).use { database ->
             // 验证 5 条记录均被完整保留，无任何数据丢失
             database.query("SELECT COUNT(*) FROM health_records").use { cursor ->
