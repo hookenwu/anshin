@@ -49,7 +49,14 @@ class HealthRepositoryImpl @Inject constructor(
         },
     )
 
-    override suspend fun updateRecord(record: HealthRecord) = dao.update(record)
+    /**
+     * 编辑沿用原归属：调用方重建实体时可能没带 `careRecipientId`（默认 0），
+     * 这里以库中原行的归属为准，避免把记录改成"无归属"而从所有成员的视图里消失。
+     */
+    override suspend fun updateRecord(record: HealthRecord) {
+        val owner = dao.getById(record.id)?.careRecipientId ?: record.careRecipientId
+        dao.update(if (owner == record.careRecipientId) record else record.copy(careRecipientId = owner))
+    }
 
     override suspend fun deleteRecord(record: HealthRecord) = dao.delete(record)
 }

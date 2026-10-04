@@ -43,7 +43,11 @@ class SymptomRepositoryImpl @Inject constructor(
         },
     )
 
-    override suspend fun update(log: SymptomLog) = dao.update(log)
+    /** 编辑沿用原归属（同健康记录：避免调用方漏带 careRecipientId 时把行写成 0 而丢归属）。 */
+    override suspend fun update(log: SymptomLog) {
+        val owner = dao.getById(log.id)?.careRecipientId ?: log.careRecipientId
+        dao.update(if (owner == log.careRecipientId) log else log.copy(careRecipientId = owner))
+    }
 
     override suspend fun delete(log: SymptomLog) = dao.delete(log)
 
