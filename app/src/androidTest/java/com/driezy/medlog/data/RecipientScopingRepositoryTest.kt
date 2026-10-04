@@ -8,6 +8,7 @@ import com.driezy.medlog.data.local.MedLogDatabase
 import com.driezy.medlog.data.local.RoomTransactionRunner
 import com.driezy.medlog.data.model.HealthRecord
 import com.driezy.medlog.data.model.Medication
+import com.driezy.medlog.data.model.SymptomLog
 import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import com.driezy.medlog.data.repository.CareRecipientRepository
 import com.driezy.medlog.data.repository.CareRecipientRepositoryImpl
@@ -17,6 +18,8 @@ import com.driezy.medlog.data.repository.LogRepository
 import com.driezy.medlog.data.repository.LogRepositoryImpl
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.data.repository.MedicationRepositoryImpl
+import com.driezy.medlog.data.repository.SymptomRepository
+import com.driezy.medlog.data.repository.SymptomRepositoryImpl
 import com.driezy.medlog.data.repository.UserPreferencesRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -46,6 +49,7 @@ class RecipientScopingRepositoryTest {
     private lateinit var medications: MedicationRepository
     private lateinit var logs: LogRepository
     private lateinit var health: HealthRepository
+    private lateinit var symptoms: SymptomRepository
     private lateinit var recipients: CareRecipientRepository
 
     @Before
@@ -64,6 +68,7 @@ class RecipientScopingRepositoryTest {
         )
         logs = LogRepositoryImpl(database.medicationLogDao(), activeRecipient)
         health = HealthRepositoryImpl(database.healthRecordDao(), activeRecipient)
+        symptoms = SymptomRepositoryImpl(database.symptomLogDao(), activeRecipient)
         recipients = CareRecipientRepositoryImpl(
             database.careRecipientDao(),
             activeRecipient,
@@ -147,6 +152,66 @@ class RecipientScopingRepositoryTest {
         assertTrue(recipients.rename(dad, "老爸"))
         assertEquals(uuidBefore, recipients.getById(dad)!!.uuid)
         assertEquals("老爸", recipients.getById(dad)!!.displayName)
+    }
+
+    @Test
+    fun editingHealthRecordKeepsOriginalOwnerWhenCallerOmitsRecipient() = runBlocking {
+        val dad = recipients.create("爸爸")
+        val recordId = health.addRecord(HealthRecord(type = "BLOOD_PRESSURE", value = 120.0))
+        assertEquals(1, health.getAllRecords().first().size)
+
+        // 编辑路径重建实体时漏带 careRecipientId（默认 0）：归属必须沿用库中原行，而不是写成 0。
+        val rebuilt = HealthRecord(
+            id = recordId,
+            careRecipientId = 0L,
+            type = "BLOOD_PRESSURE",
+            value = 135.0,
+        )
+        health.updateRecord(rebuilt)
+
+        val stored = database.healthRecordDao().getById(recordId)
+        assertNotNull(stored)
+        assertEquals("编辑后归属必须仍是原成员", dad, stored!!.careRecipientId)
+        assertNotEquals("归属不得被写成 0", 0L, stored.careRecipientId)
+        assertEquals("编辑后的值必须写入", 135.0, stored.value, 0.0)
+
+        // 仍对原成员可见。
+        assertEquals(listOf(recordId), health.getAllRecords().first().map { it.id })
+
+        // 其他成员看不到（行没有移动到任何其他成员名下）。
+        val mom = recipients.create("妈妈")
+        recipients.setActiveRecipient(mom)
+        assertTrue("记录不得移动到其他成员", health.getAllRecords().first().isEmpty())
+    }
+
+    @Test
+    fun editingSymptomLogKeepsOriginalOwnerWhenCallerOmitsRecipient() = runBlocking {
+        val dad = recipients.create("爸爸")
+        val logId = symptoms.insert(SymptomLog(symptoms = "头痛", overallRating = 3))
+        assertEquals(1, symptoms.getAllLogs().first().size)
+
+        // 与健康记录编辑同源的缺陷路径：重建实体漏带 careRecipientId。
+        val rebuilt = SymptomLog(
+            id = logId,
+            careRecipientId = 0L,
+            symptoms = "头痛,恶心",
+            overallRating = 2,
+        )
+        symptoms.update(rebuilt)
+
+        val stored = database.symptomLogDao().getById(logId)
+        assertNotNull(stored)
+        assertEquals("编辑后归属必须仍是原成员", dad, stored!!.careRecipientId)
+        assertNotEquals("归属不得被写成 0", 0L, stored.careRecipientId)
+        assertEquals("编辑后的症状必须写入", "头痛,恶心", stored.symptoms)
+
+        // 仍对原成员可见。
+        assertEquals(listOf(logId), symptoms.getAllLogs().first().map { it.id })
+
+        // 其他成员看不到。
+        val mom = recipients.create("妈妈")
+        recipients.setActiveRecipient(mom)
+        assertTrue("记录不得移动到其他成员", symptoms.getAllLogs().first().isEmpty())
     }
 
     private fun medication(name: String) = Medication(name = name, dose = 1.0, doseUnit = "片")
