@@ -31,6 +31,9 @@ import com.driezy.medlog.feature.medications.detail.MedicationDetailScreen
 import com.driezy.medlog.feature.medications.editor.AddMedicationScreen
 import com.driezy.medlog.feature.medications.home.HomeScreen
 import com.driezy.medlog.feature.onboarding.WelcomeScreen
+import com.driezy.medlog.feature.recipients.CareRecipientGateScreen
+import com.driezy.medlog.feature.recipients.CareRecipientsScreen
+import com.driezy.medlog.feature.recipients.CareRecipientsViewModel
 import com.driezy.medlog.feature.settings.AppearanceSettingsScreen
 import com.driezy.medlog.feature.settings.Bpx1DeviceSettingsScreen
 import com.driezy.medlog.feature.settings.CloudApiSettingsScreen
@@ -49,6 +52,30 @@ import com.driezy.medlog.ui.navigation.TopLevelDestination
 @Composable
 fun MedLogApp(openAddMedication: Boolean = false) {
     val appViewModel: MedLogAppViewModel = hiltViewModel()
+    val recipientViewModel: CareRecipientsViewModel = hiltViewModel()
+    val recipientState by recipientViewModel.uiState.collectAsStateWithLifecycle()
+
+    // ── 首次运行成员门禁：没有任何家庭成员时，替代全部正常内容 ─────────────
+    when {
+        recipientState.isLoading -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                LoadingIndicator()
+            }
+            return
+        }
+        recipientState.recipients.isEmpty() -> {
+            CareRecipientGateScreen()
+            return
+        }
+        recipientState.activeRecipientId == 0L -> {
+            // 需求 3：成员存在但未选中时，ViewModel 会自动选中第一位；等待切换完成
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                LoadingIndicator()
+            }
+            return
+        }
+    }
+
     val startDestState by appViewModel.startDestination.collectAsStateWithLifecycle()
     // DataStore 加载期间显示居中加载指示器；捕获到本地 val 以消除后续 !! 需求
     val startDest = startDestState ?: run {
@@ -246,6 +273,7 @@ private fun MedLogNavHost(
                 onNavigateToBpx1Settings = { navController.navigate(Route.SettingsBpx1) },
                 onNavigateToWidgetSettings = { navController.navigate(Route.SettingsWidgets) },
                 onNavigateToDataSettings = { navController.navigate(Route.SettingsData) },
+                onNavigateToMemberSettings = { navController.navigate(Route.SettingsRecipients) },
             )
         }
         composable<Route.SettingsAppearance>(
@@ -323,6 +351,14 @@ private fun MedLogNavHost(
                     }
                 },
             )
+        }
+        composable<Route.SettingsRecipients>(
+            enterTransition = { materialSharedAxisX(forward = true) },
+            exitTransition = { navFadeOut },
+            popEnterTransition = { materialSharedAxisX(forward = false) },
+            popExitTransition = { materialSharedAxisXOut(forward = true) },
+        ) {
+            CareRecipientsScreen(onBack = { navController.popBackStack() })
         }
         composable<Route.MedDetail>(
             enterTransition = { materialSharedAxisX(forward = true) },

@@ -56,6 +56,7 @@ fun SettingsScreen(
     onNavigateToBpx1Settings: () -> Unit = {},
     onNavigateToWidgetSettings: () -> Unit = {},
     onNavigateToDataSettings: () -> Unit = {},
+    onNavigateToMemberSettings: () -> Unit = {},
     viewModel: SettingsHomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -69,6 +70,7 @@ fun SettingsScreen(
         onNavigateToBpx1Settings = onNavigateToBpx1Settings,
         onNavigateToWidgetSettings = onNavigateToWidgetSettings,
         onNavigateToDataSettings = onNavigateToDataSettings,
+        onNavigateToMemberSettings = onNavigateToMemberSettings,
         uiState = uiState,
         onAction = {},
     )
@@ -88,6 +90,7 @@ internal fun SettingsScaffold(
     onNavigateToBpx1Settings: () -> Unit = {},
     onNavigateToWidgetSettings: () -> Unit = {},
     onNavigateToDataSettings: () -> Unit = {},
+    onNavigateToMemberSettings: () -> Unit = {},
     uiState: SettingsUiState,
     onAction: (SettingsUiAction) -> Unit,
     dataInProgress: Boolean = false,
@@ -305,6 +308,7 @@ internal fun SettingsScaffold(
                                     onNavigateToBpx1Settings = onNavigateToBpx1Settings,
                                     onNavigateToWidgetSettings = onNavigateToWidgetSettings,
                                     onNavigateToDataSettings = onNavigateToDataSettings,
+                                    onNavigateToMemberSettings = onNavigateToMemberSettings,
                                 )
                             }
                         }

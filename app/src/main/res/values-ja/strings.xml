@@ -940,4 +940,29 @@
     <string name="settings_restart_dialog_body">データベースを復元しました。変更を反映するにはアプリの再起動が必要です。今すぐ再起動しますか？</string>
     <string name="settings_restart_dialog_confirm">今すぐ再起動</string>
     <string name="settings_ai_endpoint_more_hint">最初の80件を表示しています。検索して絞り込んでください。</string>
+
+    <!-- 家族メンバー（family MVP / care recipients） -->
+    <string name="settings_destination_members">ご家族</string>
+    <string name="settings_destination_members_desc">ご家族の追加・切り替え・管理</string>
+    <string name="recipients_gate_title">ご家族を登録</string>
+    <string name="recipients_gate_body">Anshin では複数のご家族の服薬をまとめて管理できます。まずお一人を登録してください（例：お父さん、お母さん）。あとから設定で追加・切り替えができます。</string>
+    <string name="recipients_gate_name_label">呼び名</string>
+    <string name="recipients_gate_name_placeholder">例：お父さん</string>
+    <string name="recipients_gate_save">はじめる</string>
+    <string name="recipients_name_required">呼び名を入力してください</string>
+    <string name="recipients_manage_title">ご家族</string>
+    <string name="recipients_manage_add">メンバーを追加</string>
+    <string name="recipients_manage_active_badge">現在のメンバー</string>
+    <string name="recipients_manage_select">現在のメンバーにする</string>
+    <string name="recipients_manage_rename">名前を変更</string>
+    <string name="recipients_manage_delete">削除</string>
+    <string name="recipients_manage_empty_title">メンバーがまだいません</string>
+    <string name="recipients_manage_empty_body">メンバーを追加すると服薬管理を始められます。</string>
+    <string name="recipients_create_dialog_title">メンバーを追加</string>
+    <string name="recipients_rename_dialog_title">メンバー名を変更</string>
+    <string name="recipients_name_label">呼び名</string>
+    <string name="recipients_delete_confirm_title">このメンバーを削除しますか？</string>
+    <string name="recipients_delete_confirm_body">削除すると、このメンバーの薬・服薬記録・ログもすべて削除され、元に戻せません。</string>
+    <string name="recipients_delete_confirm_action">削除</string>
+    <string name="recipients_rename_failed">名前を変更できませんでした。名前を確認して再試行してください。</string>
 </resources>

@@ -922,4 +922,29 @@
     <string name="settings_restart_dialog_title">恢复完成</string>
     <string name="settings_restart_dialog_body">数据库已恢复，应用需要重启以生效。立即重启吗？</string>
     <string name="settings_restart_dialog_confirm">立即重启</string>
+
+    <!-- 家庭成员（family MVP / care recipients） -->
+    <string name="settings_destination_members">家庭成员</string>
+    <string name="settings_destination_members_desc">添加、切换或管理家庭成员</string>
+    <string name="recipients_gate_title">创建家庭成员</string>
+    <string name="recipients_gate_body">安心用药可以管理多位家庭成员的用药。请先添加一位成员（如爸爸或妈妈），之后可随时在设置中添加或切换。</string>
+    <string name="recipients_gate_name_label">成员称呼</string>
+    <string name="recipients_gate_name_placeholder">例如：爸爸</string>
+    <string name="recipients_gate_save">开始使用</string>
+    <string name="recipients_name_required">请输入成员称呼</string>
+    <string name="recipients_manage_title">家庭成员</string>
+    <string name="recipients_manage_add">添加成员</string>
+    <string name="recipients_manage_active_badge">当前成员</string>
+    <string name="recipients_manage_select">设为当前成员</string>
+    <string name="recipients_manage_rename">重命名</string>
+    <string name="recipients_manage_delete">删除</string>
+    <string name="recipients_manage_empty_title">还没有家庭成员</string>
+    <string name="recipients_manage_empty_body">添加一位成员后即可开始管理用药。</string>
+    <string name="recipients_create_dialog_title">添加成员</string>
+    <string name="recipients_rename_dialog_title">重命名成员</string>
+    <string name="recipients_name_label">成员称呼</string>
+    <string name="recipients_delete_confirm_title">删除该成员？</string>
+    <string name="recipients_delete_confirm_body">删除后，该成员的药品、用药记录与日志都将一并删除，且无法恢复。</string>
+    <string name="recipients_delete_confirm_action">删除</string>
+    <string name="recipients_rename_failed">重命名失败，请检查名称后重试。</string>
 </resources>

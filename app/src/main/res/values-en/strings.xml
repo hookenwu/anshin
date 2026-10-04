@@ -953,4 +953,29 @@ Path: Settings → Privacy → Permissions → Desktop shortcut → MedLog → A
     <string name="settings_restart_dialog_title">Restore complete</string>
     <string name="settings_restart_dialog_body">The database has been restored. The app needs to restart to apply the changes. Restart now?</string>
     <string name="settings_restart_dialog_confirm">Restart now</string>
+
+    <!-- Family members (family MVP / care recipients) -->
+    <string name="settings_destination_members">Family members</string>
+    <string name="settings_destination_members_desc">Add, switch, or manage family members</string>
+    <string name="recipients_gate_title">Create a family member</string>
+    <string name="recipients_gate_body">Anshin can manage medications for more than one family member. Add one to start (for example Dad or Mom). You can add or switch members later in Settings.</string>
+    <string name="recipients_gate_name_label">Member name</string>
+    <string name="recipients_gate_name_placeholder">e.g. Dad</string>
+    <string name="recipients_gate_save">Get started</string>
+    <string name="recipients_name_required">Please enter a member name</string>
+    <string name="recipients_manage_title">Family members</string>
+    <string name="recipients_manage_add">Add member</string>
+    <string name="recipients_manage_active_badge">Active member</string>
+    <string name="recipients_manage_select">Set as active</string>
+    <string name="recipients_manage_rename">Rename</string>
+    <string name="recipients_manage_delete">Delete</string>
+    <string name="recipients_manage_empty_title">No family members yet</string>
+    <string name="recipients_manage_empty_body">Add a member to start managing medications.</string>
+    <string name="recipients_create_dialog_title">Add member</string>
+    <string name="recipients_rename_dialog_title">Rename member</string>
+    <string name="recipients_name_label">Member name</string>
+    <string name="recipients_delete_confirm_title">Delete this member?</string>
+    <string name="recipients_delete_confirm_body">Deleting this member also deletes their medications, records, and logs. This cannot be undone.</string>
+    <string name="recipients_delete_confirm_action">Delete</string>
+    <string name="recipients_rename_failed">Rename failed. Check the name and try again.</string>
 </resources>

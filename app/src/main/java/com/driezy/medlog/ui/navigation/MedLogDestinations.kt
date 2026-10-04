@@ -39,6 +39,8 @@ import kotlinx.serialization.Serializable
 
     @Serializable data object SettingsData : Route
 
+    @Serializable data object SettingsRecipients : Route
+
     @Serializable data class MedDetail(val medicationId: Long) : Route
 
     /**

@@ -31,6 +31,7 @@ class SettingsFlowTest {
                     onNavigateToBpx1Settings = { destination = "bpx1" },
                     onNavigateToWidgetSettings = { destination = "widgets" },
                     onNavigateToDataSettings = { destination = "data" },
+                    onNavigateToMemberSettings = { destination = "members" },
                 )
             }
         }

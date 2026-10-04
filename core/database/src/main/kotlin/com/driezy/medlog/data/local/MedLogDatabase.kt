@@ -7,6 +7,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.driezy.medlog.data.model.AiAnalysisCacheEntry
 import com.driezy.medlog.data.model.AiUsageEvent
+import com.driezy.medlog.data.model.CareRecipient
 import com.driezy.medlog.data.model.HealthRecord
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
@@ -15,6 +16,7 @@ import com.driezy.medlog.data.model.SymptomLog
 
 @Database(
     entities = [
+        CareRecipient::class,
         Medication::class,
         MedicationLog::class,
         MedicationPlanRevision::class,
@@ -28,6 +30,7 @@ import com.driezy.medlog.data.model.SymptomLog
 )
 @TypeConverters(Converters::class)
 abstract class MedLogDatabase : RoomDatabase() {
+    abstract fun careRecipientDao(): CareRecipientDao
     abstract fun medicationDao(): MedicationDao
     abstract fun medicationLogDao(): MedicationLogDao
     abstract fun symptomLogDao(): SymptomLogDao
@@ -36,6 +39,242 @@ abstract class MedLogDatabase : RoomDatabase() {
     abstract fun aiUsageEventDao(): AiUsageEventDao
 
     companion object {
+        /** 迁移兼容档案名：v18 及更早版本没有成员概念，历史数据统一归入该档案。 */
+        private const val LEGACY_RECIPIENT_NAME = "本人"
+
+        /**
+         * v18 → v19：引入一级实体 CareRecipient。
+         *
+         * - 新建 care_recipients 表；
+         * - 仅当库内存在历史人员数据（药品/症状/健康记录任一非空）时创建一个兼容档案，
+         *   并把历史行回填到该档案下；空库不创建任何成员（新安装由"添加成员"建立档案）；
+         * - medications / symptom_logs / health_records 增加 careRecipientId（NOT NULL + FK CASCADE），
+         *   三张表按 Room 的表重建模式迁移；
+         * - health_records 的唯一索引由 (sourceCacheKey) 改为 (careRecipientId, sourceCacheKey)。
+         */
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `care_recipients` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `uuid` TEXT NOT NULL,
+                        `displayName` TEXT NOT NULL,
+                        `createdAtMs` INTEGER NOT NULL,
+                        `updatedAtMs` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_care_recipients_uuid` " +
+                        "ON `care_recipients` (`uuid`)",
+                )
+
+                val legacyRows = db.query(
+                    """
+                    SELECT (SELECT COUNT(*) FROM medications)
+                         + (SELECT COUNT(*) FROM symptom_logs)
+                         + (SELECT COUNT(*) FROM health_records)
+                    """.trimIndent(),
+                ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L }
+
+                val now = System.currentTimeMillis()
+                val recipientId = if (legacyRows > 0L) {
+                    db.execSQL(
+                        "INSERT INTO `care_recipients` " +
+                            "(`uuid`, `displayName`, `createdAtMs`, `updatedAtMs`) VALUES (?, ?, ?, ?)",
+                        arrayOf<Any?>(CareRecipient.newUuid(), LEGACY_RECIPIENT_NAME, now, now),
+                    )
+                    db.query("SELECT `id` FROM `care_recipients` ORDER BY `id` LIMIT 1")
+                        .use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L }
+                } else {
+                    0L
+                }
+
+                // ── medications：加 careRecipientId + FK，表重建 ──────────────────
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `_new_medications` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `careRecipientId` INTEGER NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `dose` REAL NOT NULL,
+                        `doseUnit` TEXT NOT NULL,
+                        `category` TEXT NOT NULL,
+                        `form` TEXT NOT NULL,
+                        `isHighPriority` INTEGER NOT NULL,
+                        `frequencyType` TEXT NOT NULL,
+                        `frequencyInterval` INTEGER NOT NULL,
+                        `frequencyDays` TEXT NOT NULL,
+                        `timePeriod` TEXT NOT NULL,
+                        `reminderTimes` TEXT NOT NULL,
+                        `reminderHour` INTEGER NOT NULL,
+                        `reminderMinute` INTEGER NOT NULL,
+                        `doseQuantity` REAL NOT NULL,
+                        `isPRN` INTEGER NOT NULL,
+                        `maxDailyDose` REAL,
+                        `startDate` INTEGER NOT NULL,
+                        `endDate` INTEGER,
+                        `stock` REAL,
+                        `refillThreshold` REAL,
+                        `refillReminderDays` INTEGER NOT NULL,
+                        `notes` TEXT NOT NULL,
+                        `isCustomDrug` INTEGER NOT NULL,
+                        `isArchived` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `isTcm` INTEGER NOT NULL,
+                        `fullPath` TEXT NOT NULL,
+                        `intervalHours` INTEGER NOT NULL,
+                        `planEffectiveFromMs` INTEGER NOT NULL,
+                        FOREIGN KEY(`careRecipientId`) REFERENCES `care_recipients`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `_new_medications` (
+                        `id`, `careRecipientId`, `name`, `dose`, `doseUnit`, `category`, `form`,
+                        `isHighPriority`, `frequencyType`, `frequencyInterval`, `frequencyDays`,
+                        `timePeriod`, `reminderTimes`, `reminderHour`, `reminderMinute`,
+                        `doseQuantity`, `isPRN`, `maxDailyDose`, `startDate`, `endDate`, `stock`,
+                        `refillThreshold`, `refillReminderDays`, `notes`, `isCustomDrug`,
+                        `isArchived`, `createdAt`, `isTcm`, `fullPath`, `intervalHours`,
+                        `planEffectiveFromMs`
+                    )
+                    SELECT
+                        `id`, ?, `name`, `dose`, `doseUnit`, `category`, `form`,
+                        `isHighPriority`, `frequencyType`, `frequencyInterval`, `frequencyDays`,
+                        `timePeriod`, `reminderTimes`, `reminderHour`, `reminderMinute`,
+                        `doseQuantity`, `isPRN`, `maxDailyDose`, `startDate`, `endDate`, `stock`,
+                        `refillThreshold`, `refillReminderDays`, `notes`, `isCustomDrug`,
+                        `isArchived`, `createdAt`, `isTcm`, `fullPath`, `intervalHours`,
+                        `planEffectiveFromMs`
+                    FROM `medications`
+                    """.trimIndent(),
+                    arrayOf(recipientId),
+                )
+                db.execSQL("DROP TABLE `medications`")
+                db.execSQL("ALTER TABLE `_new_medications` RENAME TO `medications`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_medications_isArchived` " +
+                        "ON `medications` (`isArchived`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_medications_careRecipientId` " +
+                        "ON `medications` (`careRecipientId`)",
+                )
+
+                // ── symptom_logs：加 careRecipientId + FK，表重建 ────────────────
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `_new_symptom_logs` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `careRecipientId` INTEGER NOT NULL,
+                        `recordedAt` INTEGER NOT NULL,
+                        `overallRating` INTEGER NOT NULL,
+                        `symptoms` TEXT NOT NULL,
+                        `sideEffects` TEXT NOT NULL,
+                        `note` TEXT NOT NULL,
+                        `medicationId` INTEGER NOT NULL,
+                        `medicationName` TEXT NOT NULL,
+                        FOREIGN KEY(`careRecipientId`) REFERENCES `care_recipients`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `_new_symptom_logs` (
+                        `id`, `careRecipientId`, `recordedAt`, `overallRating`, `symptoms`,
+                        `sideEffects`, `note`, `medicationId`, `medicationName`
+                    )
+                    SELECT
+                        `id`, ?, `recordedAt`, `overallRating`, `symptoms`,
+                        `sideEffects`, `note`, `medicationId`, `medicationName`
+                    FROM `symptom_logs`
+                    """.trimIndent(),
+                    arrayOf(recipientId),
+                )
+                db.execSQL("DROP TABLE `symptom_logs`")
+                db.execSQL("ALTER TABLE `_new_symptom_logs` RENAME TO `symptom_logs`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_symptom_logs_recordedAt` " +
+                        "ON `symptom_logs` (`recordedAt`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_symptom_logs_medicationId` " +
+                        "ON `symptom_logs` (`medicationId`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_symptom_logs_careRecipientId` " +
+                        "ON `symptom_logs` (`careRecipientId`)",
+                )
+
+                // ── health_records：加 careRecipientId + FK，唯一索引改为按成员 ──
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `_new_health_records` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `careRecipientId` INTEGER NOT NULL,
+                        `type` TEXT NOT NULL,
+                        `value` REAL NOT NULL,
+                        `secondaryValue` REAL,
+                        `timestamp` INTEGER NOT NULL,
+                        `notes` TEXT NOT NULL,
+                        `source` TEXT NOT NULL,
+                        `sourceFeature` TEXT,
+                        `sourceProvider` TEXT,
+                        `sourceModel` TEXT,
+                        `sourceConfidence` REAL,
+                        `sourceCacheKey` TEXT,
+                        `confirmedAt` INTEGER,
+                        FOREIGN KEY(`careRecipientId`) REFERENCES `care_recipients`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `_new_health_records` (
+                        `id`, `careRecipientId`, `type`, `value`, `secondaryValue`, `timestamp`,
+                        `notes`, `source`, `sourceFeature`, `sourceProvider`, `sourceModel`,
+                        `sourceConfidence`, `sourceCacheKey`, `confirmedAt`
+                    )
+                    SELECT
+                        `id`, ?, `type`, `value`, `secondaryValue`, `timestamp`,
+                        `notes`, `source`, `sourceFeature`, `sourceProvider`, `sourceModel`,
+                        `sourceConfidence`, `sourceCacheKey`, `confirmedAt`
+                    FROM `health_records`
+                    """.trimIndent(),
+                    arrayOf(recipientId),
+                )
+                db.execSQL("DROP TABLE `health_records`")
+                db.execSQL("ALTER TABLE `_new_health_records` RENAME TO `health_records`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_health_records_type` " +
+                        "ON `health_records` (`type`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_health_records_timestamp` " +
+                        "ON `health_records` (`timestamp`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_health_records_source` " +
+                        "ON `health_records` (`source`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_health_records_careRecipientId` " +
+                        "ON `health_records` (`careRecipientId`)",
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                        "`index_health_records_careRecipientId_sourceCacheKey` " +
+                        "ON `health_records` (`careRecipientId`, `sourceCacheKey`)",
+                )
+            }
+        }
+
         val MIGRATION_17_18 = object : Migration(17, 18) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE medications ADD COLUMN planEffectiveFromMs INTEGER NOT NULL DEFAULT 0")

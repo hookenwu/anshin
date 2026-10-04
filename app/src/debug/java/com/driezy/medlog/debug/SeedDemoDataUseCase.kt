@@ -8,6 +8,7 @@ import com.driezy.medlog.data.model.LogStatus
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
 import com.driezy.medlog.data.model.TimePeriod
+import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -15,7 +16,10 @@ import java.time.LocalTime
 import java.time.ZoneId
 import javax.inject.Inject
 
-class SeedDemoDataUseCase @Inject constructor(private val database: MedLogDatabase) {
+class SeedDemoDataUseCase @Inject constructor(
+    private val database: MedLogDatabase,
+    private val activeRecipient: ActiveRecipientStore,
+) {
 
     suspend fun seed(
         reset: Boolean,
@@ -24,15 +28,21 @@ class SeedDemoDataUseCase @Inject constructor(private val database: MedLogDataba
     ): SeedResult {
         val dataset = buildDataset(profile, calendar)
         return database.withTransaction {
+            val recipientId = activeRecipient.current()
+            check(recipientId != ActiveRecipientStore.NO_RECIPIENT) {
+                "尚未选择家庭成员，无法写入演示数据"
+            }
             if (reset) {
-                clearAllData()
+                clearAllData(recipientId)
             } else {
-                clearPreviousSeedData()
+                clearPreviousSeedData(recipientId)
             }
 
             val medicationIds = mutableMapOf<String, Long>()
             dataset.medications.forEach { seeded ->
-                medicationIds[seeded.key] = database.medicationDao().insertMedication(seeded.medication)
+                medicationIds[seeded.key] = database.medicationDao().insertMedication(
+                    seeded.medication.copy(careRecipientId = recipientId),
+                )
             }
 
             dataset.logs.forEach { seeded ->
@@ -43,7 +53,7 @@ class SeedDemoDataUseCase @Inject constructor(private val database: MedLogDataba
             }
 
             dataset.healthRecords.forEach { seeded ->
-                database.healthRecordDao().insert(seeded.record)
+                database.healthRecordDao().insert(seeded.record.copy(careRecipientId = recipientId))
             }
 
             SeedResult(
@@ -54,24 +64,34 @@ class SeedDemoDataUseCase @Inject constructor(private val database: MedLogDataba
         }
     }
 
-    private fun clearAllData() {
+    private fun clearAllData(recipientId: Long) {
         val db = database.openHelper.writableDatabase
-        db.execSQL("DELETE FROM medication_logs")
-        db.execSQL("DELETE FROM symptom_logs")
-        db.execSQL("DELETE FROM health_records")
-        db.execSQL("DELETE FROM medications")
         db.execSQL(
-            "DELETE FROM sqlite_sequence WHERE name IN " +
-                "('medications', 'medication_logs', 'symptom_logs', 'health_records')",
+            "DELETE FROM medication_logs WHERE medicationId IN " +
+                "(SELECT id FROM medications WHERE careRecipientId = ?)",
+            arrayOf(recipientId),
         )
+        db.execSQL("DELETE FROM symptom_logs WHERE careRecipientId = ?", arrayOf(recipientId))
+        db.execSQL("DELETE FROM health_records WHERE careRecipientId = ?", arrayOf(recipientId))
+        db.execSQL("DELETE FROM medications WHERE careRecipientId = ?", arrayOf(recipientId))
     }
 
-    private fun clearPreviousSeedData() {
+    private fun clearPreviousSeedData(recipientId: Long) {
         val db = database.openHelper.writableDatabase
-        db.execSQL("DELETE FROM medication_logs WHERE notes LIKE 'seed:%'")
-        db.execSQL("DELETE FROM symptom_logs WHERE note LIKE 'seed:%'")
-        db.execSQL("DELETE FROM health_records WHERE notes LIKE 'seed:%'")
-        db.execSQL("DELETE FROM medications WHERE notes LIKE 'seed:%'")
+        db.execSQL(
+            "DELETE FROM medication_logs WHERE notes LIKE 'seed:%' AND medicationId IN " +
+                "(SELECT id FROM medications WHERE careRecipientId = ?)",
+            arrayOf(recipientId),
+        )
+        db.execSQL(
+            "DELETE FROM symptom_logs WHERE note LIKE 'seed:%' AND careRecipientId = ?",
+            arrayOf(recipientId),
+        )
+        db.execSQL(
+            "DELETE FROM health_records WHERE notes LIKE 'seed:%' AND careRecipientId = ?",
+            arrayOf(recipientId),
+        )
+        db.execSQL("DELETE FROM medications WHERE notes LIKE 'seed:%' AND careRecipientId = ?", arrayOf(recipientId))
     }
 
     data class SeedResult(val medicationCount: Int, val logCount: Int, val healthRecordCount: Int)

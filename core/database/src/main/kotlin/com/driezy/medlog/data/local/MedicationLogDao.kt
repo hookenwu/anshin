@@ -4,17 +4,25 @@ import androidx.room.*
 import com.driezy.medlog.data.model.MedicationLog
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * 服药日志 DAO。
+ *
+ * 日志通过 `medicationId` 继承所属成员，不冗余 `careRecipientId`；
+ * 按时间范围/数量的查询通过 JOIN medications 按成员过滤。
+ */
 @Dao
 interface MedicationLogDao {
 
     @Query(
         """
-        SELECT * FROM medication_logs
-        WHERE scheduledTimeMs BETWEEN :startMs AND :endMs
-        ORDER BY scheduledTimeMs ASC
+        SELECT medication_logs.* FROM medication_logs
+        INNER JOIN medications ON medications.id = medication_logs.medicationId
+        WHERE medications.careRecipientId = :recipientId
+          AND medication_logs.scheduledTimeMs BETWEEN :startMs AND :endMs
+        ORDER BY medication_logs.scheduledTimeMs ASC
         """,
     )
-    fun getLogsForDateRange(startMs: Long, endMs: Long): Flow<List<MedicationLog>>
+    fun getLogsForDateRange(recipientId: Long, startMs: Long, endMs: Long): Flow<List<MedicationLog>>
 
     @Query(
         """
@@ -58,15 +66,36 @@ interface MedicationLogDao {
     suspend fun deleteLogForScheduledTime(medicationId: Long, scheduledTimeMs: Long)
 
     @Query(
-        "SELECT COUNT(*) FROM medication_logs WHERE status = 'TAKEN' AND scheduledTimeMs BETWEEN :startMs AND :endMs",
+        """
+        SELECT COUNT(*) FROM medication_logs
+        INNER JOIN medications ON medications.id = medication_logs.medicationId
+        WHERE medications.careRecipientId = :recipientId
+          AND medication_logs.status = 'TAKEN'
+          AND medication_logs.scheduledTimeMs BETWEEN :startMs AND :endMs
+        """,
     )
-    fun getTakenCountForDateRange(startMs: Long, endMs: Long): Flow<Int>
+    fun getTakenCountForDateRange(recipientId: Long, startMs: Long, endMs: Long): Flow<Int>
 
-    /** Widget 专用：一次性查询某天开始后的所有日志 */
-    @Query("SELECT * FROM medication_logs WHERE scheduledTimeMs >= :startMs AND scheduledTimeMs < :startMs + 86400000")
-    suspend fun getLogsForDateOnce(startMs: Long): List<MedicationLog>
+    /** Widget 专用：一次性查询某成员某天开始后的所有日志 */
+    @Query(
+        """
+        SELECT medication_logs.* FROM medication_logs
+        INNER JOIN medications ON medications.id = medication_logs.medicationId
+        WHERE medications.careRecipientId = :recipientId
+          AND medication_logs.scheduledTimeMs >= :startMs
+          AND medication_logs.scheduledTimeMs < :startMs + 86400000
+        """,
+    )
+    suspend fun getLogsForDateOnce(recipientId: Long, startMs: Long): List<MedicationLog>
 
-    /** Widget / Streak 专用：一次性查询时间范围内的所有日志 */
-    @Query("SELECT * FROM medication_logs WHERE scheduledTimeMs BETWEEN :startMs AND :endMs")
-    suspend fun getLogsForRangeOnce(startMs: Long, endMs: Long): List<MedicationLog>
+    /** Widget / Streak 专用：一次性查询某成员时间范围内的所有日志 */
+    @Query(
+        """
+        SELECT medication_logs.* FROM medication_logs
+        INNER JOIN medications ON medications.id = medication_logs.medicationId
+        WHERE medications.careRecipientId = :recipientId
+          AND medication_logs.scheduledTimeMs BETWEEN :startMs AND :endMs
+        """,
+    )
+    suspend fun getLogsForRangeOnce(recipientId: Long, startMs: Long, endMs: Long): List<MedicationLog>
 }

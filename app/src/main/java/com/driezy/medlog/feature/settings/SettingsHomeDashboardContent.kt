@@ -20,9 +20,17 @@ internal fun SettingsHomeDashboard(
     onNavigateToBpx1Settings: () -> Unit,
     onNavigateToWidgetSettings: () -> Unit,
     onNavigateToDataSettings: () -> Unit,
+    onNavigateToMemberSettings: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Medium)) {
         SettingsNavigationGroup(title = stringResource(R.string.settings_home_frequent_group)) {
+            SettingsNavigationRow(
+                title = stringResource(R.string.settings_destination_members),
+                subtitle = stringResource(R.string.settings_destination_members_desc),
+                icon = MedLogIcons.VerifiedUser,
+                onClick = onNavigateToMemberSettings,
+            )
+            HorizontalDivider()
             SettingsNavigationRow(
                 title = stringResource(R.string.settings_destination_reminders),
                 subtitle = stringResource(R.string.settings_home_tile_reminders_status),

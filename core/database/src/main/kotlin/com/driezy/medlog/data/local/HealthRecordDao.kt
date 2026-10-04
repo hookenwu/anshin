@@ -21,38 +21,48 @@ interface HealthRecordDao {
     @Delete
     suspend fun delete(record: HealthRecord)
 
-    /** 所有记录，按时间倒序 */
-    @Query("SELECT * FROM health_records ORDER BY timestamp DESC")
-    fun getAllRecords(): Flow<List<HealthRecord>>
+    /** 某成员的所有记录，按时间倒序 */
+    @Query("SELECT * FROM health_records WHERE careRecipientId = :recipientId ORDER BY timestamp DESC")
+    fun getAllRecords(recipientId: Long): Flow<List<HealthRecord>>
 
-    /** 指定类型的记录，按时间倒序 */
-    @Query("SELECT * FROM health_records WHERE type = :type ORDER BY timestamp DESC")
-    fun getRecordsByType(type: String): Flow<List<HealthRecord>>
-
-    /** 指定时间范围内的记录（用于生成趋势图），按时间正序 */
-    @Query("SELECT * FROM health_records WHERE timestamp >= :from AND timestamp <= :to ORDER BY timestamp ASC")
-    fun getRecordsInRange(from: Long, to: Long): Flow<List<HealthRecord>>
-
-    /** 指定类型在指定时间范围内的记录，按时间正序 */
+    /** 某成员指定类型的记录，按时间倒序 */
     @Query(
-        "SELECT * FROM health_records WHERE type = :type AND timestamp >= :from AND timestamp <= :to ORDER BY timestamp ASC",
+        "SELECT * FROM health_records WHERE careRecipientId = :recipientId AND type = :type " +
+            "ORDER BY timestamp DESC",
     )
-    fun getRecordsByTypeInRange(type: String, from: Long, to: Long): Flow<List<HealthRecord>>
+    fun getRecordsByType(recipientId: Long, type: String): Flow<List<HealthRecord>>
 
-    /** 每种类型的最新一条记录（用于主页快速展示；同毫秒时按 id 取最大保证确定） */
+    /** 某成员指定时间范围内的记录（用于生成趋势图），按时间正序 */
+    @Query(
+        "SELECT * FROM health_records WHERE careRecipientId = :recipientId " +
+            "AND timestamp >= :from AND timestamp <= :to ORDER BY timestamp ASC",
+    )
+    fun getRecordsInRange(recipientId: Long, from: Long, to: Long): Flow<List<HealthRecord>>
+
+    /** 某成员指定类型在指定时间范围内的记录，按时间正序 */
+    @Query(
+        "SELECT * FROM health_records WHERE careRecipientId = :recipientId AND type = :type " +
+            "AND timestamp >= :from AND timestamp <= :to ORDER BY timestamp ASC",
+    )
+    fun getRecordsByTypeInRange(recipientId: Long, type: String, from: Long, to: Long): Flow<List<HealthRecord>>
+
+    /** 某成员每种类型的最新一条记录（用于主页快速展示；同毫秒时按 id 取最大保证确定） */
     @Query(
         "SELECT h.* FROM health_records h " +
-            "WHERE h.id = (" +
+            "WHERE h.careRecipientId = :recipientId AND h.id = (" +
             "SELECT h2.id FROM health_records h2 " +
-            "WHERE h2.type = h.type " +
+            "WHERE h2.careRecipientId = :recipientId AND h2.type = h.type " +
             "ORDER BY h2.timestamp DESC, h2.id DESC LIMIT 1" +
             ")",
     )
-    fun getLatestRecordPerType(): Flow<List<HealthRecord>>
+    fun getLatestRecordPerType(recipientId: Long): Flow<List<HealthRecord>>
 
     @Query("SELECT * FROM health_records WHERE id = :id")
     suspend fun getById(id: Long): HealthRecord?
 
-    @Query("SELECT EXISTS(SELECT 1 FROM health_records WHERE sourceCacheKey = :sourceCacheKey LIMIT 1)")
-    suspend fun hasSourceCacheKey(sourceCacheKey: String): Boolean
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM health_records " +
+            "WHERE careRecipientId = :recipientId AND sourceCacheKey = :sourceCacheKey LIMIT 1)",
+    )
+    suspend fun hasSourceCacheKey(recipientId: Long, sourceCacheKey: String): Boolean
 }

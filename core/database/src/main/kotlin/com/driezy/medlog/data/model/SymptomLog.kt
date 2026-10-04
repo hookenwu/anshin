@@ -1,6 +1,7 @@
 package com.driezy.medlog.data.model
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -11,14 +12,26 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "symptom_logs",
+    foreignKeys = [
+        ForeignKey(
+            entity = CareRecipient::class,
+            parentColumns = ["id"],
+            childColumns = ["careRecipientId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
     indices = [
         Index("recordedAt"),
         Index("medicationId"),
+        Index("careRecipientId"),
     ],
 )
 data class SymptomLog(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+
+    /** 所属家庭成员（v19）。 */
+    val careRecipientId: Long = 0L,
 
     /** 记录时间（毫秒时间戳） */
     val recordedAt: Long = System.currentTimeMillis(),

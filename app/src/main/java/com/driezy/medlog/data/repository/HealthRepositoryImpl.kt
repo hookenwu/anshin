@@ -2,25 +2,52 @@ package com.driezy.medlog.data.repository
 
 import com.driezy.medlog.data.local.HealthRecordDao
 import com.driezy.medlog.data.model.HealthRecord
+import com.driezy.medlog.data.recipient.ActiveRecipientStore
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import javax.inject.Inject
 
-class HealthRepositoryImpl @Inject constructor(private val dao: HealthRecordDao) : HealthRepository {
+@OptIn(ExperimentalCoroutinesApi::class)
+class HealthRepositoryImpl @Inject constructor(
+    private val dao: HealthRecordDao,
+    private val activeRecipient: ActiveRecipientStore,
+) : HealthRepository {
 
-    override fun getAllRecords(): Flow<List<HealthRecord>> = dao.getAllRecords()
+    private fun scoped(block: (Long) -> Flow<List<HealthRecord>>): Flow<List<HealthRecord>> =
+        activeRecipient.recipientId.flatMapLatest { recipientId ->
+            if (recipientId == ActiveRecipientStore.NO_RECIPIENT) emptyFlow() else block(recipientId)
+        }
 
-    override fun getRecordsByType(type: String): Flow<List<HealthRecord>> = dao.getRecordsByType(type)
+    private suspend fun requireRecipientId(): Long {
+        val recipientId = activeRecipient.current()
+        check(recipientId != ActiveRecipientStore.NO_RECIPIENT) { "尚未选择家庭成员，禁止写入健康记录" }
+        return recipientId
+    }
 
-    override fun getRecordsInRange(from: Long, to: Long): Flow<List<HealthRecord>> = dao.getRecordsInRange(from, to)
+    override fun getAllRecords(): Flow<List<HealthRecord>> = scoped { dao.getAllRecords(it) }
+
+    override fun getRecordsByType(type: String): Flow<List<HealthRecord>> = scoped { dao.getRecordsByType(it, type) }
+
+    override fun getRecordsInRange(from: Long, to: Long): Flow<List<HealthRecord>> =
+        scoped { dao.getRecordsInRange(it, from, to) }
 
     override fun getRecordsByTypeInRange(type: String, from: Long, to: Long): Flow<List<HealthRecord>> =
-        dao.getRecordsByTypeInRange(type, from, to)
+        scoped { dao.getRecordsByTypeInRange(it, type, from, to) }
 
-    override fun getLatestRecordPerType(): Flow<List<HealthRecord>> = dao.getLatestRecordPerType()
+    override fun getLatestRecordPerType(): Flow<List<HealthRecord>> = scoped { dao.getLatestRecordPerType(it) }
 
-    override suspend fun hasSourceCacheKey(sourceCacheKey: String): Boolean = dao.hasSourceCacheKey(sourceCacheKey)
+    override suspend fun hasSourceCacheKey(sourceCacheKey: String): Boolean =
+        dao.hasSourceCacheKey(requireRecipientId(), sourceCacheKey)
 
-    override suspend fun addRecord(record: HealthRecord): Long = dao.insert(record)
+    override suspend fun addRecord(record: HealthRecord): Long = dao.insert(
+        if (record.careRecipientId == ActiveRecipientStore.NO_RECIPIENT) {
+            record.copy(careRecipientId = requireRecipientId())
+        } else {
+            record
+        },
+    )
 
     override suspend fun updateRecord(record: HealthRecord) = dao.update(record)
 

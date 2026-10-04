@@ -14,6 +14,7 @@ import com.driezy.medlog.capability.widgets.GlanceWidgetRefresher
 import com.driezy.medlog.capability.widgets.WidgetRefresher
 import com.driezy.medlog.data.local.AiAnalysisCacheDao
 import com.driezy.medlog.data.local.AiUsageEventDao
+import com.driezy.medlog.data.local.CareRecipientDao
 import com.driezy.medlog.data.local.DrugAliasAssetParser
 import com.driezy.medlog.data.local.HealthRecordDao
 import com.driezy.medlog.data.local.MedLogDatabase
@@ -26,6 +27,8 @@ import com.driezy.medlog.data.repository.AiCacheRepository
 import com.driezy.medlog.data.repository.AiCacheRepositoryImpl
 import com.driezy.medlog.data.repository.AiPreferences
 import com.driezy.medlog.data.repository.AppearancePreferences
+import com.driezy.medlog.data.repository.CareRecipientRepository
+import com.driezy.medlog.data.repository.CareRecipientRepositoryImpl
 import com.driezy.medlog.data.repository.DrugRepository
 import com.driezy.medlog.data.repository.DrugRepositoryImpl
 import com.driezy.medlog.data.repository.FeaturePreferences
@@ -88,11 +91,15 @@ object DatabaseModule {
             MedLogDatabase.MIGRATION_15_16,
             MedLogDatabase.MIGRATION_16_17,
             MedLogDatabase.MIGRATION_17_18,
+            MedLogDatabase.MIGRATION_18_19,
         )
         .build()
 
     @Provides
     fun provideMedicationDao(db: MedLogDatabase): MedicationDao = db.medicationDao()
+
+    @Provides
+    fun provideCareRecipientDao(db: MedLogDatabase): CareRecipientDao = db.careRecipientDao()
 
     @Provides
     fun provideMedicationLogDao(db: MedLogDatabase): MedicationLogDao = db.medicationLogDao()
@@ -149,6 +156,10 @@ object DatabaseModule {
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
+
+    @Binds
+    @Singleton
+    abstract fun bindCareRecipientRepository(impl: CareRecipientRepositoryImpl): CareRecipientRepository
 
     @Binds
     @Singleton

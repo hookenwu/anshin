@@ -1,6 +1,7 @@
 package com.driezy.medlog.data.model
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -10,11 +11,24 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "medications",
-    indices = [Index("isArchived")],
+    foreignKeys = [
+        ForeignKey(
+            entity = CareRecipient::class,
+            parentColumns = ["id"],
+            childColumns = ["careRecipientId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [
+        Index("isArchived"),
+        Index("careRecipientId"),
+    ],
 )
 data class Medication(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    /** 所属家庭成员（v19）。0 = 未归属，写入前必须由 repository 绑定当前成员。 */
+    val careRecipientId: Long = 0L,
     val name: String,
     val dose: Double,
     val doseUnit: String, // 片 / 粒 / ml ...

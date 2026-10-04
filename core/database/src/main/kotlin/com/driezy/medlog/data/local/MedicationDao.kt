@@ -12,17 +12,20 @@ interface MedicationDao {
     @Query(
         """
         SELECT * FROM medications
-        WHERE isArchived = 0
+        WHERE careRecipientId = :recipientId AND isArchived = 0
         ORDER BY isHighPriority DESC, reminderHour, reminderMinute
     """,
     )
-    fun getActiveMedications(): Flow<List<Medication>>
+    fun getActiveMedications(recipientId: Long): Flow<List<Medication>>
 
-    @Query("SELECT * FROM medications ORDER BY isHighPriority DESC, name")
-    fun getAllMedications(): Flow<List<Medication>>
+    @Query(
+        "SELECT * FROM medications WHERE careRecipientId = :recipientId " +
+            "ORDER BY isHighPriority DESC, name",
+    )
+    fun getAllMedications(recipientId: Long): Flow<List<Medication>>
 
-    @Query("SELECT * FROM medications WHERE isArchived = 1 ORDER BY name")
-    fun getArchivedMedications(): Flow<List<Medication>>
+    @Query("SELECT * FROM medications WHERE careRecipientId = :recipientId AND isArchived = 1 ORDER BY name")
+    fun getArchivedMedications(recipientId: Long): Flow<List<Medication>>
 
     @Query("SELECT * FROM medications WHERE id = :id")
     suspend fun getMedicationById(id: Long): Medication?
@@ -30,32 +33,39 @@ interface MedicationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMedication(medication: Medication): Long
 
-    @Query("SELECT LOWER(TRIM(name)) FROM medications WHERE isArchived = 0")
-    suspend fun getNormalizedActiveNames(): List<String>
+    @Query("SELECT LOWER(TRIM(name)) FROM medications WHERE careRecipientId = :recipientId AND isArchived = 0")
+    suspend fun getNormalizedActiveNames(recipientId: Long): List<String>
 
-    @Query("DELETE FROM medications WHERE isArchived = 0")
-    suspend fun deleteActiveMedications()
+    @Query("DELETE FROM medications WHERE careRecipientId = :recipientId AND isArchived = 0")
+    suspend fun deleteActiveMedications(recipientId: Long)
 
     @Transaction
-    suspend fun mergeMedicationsByName(medications: List<Medication>) {
-        val names = getNormalizedActiveNames().toMutableSet()
+    suspend fun mergeMedicationsByName(recipientId: Long, medications: List<Medication>) {
+        val names = getNormalizedActiveNames(recipientId).toMutableSet()
         medications.forEach { medication ->
             val normalizedName = medication.name.trim().lowercase()
-            if (names.add(normalizedName)) insertMedication(medication.copy(id = 0))
+            if (names.add(normalizedName)) insertMedication(medication.copy(id = 0, careRecipientId = recipientId))
         }
     }
 
     @Transaction
-    suspend fun replaceActiveMedications(medications: List<Medication>) {
-        deleteActiveMedications()
-        medications.forEach { insertMedication(it.copy(id = 0)) }
+    suspend fun replaceActiveMedications(recipientId: Long, medications: List<Medication>) {
+        deleteActiveMedications(recipientId)
+        medications.forEach { insertMedication(it.copy(id = 0, careRecipientId = recipientId)) }
     }
 
     @Update
     suspend fun updateMedication(medication: Medication)
 
-    @Query("SELECT * FROM medication_plan_revisions ORDER BY effectiveFromMs")
-    fun observePlanRevisions(): Flow<List<MedicationPlanRevision>>
+    @Query(
+        """
+        SELECT medication_plan_revisions.* FROM medication_plan_revisions
+        INNER JOIN medications ON medications.id = medication_plan_revisions.medicationId
+        WHERE medications.careRecipientId = :recipientId
+        ORDER BY medication_plan_revisions.effectiveFromMs
+    """,
+    )
+    fun observePlanRevisions(recipientId: Long): Flow<List<MedicationPlanRevision>>
 
     @Insert
     suspend fun insertPlanRevision(revision: MedicationPlanRevision)
@@ -83,16 +93,19 @@ interface MedicationDao {
     @Delete
     suspend fun deleteMedication(medication: Medication)
 
-    @Query("UPDATE medications SET isArchived = 1 WHERE id = :id")
-    suspend fun archiveMedication(id: Long)
+    @Query("UPDATE medications SET isArchived = 1 WHERE id = :id AND careRecipientId = :recipientId")
+    suspend fun archiveMedication(id: Long, recipientId: Long)
 
-    @Query("UPDATE medications SET isArchived = 0 WHERE id = :id")
-    suspend fun unarchiveMedication(id: Long)
+    @Query("UPDATE medications SET isArchived = 0 WHERE id = :id AND careRecipientId = :recipientId")
+    suspend fun unarchiveMedication(id: Long, recipientId: Long)
 
-    @Query("UPDATE medications SET stock = :newStock WHERE id = :id")
-    suspend fun updateStock(id: Long, newStock: Double)
+    @Query("UPDATE medications SET stock = :newStock WHERE id = :id AND careRecipientId = :recipientId")
+    suspend fun updateStock(id: Long, recipientId: Long, newStock: Double)
 
-    /** Widget 专用：一次性查询全部药品（不返回 Flow） */
-    @Query("SELECT * FROM medications WHERE isArchived = 0 ORDER BY isHighPriority DESC, name")
-    suspend fun getAllMedicationsOnce(): List<Medication>
+    /** Widget 专用：一次性查询某成员的全部在用药（不返回 Flow） */
+    @Query(
+        "SELECT * FROM medications WHERE careRecipientId = :recipientId AND isArchived = 0 " +
+            "ORDER BY isHighPriority DESC, name",
+    )
+    suspend fun getAllMedicationsOnce(recipientId: Long): List<Medication>
 }

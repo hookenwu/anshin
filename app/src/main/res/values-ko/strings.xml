@@ -943,4 +943,29 @@
     <string name="settings_restart_dialog_body">데이터베이스가 복원되었습니다. 변경 사항을 적용하려면 앱을 다시 시작해야 합니다. 지금 다시 시작할까요?</string>
     <string name="settings_restart_dialog_confirm">지금 다시 시작</string>
     <string name="settings_ai_endpoint_more_hint">처음 80개만 표시됩니다. 검색으로 좁혀보세요.</string>
+
+    <!-- 가족 구성원 (family MVP / care recipients) -->
+    <string name="settings_destination_members">가족 구성원</string>
+    <string name="settings_destination_members_desc">가족 구성원 추가·전환·관리</string>
+    <string name="recipients_gate_title">가족 구성원 만들기</string>
+    <string name="recipients_gate_body">Anshin은 여러 가족의 복약을 함께 관리할 수 있습니다. 먼저 한 명을 추가하세요(예: 아빠, 엄마). 나중에 설정에서 추가하거나 전환할 수 있습니다.</string>
+    <string name="recipients_gate_name_label">구성원 이름</string>
+    <string name="recipients_gate_name_placeholder">예: 아빠</string>
+    <string name="recipients_gate_save">시작하기</string>
+    <string name="recipients_name_required">구성원 이름을 입력하세요</string>
+    <string name="recipients_manage_title">가족 구성원</string>
+    <string name="recipients_manage_add">구성원 추가</string>
+    <string name="recipients_manage_active_badge">현재 구성원</string>
+    <string name="recipients_manage_select">현재 구성원으로 설정</string>
+    <string name="recipients_manage_rename">이름 변경</string>
+    <string name="recipients_manage_delete">삭제</string>
+    <string name="recipients_manage_empty_title">아직 가족 구성원이 없습니다</string>
+    <string name="recipients_manage_empty_body">구성원을 추가하면 복약 관리를 시작할 수 있습니다.</string>
+    <string name="recipients_create_dialog_title">구성원 추가</string>
+    <string name="recipients_rename_dialog_title">구성원 이름 변경</string>
+    <string name="recipients_name_label">구성원 이름</string>
+    <string name="recipients_delete_confirm_title">이 구성원을 삭제할까요?</string>
+    <string name="recipients_delete_confirm_body">삭제하면 이 구성원의 약, 복약 기록, 로그도 함께 삭제되며 되돌릴 수 없습니다.</string>
+    <string name="recipients_delete_confirm_action">삭제</string>
+    <string name="recipients_rename_failed">이름을 변경하지 못했습니다. 이름을 확인한 후 다시 시도하세요.</string>
 </resources>

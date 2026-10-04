@@ -7,11 +7,14 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface SymptomLogDao {
 
-    @Query("SELECT * FROM symptom_logs ORDER BY recordedAt DESC")
-    fun getAllLogs(): Flow<List<SymptomLog>>
+    @Query("SELECT * FROM symptom_logs WHERE careRecipientId = :recipientId ORDER BY recordedAt DESC")
+    fun getAllLogs(recipientId: Long): Flow<List<SymptomLog>>
 
-    @Query("SELECT * FROM symptom_logs WHERE recordedAt BETWEEN :startMs AND :endMs ORDER BY recordedAt DESC")
-    fun getLogsForDateRange(startMs: Long, endMs: Long): Flow<List<SymptomLog>>
+    @Query(
+        "SELECT * FROM symptom_logs WHERE careRecipientId = :recipientId " +
+            "AND recordedAt BETWEEN :startMs AND :endMs ORDER BY recordedAt DESC",
+    )
+    fun getLogsForDateRange(recipientId: Long, startMs: Long, endMs: Long): Flow<List<SymptomLog>>
 
     @Query("SELECT * FROM symptom_logs WHERE medicationId = :medId ORDER BY recordedAt DESC")
     fun getLogsForMedication(medId: Long): Flow<List<SymptomLog>>
@@ -28,6 +31,6 @@ interface SymptomLogDao {
     @Delete
     suspend fun delete(log: SymptomLog)
 
-    @Query("DELETE FROM symptom_logs WHERE id = :id")
-    suspend fun deleteById(id: Long)
+    @Query("DELETE FROM symptom_logs WHERE id = :id AND careRecipientId = :recipientId")
+    suspend fun deleteById(id: Long, recipientId: Long)
 }

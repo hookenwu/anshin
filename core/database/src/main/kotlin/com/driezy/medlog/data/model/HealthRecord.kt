@@ -1,6 +1,7 @@
 package com.driezy.medlog.data.model
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -23,16 +24,27 @@ enum class HealthRecordSource {
  */
 @Entity(
     tableName = "health_records",
+    foreignKeys = [
+        ForeignKey(
+            entity = CareRecipient::class,
+            parentColumns = ["id"],
+            childColumns = ["careRecipientId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
     indices = [
         Index("type"),
         Index("timestamp"),
         Index("source"),
-        Index(value = ["sourceCacheKey"], unique = true),
+        Index("careRecipientId"),
+        Index(value = ["careRecipientId", "sourceCacheKey"], unique = true),
     ],
 )
 data class HealthRecord(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    /** 所属家庭成员（v19）。 */
+    val careRecipientId: Long = 0L,
     /** HealthType.name 字符串存储，以支持未来扩展 */
     val type: String,
     /** 主值（收缩压 / 血糖 / 体重 / 心率 / 体温 / 血氧） */

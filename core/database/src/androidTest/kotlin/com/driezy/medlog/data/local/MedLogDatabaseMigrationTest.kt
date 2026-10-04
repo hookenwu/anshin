@@ -46,6 +46,7 @@ class MedLogDatabaseMigrationTest {
             MedLogDatabase.MIGRATION_15_16,
             MedLogDatabase.MIGRATION_16_17,
             MedLogDatabase.MIGRATION_17_18,
+            MedLogDatabase.MIGRATION_18_19,
         ).use { database ->
             database.query("SELECT name, intervalHours, refillReminderDays FROM medications WHERE id = 1").use {
                 check(it.moveToFirst())
@@ -92,6 +93,7 @@ class MedLogDatabaseMigrationTest {
             MedLogDatabase.MIGRATION_15_16,
             MedLogDatabase.MIGRATION_16_17,
             MedLogDatabase.MIGRATION_17_18,
+            MedLogDatabase.MIGRATION_18_19,
         ).use { database ->
             database.query(
                 "SELECT id, type, value, secondaryValue, timestamp, notes FROM health_records WHERE id = 7",
@@ -131,6 +133,7 @@ class MedLogDatabaseMigrationTest {
             MedLogDatabase.MIGRATION_15_16,
             MedLogDatabase.MIGRATION_16_17,
             MedLogDatabase.MIGRATION_17_18,
+            MedLogDatabase.MIGRATION_18_19,
         ).use { database ->
             database.query(
                 "SELECT COUNT(*), MAX(id) FROM medication_logs WHERE medicationId = 42 AND scheduledTimeMs = 1717000000000",
@@ -225,6 +228,7 @@ class MedLogDatabaseMigrationTest {
             true,
             MedLogDatabase.MIGRATION_16_17,
             MedLogDatabase.MIGRATION_17_18,
+            MedLogDatabase.MIGRATION_18_19,
         ).use { database ->
             // 验证 5 条记录均被完整保留，无任何数据丢失
             database.query("SELECT COUNT(*) FROM health_records").use { cursor ->
@@ -258,17 +262,17 @@ class MedLogDatabaseMigrationTest {
                 assertEquals("unique_key", cursor.getString(0))
             }
 
-            // 验证唯一索引成功创建且生效
+            // 验证唯一索引成功创建且生效（v19 起唯一性按成员维度：careRecipientId + sourceCacheKey）
             database.query("PRAGMA index_list('health_records')").use { cursor ->
                 val nameIndex = cursor.getColumnIndexOrThrow("name")
                 val uniqueIndex = cursor.getColumnIndexOrThrow("unique")
-                var sourceCacheKeyIndexIsUnique = false
+                var recipientScopedIndexIsUnique = false
                 while (cursor.moveToNext()) {
-                    if (cursor.getString(nameIndex) == "index_health_records_sourceCacheKey") {
-                        sourceCacheKeyIndexIsUnique = cursor.getInt(uniqueIndex) == 1
+                    if (cursor.getString(nameIndex) == "index_health_records_careRecipientId_sourceCacheKey") {
+                        recipientScopedIndexIsUnique = cursor.getInt(uniqueIndex) == 1
                     }
                 }
-                assertEquals(true, sourceCacheKeyIndexIsUnique)
+                assertEquals(true, recipientScopedIndexIsUnique)
             }
         }
     }
