@@ -4,6 +4,9 @@
     <string name="medication_catalog">의약품 목록</string>
     <string name="medication_active">복용 중</string>
     <string name="medication_archived">복용 중단</string>
+    <string name="medication_sort_default">기본</string>
+    <string name="medication_sort_time_asc">시간(이른 순)</string>
+    <string name="medication_sort_time_desc">시간(늦은 순)</string>
     <string name="medication_resume">복용 일정 재개</string>
     <string name="medication_archived_empty">중단한 약이 없습니다</string>
     <string name="medication_active_empty">약을 추가하여 매일 복용 일정을 만드세요</string>

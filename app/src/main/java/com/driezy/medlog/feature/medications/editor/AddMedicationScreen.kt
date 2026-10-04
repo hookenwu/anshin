@@ -108,15 +108,13 @@ private fun AddMedicationContent(
         FormOption("patch", stringResource(R.string.add_form_patch), MedLogIcons.Healing),
         FormOption("other", stringResource(R.string.add_form_other), MedLogIcons.MoreHoriz),
     )
-    val doseUnits = listOf(
-        stringResource(R.string.add_unit_tablet),
-        stringResource(R.string.add_unit_capsule),
-        "ml",
-        "mg",
-        stringResource(R.string.add_unit_drop),
-        stringResource(R.string.add_unit_bag),
-        stringResource(R.string.add_unit_tube),
-        stringResource(R.string.add_unit_patch_unit),
+    val doseUnits = doseUnitOptions(
+        tablet = stringResource(R.string.add_unit_tablet),
+        capsule = stringResource(R.string.add_unit_capsule),
+        drop = stringResource(R.string.add_unit_drop),
+        bag = stringResource(R.string.add_unit_bag),
+        tube = stringResource(R.string.add_unit_tube),
+        patch = stringResource(R.string.add_unit_patch_unit),
     )
     val customDoseTitle = stringResource(R.string.add_dose_custom_dialog_title)
     val customDoseLabel = stringResource(R.string.add_dose_custom_dialog_hint)

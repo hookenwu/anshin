@@ -10,6 +10,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.Medication
+import com.driezy.medlog.data.repository.MedicationSortOrder
 import com.driezy.medlog.feature.medications.list.MyMedicationsContent
 import com.driezy.medlog.feature.medications.list.MyMedicationsState
 import com.driezy.medlog.ui.components.MedicationAdherenceCard
@@ -60,7 +61,7 @@ class MedicationFlowUiTest {
         compose.setContent {
             MedLogTheme(dynamicColor = false) {
                 MyMedicationsContent(MyMedicationsState(listOf(active, stopped), loading = false), {
-                }, { opened = it }, { catalog++ }, {}, {})
+                }, { opened = it }, { catalog++ }, {}, {}, {})
             }
         }
         compose.onNodeWithText(active.name).assertIsDisplayed().performClick()
@@ -77,10 +78,43 @@ class MedicationFlowUiTest {
         val active = Medication(id = 1, name = "My medicine", dose = 1.0, doseUnit = "tablet")
         compose.setContent {
             MedLogTheme(dynamicColor = false) {
-                MyMedicationsContent(MyMedicationsState(listOf(active), loading = false), {}, {}, null, {}, {})
+                MyMedicationsContent(MyMedicationsState(listOf(active), loading = false), {}, {}, null, {}, {}, {})
             }
         }
         compose.onNodeWithText(active.name).assertIsDisplayed()
         compose.onNodeWithContentDescription(context.getString(R.string.medication_catalog)).assertDoesNotExist()
+    }
+
+    @Test fun timeSortChipsReflectSelectionAndDispatchTheChosenOrder() {
+        val chosen = mutableListOf<MedicationSortOrder>()
+        val active = Medication(id = 1, name = "My medicine", dose = 1.0, doseUnit = "tablet")
+        compose.setContent {
+            MedLogTheme(dynamicColor = false) {
+                MyMedicationsContent(
+                    MyMedicationsState(
+                        medications = listOf(active),
+                        sortOrder = MedicationSortOrder.DEFAULT,
+                        loading = false,
+                    ),
+                    {},
+                    {},
+                    null,
+                    {},
+                    {},
+                    chosen::add,
+                )
+            }
+        }
+
+        compose.onNodeWithText(context.getString(R.string.medication_sort_default)).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.medication_sort_time_asc)).performClick()
+        compose.runOnIdle { assertEquals(listOf(MedicationSortOrder.TIME_ASC), chosen) }
+        compose.onNodeWithText(context.getString(R.string.medication_sort_time_desc)).performClick()
+        compose.runOnIdle {
+            assertEquals(
+                listOf(MedicationSortOrder.TIME_ASC, MedicationSortOrder.TIME_DESC),
+                chosen,
+            )
+        }
     }
 }

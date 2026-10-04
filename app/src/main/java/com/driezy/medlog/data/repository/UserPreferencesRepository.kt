@@ -81,6 +81,7 @@ data class SettingsPreferences(
     val autoCollapseCompletedGroups: Boolean = true,
     /** 今日页焦点区域样式；默认使用最直接的行动型。 */
     val homeHeroStyle: HomeHeroStyle = HomeHeroStyle.ACTION,
+    val medicationSortOrder: MedicationSortOrder = MedicationSortOrder.DEFAULT,
     // ── 提醒弹性设置 ───────────────────────────────────────────
     /**
      * 提前 N 分钟发送预告提醒。
@@ -215,6 +216,7 @@ class UserPreferencesRepository @Inject constructor(@param:ApplicationContext pr
         // 今日页面显示偏好
         val AUTO_COLLAPSE_DONE = booleanPreferencesKey("auto_collapse_completed_groups")
         val HOME_HERO_STYLE = stringPreferencesKey("home_hero_style")
+        val MEDICATION_SORT_ORDER = stringPreferencesKey("medication_sort_order")
 
         // 提前预告提醒
         val EARLY_REMINDER_MINUTES = intPreferencesKey("early_reminder_minutes")
@@ -337,6 +339,7 @@ class UserPreferencesRepository @Inject constructor(@param:ApplicationContext pr
                 uiDensityScale = UiDensityScale.fromStoredName(prefs[UI_DENSITY_SCALE]),
                 autoCollapseCompletedGroups = prefs[AUTO_COLLAPSE_DONE] ?: true,
                 homeHeroStyle = HomeHeroStyle.fromStoredName(prefs[HOME_HERO_STYLE]),
+                medicationSortOrder = MedicationSortOrder.fromStoredName(prefs[MEDICATION_SORT_ORDER]),
                 earlyReminderMinutes = prefs[EARLY_REMINDER_MINUTES] ?: 0,
                 widgetShowActions = prefs[WIDGET_SHOW_ACTIONS] ?: true,
                 widgetThemeMode = WidgetThemeMode.fromStoredName(prefs[WIDGET_THEME_MODE]),
@@ -386,6 +389,7 @@ class UserPreferencesRepository @Inject constructor(@param:ApplicationContext pr
             uiDensityScale = prefs.uiDensityScale,
             autoCollapseCompletedGroups = prefs.autoCollapseCompletedGroups,
             homeHeroStyle = prefs.homeHeroStyle,
+            medicationSortOrder = prefs.medicationSortOrder,
         )
     }.distinctUntilChanged()
 
@@ -581,6 +585,10 @@ class UserPreferencesRepository @Inject constructor(@param:ApplicationContext pr
 
     override suspend fun updateHomeHeroStyle(style: HomeHeroStyle) {
         dataStore.edit { it[HOME_HERO_STYLE] = style.name }
+    }
+
+    override suspend fun updateMedicationSortOrder(order: MedicationSortOrder) {
+        dataStore.edit { it[MEDICATION_SORT_ORDER] = order.name }
     }
 
     /** 更新提前预告提醒分钟数（0 = 关闭） */

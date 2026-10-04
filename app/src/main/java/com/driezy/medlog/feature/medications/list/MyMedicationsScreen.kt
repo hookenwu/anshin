@@ -1,8 +1,10 @@
 package com.driezy.medlog.feature.medications.list
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -13,6 +15,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.Medication
+import com.driezy.medlog.data.repository.MedicationSortOrder
 import com.driezy.medlog.ui.components.*
 import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
@@ -30,7 +33,15 @@ fun MyMedicationsScreen(
     viewModel: MyMedicationsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    MyMedicationsContent(state, onAdd, onOpen, onCatalog, onSettings, viewModel::retry)
+    MyMedicationsContent(
+        state = state,
+        onAdd = onAdd,
+        onOpen = onOpen,
+        onCatalog = onCatalog,
+        onSettings = onSettings,
+        onRetry = viewModel::retry,
+        onSortOrderChange = viewModel::onSortOrderChange,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,6 +53,7 @@ internal fun MyMedicationsContent(
     onCatalog: (() -> Unit)?,
     onSettings: () -> Unit,
     onRetry: () -> Unit,
+    onSortOrderChange: (MedicationSortOrder) -> Unit,
 ) {
     var archived by rememberSaveable { mutableStateOf(false) }
     val visible = remember(state.medications, archived) { state.medications.filter { it.isArchived == archived } }
@@ -85,17 +97,33 @@ internal fun MyMedicationsContent(
             verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Medium),
         ) {
             item(key = "filters", contentType = "filters") {
-                Row(horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small)) {
-                    FilterChip(
-                        selected = !archived,
-                        onClick = { archived = false },
-                        label = { Text(stringResource(R.string.medication_active)) },
-                    )
-                    FilterChip(
-                        selected = archived,
-                        onClick = { archived = true },
-                        label = { Text(stringResource(R.string.medication_archived)) },
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small)) {
+                        FilterChip(
+                            selected = !archived,
+                            onClick = { archived = false },
+                            label = { Text(stringResource(R.string.medication_active)) },
+                        )
+                        FilterChip(
+                            selected = archived,
+                            onClick = { archived = true },
+                            label = { Text(stringResource(R.string.medication_archived)) },
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .horizontalScroll(rememberScrollState())
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
+                    ) {
+                        MedicationSortOrder.entries.forEach { order ->
+                            FilterChip(
+                                selected = state.sortOrder == order,
+                                onClick = { onSortOrderChange(order) },
+                                label = { Text(stringResource(order.labelRes)) },
+                            )
+                        }
+                    }
                 }
             }
             if (state.failed) {

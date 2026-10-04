@@ -71,4 +71,28 @@ class ResyncRemindersUseCaseTest {
             reminderTimes = reminderTimes,
             isPRN = isPrn,
         )
+
+    @Test
+    fun `multi period medication resolves every meal period into one write`() = runTest {
+        val medications: MedicationRepository = mock()
+        val reconciler: ReconcileRemindersUseCase = mock()
+        val multi = medication(
+            id = 7L,
+            timePeriod = "afterDinner,beforeBreakfast",
+            reminderTimes = "08:00",
+        )
+        whenever(medications.getActiveMedications()).thenReturn(flowOf(listOf(multi)))
+        val schedule = RoutineSchedule(
+            breakfast = RoutineTime(9, 15),
+            dinner = RoutineTime(19, 45),
+        )
+
+        ResyncRemindersUseCase(medications, reconciler)(schedule)
+
+        // 两个用餐时段各自换算，升序整体回写；主提醒列取最早的一个
+        verify(medications).updateMedications(
+            listOf(multi.copy(reminderTimes = "09:00,20:00", reminderHour = 9, reminderMinute = 0)),
+        )
+        verify(reconciler).all(ReminderReconcileReason.ROUTINE_CHANGED)
+    }
 }

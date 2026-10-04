@@ -4,6 +4,9 @@
     <string name="medication_catalog">Drug catalog</string>
     <string name="medication_active">Active</string>
     <string name="medication_archived">Stopped</string>
+    <string name="medication_sort_default">Default</string>
+    <string name="medication_sort_time_asc">Time: earliest first</string>
+    <string name="medication_sort_time_desc">Time: latest first</string>
     <string name="medication_resume">Resume schedule</string>
     <string name="medication_archived_empty">No stopped medications</string>
     <string name="medication_active_empty">Add a medication to create your daily schedule</string>

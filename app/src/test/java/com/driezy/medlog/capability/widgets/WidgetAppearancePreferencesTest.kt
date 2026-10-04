@@ -5,6 +5,7 @@ import com.driezy.medlog.data.repository.AppearancePreferenceState
 import com.driezy.medlog.data.repository.AppearancePreferences
 import com.driezy.medlog.data.repository.FontMode
 import com.driezy.medlog.data.repository.HomeHeroStyle
+import com.driezy.medlog.data.repository.MedicationSortOrder
 import com.driezy.medlog.data.repository.ThemeMode
 import com.driezy.medlog.data.repository.UiDensityScale
 import com.driezy.medlog.data.repository.WidgetColorSource
@@ -150,6 +151,7 @@ class WidgetAppearancePreferencesTest {
                 uiDensityScale = UiDensityScale.STANDARD,
                 autoCollapseCompletedGroups = false,
                 homeHeroStyle = HomeHeroStyle.ACTION,
+                medicationSortOrder = MedicationSortOrder.DEFAULT,
             ),
         )
 
@@ -161,5 +163,6 @@ class WidgetAppearancePreferencesTest {
         override suspend fun updateUiDensityScale(scale: UiDensityScale) = Unit
         override suspend fun updateAutoCollapseCompletedGroups(enabled: Boolean) = Unit
         override suspend fun updateHomeHeroStyle(style: HomeHeroStyle) = Unit
+        override suspend fun updateMedicationSortOrder(order: MedicationSortOrder) = Unit
     }
 }

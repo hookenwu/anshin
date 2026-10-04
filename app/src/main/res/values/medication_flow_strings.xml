@@ -4,6 +4,9 @@
     <string name="medication_catalog">药品库</string>
     <string name="medication_active">进行中</string>
     <string name="medication_archived">已停用</string>
+    <string name="medication_sort_default">默认排序</string>
+    <string name="medication_sort_time_asc">时间升序</string>
+    <string name="medication_sort_time_desc">时间降序</string>
     <string name="medication_resume">恢复用药计划</string>
     <string name="medication_archived_empty">暂无已停用的药品</string>
     <string name="medication_active_empty">添加正在服用的药品，建立每日计划</string>

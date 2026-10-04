@@ -1,9 +1,27 @@
 package com.driezy.medlog.ui.util
 
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.TimePeriod
+import com.driezy.medlog.data.model.TimePeriods
 import com.driezy.medlog.ui.icons.MedLogIcons
+
+/** 首个作息时段（用于图标）；精确时间或无法识别时返回 null。 */
+fun primaryTimePeriod(raw: String): TimePeriod? = TimePeriods.parse(raw).firstOrNull()
+
+/**
+ * 多个作息时段的本地化文案（如「早餐后、晚餐后」）。
+ * 精确时间或全为未知 key 时返回 null，由调用方回落到具体钟点。
+ */
+@Composable
+fun timePeriodsLabel(raw: String): String? {
+    val periods = TimePeriods.parse(raw)
+    if (periods.isEmpty()) return null
+    val labels = periods.map { stringResource(it.labelRes) }
+    return labels.joinToString("、")
+}
 
 /** TimePeriod 的展示用图标（Compose Material Icon） */
 val TimePeriod.icon: Int

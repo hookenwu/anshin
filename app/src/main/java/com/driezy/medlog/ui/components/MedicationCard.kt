@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.TimePeriod
+import com.driezy.medlog.data.model.TimePeriods
 import com.driezy.medlog.feature.medications.home.MedicationWithStatus
 import com.driezy.medlog.ui.icons.MedLogIcon
 import com.driezy.medlog.ui.icons.MedLogIcons
@@ -32,7 +33,8 @@ import com.driezy.medlog.ui.util.displayName
 import com.driezy.medlog.ui.util.formIcon
 import com.driezy.medlog.ui.util.formatDose
 import com.driezy.medlog.ui.util.icon
-import com.driezy.medlog.ui.util.labelRes
+import com.driezy.medlog.ui.util.primaryTimePeriod
+import com.driezy.medlog.ui.util.timePeriodsLabel
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -227,18 +229,18 @@ fun MedicationCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        val period = TimePeriod.fromKey(med.timePeriod)
+                        val period = primaryTimePeriod(med.timePeriod) ?: TimePeriod.EXACT
                         MedLogIcon(
                             period.icon,
                             null,
                             Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        val timeText = if (med.timePeriod == "exact") {
+                        val timeText = if (TimePeriods.isExact(med.timePeriod)) {
                             med.reminderTimes.split(",").firstOrNull()
                                 ?: "%02d:%02d".format(med.reminderHour, med.reminderMinute)
                         } else {
-                            stringResource(period.labelRes)
+                            timePeriodsLabel(med.timePeriod).orEmpty()
                         }
                         val doseDisplay = "${med.doseQuantity.formatDose()} ${med.doseUnit}"
                         Text(

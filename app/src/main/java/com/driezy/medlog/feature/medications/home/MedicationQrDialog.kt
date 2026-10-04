@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.TimePeriod
+import com.driezy.medlog.data.model.TimePeriods
 import com.driezy.medlog.feature.medications.application.PlanExport
 import com.driezy.medlog.feature.medications.application.PlanExportCodec
 import com.driezy.medlog.ui.icons.MedLogIcon
@@ -105,7 +106,9 @@ internal fun MedicationQrDialog(
                 }
                 val med = item.medication
                 val dose = "${med.doseQuantity.formatDose()}${med.doseUnit}"
-                val period = periodStrings[med.timePeriod] ?: ""
+                val period = TimePeriods.parse(med.timePeriod)
+                    .mapNotNull { periodStrings[it.key] }
+                    .joinToString("、")
                 appendLine("$status ${med.name} $dose $period")
             }
         }.trimEnd()

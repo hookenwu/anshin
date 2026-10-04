@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
-import com.driezy.medlog.data.model.TimePeriod
+import com.driezy.medlog.data.model.TimePeriods
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
 import com.driezy.medlog.ui.components.MedicationAdherenceCard
 import com.driezy.medlog.ui.components.MedicationMessageCard
@@ -30,7 +30,7 @@ import com.driezy.medlog.ui.theme.MedLogSpacing
 import com.driezy.medlog.ui.util.displayName
 import com.driezy.medlog.ui.util.formIcon
 import com.driezy.medlog.ui.util.formatDosePrecise
-import com.driezy.medlog.ui.util.labelRes
+import com.driezy.medlog.ui.util.timePeriodsLabel
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 
@@ -283,11 +283,10 @@ private fun MedicationDetailContent(
                                 stringResource(R.string.detail_usage_prn),
                             )
                         } else {
-                            val period = TimePeriod.fromKey(med.timePeriod)
-                            val timeStr = if (med.timePeriod == "exact") {
+                            val timeStr = if (TimePeriods.isExact(med.timePeriod)) {
                                 med.reminderTimes.replace(",", " / ")
                             } else {
-                                stringResource(period.labelRes)
+                                timePeriodsLabel(med.timePeriod).orEmpty()
                             }
                             DetailRow(stringResource(R.string.detail_label_period), timeStr)
                             val freqStr = when (med.frequencyType) {

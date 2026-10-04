@@ -53,6 +53,7 @@ import com.driezy.medlog.ui.theme.MedLogSpacing
 import com.driezy.medlog.ui.util.displayName
 import com.driezy.medlog.ui.util.formatDose
 import com.driezy.medlog.ui.util.labelRes
+import com.driezy.medlog.ui.util.primaryTimePeriod
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -202,7 +203,7 @@ internal fun CompactMedicationPlanRow(
     modifier: Modifier = Modifier,
 ) {
     val medication = item.medication
-    val period = TimePeriod.fromKey(medication.timePeriod)
+    val period = primaryTimePeriod(medication.timePeriod) ?: TimePeriod.EXACT
     Surface(
         modifier = modifier
             .fillMaxWidth()

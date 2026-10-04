@@ -4,6 +4,9 @@
     <string name="medication_catalog">医薬品一覧</string>
     <string name="medication_active">継続中</string>
     <string name="medication_archived">中止済み</string>
+    <string name="medication_sort_default">既定</string>
+    <string name="medication_sort_time_asc">時間（早い順）</string>
+    <string name="medication_sort_time_desc">時間（遅い順）</string>
     <string name="medication_resume">服薬予定を再開</string>
     <string name="medication_archived_empty">中止した薬はありません</string>
     <string name="medication_active_empty">薬を追加して毎日の予定を作成します</string>

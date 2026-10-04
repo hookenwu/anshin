@@ -10,6 +10,7 @@ import com.driezy.medlog.data.local.TransactionRunner
 import com.driezy.medlog.data.model.Drug
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.TimePeriod
+import com.driezy.medlog.data.model.TimePeriods
 import com.driezy.medlog.data.repository.DrugRepository
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.data.repository.SettingsPreferences
@@ -63,7 +64,8 @@ data class AddMedicationUiState(
     val maxDailyDose: String = "", // 每日最大剂量（字符串，便于输入）
 
     // ── 服药时段 & 提醒 ──────────────────────────────────────────
-    val timePeriod: TimePeriod = TimePeriod.MORNING,
+    /** 选中的用餐时段集合；空集合表示"精确时间"模式（用户手填钟点）。 */
+    val timePeriods: Set<TimePeriod> = setOf(TimePeriod.MORNING),
     val reminderTimes: List<String> = listOf("08:00"), // HH:mm 列表
 
     // ── 频率 ──────────────────────────────────────────────────────
@@ -120,7 +122,8 @@ sealed interface AddMedicationUiAction {
     data class PrnChanged(val enabled: Boolean) : AddMedicationUiAction
     data class MaxDailyDoseChanged(val value: String) : AddMedicationUiAction
     data class IntervalHoursChanged(val value: Int) : AddMedicationUiAction
-    data class TimePeriodChanged(val value: TimePeriod) : AddMedicationUiAction
+    data class TimePeriodToggled(val value: TimePeriod) : AddMedicationUiAction
+    data class TimePeriodModeChanged(val periodMode: Boolean) : AddMedicationUiAction
     data class AddReminderTime(val value: String) : AddMedicationUiAction
     data class RemoveReminderTime(val value: String) : AddMedicationUiAction
     data class FrequencyTypeChanged(val value: String) : AddMedicationUiAction
@@ -258,7 +261,8 @@ class AddMedicationViewModel @Inject constructor(
             is AddMedicationUiAction.PrnChanged -> onIsPRNChange(action.enabled)
             is AddMedicationUiAction.MaxDailyDoseChanged -> onMaxDailyDoseChange(action.value)
             is AddMedicationUiAction.IntervalHoursChanged -> onIntervalHoursChange(action.value)
-            is AddMedicationUiAction.TimePeriodChanged -> onTimePeriodChange(action.value)
+            is AddMedicationUiAction.TimePeriodToggled -> onTimePeriodToggled(action.value)
+            is AddMedicationUiAction.TimePeriodModeChanged -> onTimePeriodModeChanged(action.periodMode)
             is AddMedicationUiAction.AddReminderTime -> addReminderTime(action.value)
             is AddMedicationUiAction.RemoveReminderTime -> removeReminderTime(action.value)
             is AddMedicationUiAction.FrequencyTypeChanged -> onFrequencyTypeChange(action.value)
@@ -326,7 +330,7 @@ class AddMedicationViewModel @Inject constructor(
                 doseUnit = med.doseUnit,
                 isPRN = med.isPRN,
                 maxDailyDose = med.maxDailyDose?.toString() ?: "",
-                timePeriod = TimePeriod.fromKey(med.timePeriod),
+                timePeriods = TimePeriods.parse(med.timePeriod).toSet(),
                 reminderTimes = med.reminderTimes.split(",").filter { it.isNotBlank() }
                     .ifEmpty { listOf("08:00") },
                 frequencyType = med.frequencyType,
@@ -394,16 +398,39 @@ class AddMedicationViewModel @Inject constructor(
     fun onMaxDailyDoseChange(v: String) = update { copy(maxDailyDose = v) }
     fun onIntervalHoursChange(v: Int) = update { copy(intervalHours = v.coerceAtLeast(0)) }
 
-    fun onTimePeriodChange(v: TimePeriod) {
-        val autoTime = if (v == TimePeriod.EXACT) {
-            _uiState.value.reminderTimes.firstOrNull() ?: "08:00"
-        } else {
-            ReminderTimeUtils.timePeriodToReminderTime(v, latestPrefs.value)
-        }
+    /** 选中时段集合 → 具体提醒钟点（去重、升序）；空集合表示精确时间模式。 */
+    private fun resolvePeriodTimes(periods: Set<TimePeriod>): List<String> {
+        if (periods.isEmpty()) return emptyList()
+        return periods
+            .map { period -> ReminderTimeUtils.timePeriodToReminderTime(period, latestPrefs.value) }
+            .distinct()
+            .sorted()
+    }
+
+    /** 多选：再点一次取消该时段；取消到空集时保留用户已有的具体时间，不把提醒清空。 */
+    fun onTimePeriodToggled(v: TimePeriod) {
+        val current = _uiState.value.timePeriods
+        val next = if (v in current) current - v else current + v
+        val resolved = resolvePeriodTimes(next)
         update {
             copy(
-                timePeriod = v,
-                reminderTimes = if (v == TimePeriod.EXACT) reminderTimes else listOf(autoTime),
+                timePeriods = next,
+                reminderTimes = resolved.ifEmpty { reminderTimes },
+            )
+        }
+    }
+
+    /** 精确时间 / 作息时间 模式切换：切回作息模式时若未选时段则默认一个。 */
+    fun onTimePeriodModeChanged(periodMode: Boolean) {
+        if (!periodMode) {
+            update { copy(timePeriods = emptySet()) }
+            return
+        }
+        val next = _uiState.value.timePeriods.ifEmpty { setOf(TimePeriod.MORNING) }
+        update {
+            copy(
+                timePeriods = next,
+                reminderTimes = resolvePeriodTimes(next),
             )
         }
     }
@@ -499,7 +526,7 @@ class AddMedicationViewModel @Inject constructor(
                     doseQuantity = state.doseQuantity,
                     isPRN = state.isPRN,
                     maxDailyDose = state.maxDailyDose.toDoubleOrNull(),
-                    timePeriod = state.timePeriod.key,
+                    timePeriod = TimePeriods.encode(state.timePeriods),
                     reminderTimes = state.reminderTimes.joinToString(","),
                     reminderHour = h,
                     reminderMinute = m,

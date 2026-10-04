@@ -46,6 +46,17 @@ enum class HomeHeroStyle {
     }
 }
 
+enum class MedicationSortOrder {
+    DEFAULT,
+    TIME_ASC,
+    TIME_DESC,
+    ;
+
+    companion object {
+        fun fromStoredName(name: String?): MedicationSortOrder = entries.firstOrNull { it.name == name } ?: DEFAULT
+    }
+}
+
 enum class WidgetThemeMode {
     SYSTEM,
     APP,

@@ -205,7 +205,7 @@ internal fun MedicationReminderScheduleSection(
         )
         // ── 精确时间 / 作息时间 模式切换 ─────────────────────────
         // 若用户在设置中关闭了作息时间段模式，强制为精确时间模式
-        val isExactMode = !enableTimePeriodMode || uiState.timePeriod == TimePeriod.EXACT
+        val isExactMode = !enableTimePeriodMode || uiState.timePeriods.isEmpty()
         AnimatedVisibility(
             visible = enableTimePeriodMode,
             enter = expandVertically(motionScheme.defaultSpatialSpec()) + fadeIn(motionScheme.defaultEffectsSpec()),
@@ -219,7 +219,7 @@ internal fun MedicationReminderScheduleSection(
             ) {
                 ToggleButton(
                     checked = !isExactMode,
-                    onCheckedChange = { onAction(AddMedicationUiAction.TimePeriodChanged(TimePeriod.MORNING)) },
+                    onCheckedChange = { onAction(AddMedicationUiAction.TimePeriodModeChanged(periodMode = true)) },
                     modifier = Modifier.weight(1f).semantics { role = Role.RadioButton },
                     shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
                 ) {
@@ -229,7 +229,7 @@ internal fun MedicationReminderScheduleSection(
                 }
                 ToggleButton(
                     checked = isExactMode,
-                    onCheckedChange = { onAction(AddMedicationUiAction.TimePeriodChanged(TimePeriod.EXACT)) },
+                    onCheckedChange = { onAction(AddMedicationUiAction.TimePeriodModeChanged(periodMode = false)) },
                     modifier = Modifier.weight(1f).semantics { role = Role.RadioButton },
                     shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
                 ) {
@@ -254,8 +254,8 @@ internal fun MedicationReminderScheduleSection(
                 ) {
                     TimePeriod.entries.filter { it != TimePeriod.EXACT }.forEach { tp ->
                         FilterChip(
-                            selected = tp == uiState.timePeriod,
-                            onClick = { onAction(AddMedicationUiAction.TimePeriodChanged(tp)) },
+                            selected = tp in uiState.timePeriods,
+                            onClick = { onAction(AddMedicationUiAction.TimePeriodToggled(tp)) },
                             label = { Text(stringResource(tp.labelRes), style = MaterialTheme.typography.labelSmall) },
                             leadingIcon = {
                                 MedLogIcon(tp.icon, null, Modifier.size(FilterChipDefaults.IconSize))
@@ -269,7 +269,7 @@ internal fun MedicationReminderScheduleSection(
                         Text(
                             stringResource(
                                 R.string.add_reminder_hint_format,
-                                uiState.reminderTimes.firstOrNull().orEmpty(),
+                                uiState.reminderTimes.joinToString("、"),
                             ),
                             style = MaterialTheme.typography.labelMedium,
                         )

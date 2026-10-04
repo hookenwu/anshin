@@ -14,6 +14,7 @@ data class AppearancePreferenceState(
     val uiDensityScale: UiDensityScale,
     val autoCollapseCompletedGroups: Boolean,
     val homeHeroStyle: HomeHeroStyle,
+    val medicationSortOrder: MedicationSortOrder,
 )
 
 interface AppearancePreferences {
@@ -26,6 +27,7 @@ interface AppearancePreferences {
     suspend fun updateUiDensityScale(scale: UiDensityScale)
     suspend fun updateAutoCollapseCompletedGroups(enabled: Boolean)
     suspend fun updateHomeHeroStyle(style: HomeHeroStyle)
+    suspend fun updateMedicationSortOrder(order: MedicationSortOrder)
 }
 
 data class ReminderPreferenceState(
