@@ -8,12 +8,14 @@ import android.os.Build
 import androidx.core.content.edit
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.toDomainSchedule
+import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import com.driezy.medlog.data.repository.UserPreferencesRepository
 import com.driezy.medlog.data.repository.reminderZone
 import com.driezy.medlog.di.ApplicationScope
 import com.driezy.medlog.domain.ReminderPlanner
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.time.Clock
 import java.time.Instant
@@ -43,6 +45,7 @@ const val FOLLOW_UP_CODE_OFFSET = 100_000
 class AlarmScheduler @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val prefsRepository: UserPreferencesRepository,
+    private val careRecipients: com.driezy.medlog.data.repository.CareRecipientRepository,
     private val reminderPlanner: ReminderPlanner,
     private val clock: Clock,
     @param:ApplicationScope private val scope: CoroutineScope,
@@ -51,8 +54,30 @@ class AlarmScheduler @Inject constructor(
         context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     private val projectionRegistry = context.getSharedPreferences(ALARM_PROJECTION_PREFERENCES, Context.MODE_PRIVATE)
 
-    /** 旅行模式：家乡时区，由后台协程实时同步 */
-    @Volatile private var reminderZoneId: ZoneId = clock.zone
+    /**
+     * 各成员的提醒时区与显示名（成员级作息/时区）。
+     *
+     * 成员维度的值不能只缓存"当前成员"一个：重排要为所有成员排闹钟。
+     * [activeRecipientZoneId] 由 DataStore 实时同步（当前成员），
+     * 全量缓存由 [refreshRecipientCaches] 在每次重排前填满。
+     */
+    private val zoneByRecipient = java.util.concurrent.ConcurrentHashMap<Long, ZoneId>()
+    private val nameByRecipient = java.util.concurrent.ConcurrentHashMap<Long, String>()
+
+    @Volatile private var activeRecipientZoneId: ZoneId = clock.zone
+
+    /** 当前成员在缓存里不可用时的兜底时区（例如尚未选成员）。 */
+    private fun zoneFor(recipientId: Long): ZoneId = zoneByRecipient[recipientId] ?: activeRecipientZoneId
+
+    private fun nameFor(recipientId: Long): String? = nameByRecipient[recipientId]
+
+    /** 重排前刷新各成员的时区与显示名缓存（时区用于排期，显示名用于通知标题）。 */
+    suspend fun refreshRecipientCaches() {
+        careRecipients.getRecipients().forEach { recipient ->
+            zoneByRecipient[recipient.id] = prefsRepository.reminderZoneFor(recipient.id, clock.zone)
+            nameByRecipient[recipient.id] = recipient.displayName
+        }
+    }
 
     /** 提前预告提醒分钟数（0 = 关闭），由 DataStore 实时同步 */
     @Volatile private var earlyReminderMinutes: Int = 0
@@ -60,10 +85,21 @@ class AlarmScheduler @Inject constructor(
     init {
         // 监听旅行模式 / 家乡时区变化
         scope.launch {
-            prefsRepository.settingsFlow.collect { prefs ->
-                reminderZoneId = prefs.reminderZone(clock.zone)
-                earlyReminderMinutes = prefs.earlyReminderMinutes
-            }
+            combine(
+                prefsRepository.settingsFlow,
+                careRecipients.observeActiveRecipientId(),
+            ) { prefs, recipientId -> recipientId to prefs }
+                .collect { (recipientId, prefs) ->
+                    // settingsFlow 已按成员解析，这里缓存到该成员名下，切换成员不会串档
+                    if (recipientId != com.driezy.medlog.data.recipient.ActiveRecipientStore.NO_RECIPIENT) {
+                        val zone = prefs.reminderZone(clock.zone)
+                        zoneByRecipient[recipientId] = zone
+                        activeRecipientZoneId = zone
+                    } else {
+                        activeRecipientZoneId = clock.zone
+                    }
+                    earlyReminderMinutes = prefs.earlyReminderMinutes
+                }
         }
     }
 
@@ -80,7 +116,7 @@ class AlarmScheduler @Inject constructor(
         reminderPlanner.nextOccurrences(
             schedule = medication.toDomainSchedule(),
             endAt = medication.endDate?.let(Instant::ofEpochMilli),
-            zoneId = reminderZoneId,
+            zoneId = zoneFor(medication.careRecipientId),
             lastTakenAt = lastTakenMs?.let(Instant::ofEpochMilli),
             startAt = Instant.ofEpochMilli(medication.startDate),
             handled = handled,
@@ -97,7 +133,7 @@ class AlarmScheduler @Inject constructor(
      * 在每次触发后调度下一次时使用。
      */
     fun scheduleAlarmSlot(medication: Medication, timeIndex: Int, triggerAtMs: Long) {
-        registerProjection(medication.id)
+        registerProjection(medication.id, medication.careRecipientId)
         val requestCode = (medication.id * 100 + timeIndex).toInt()
         val intent = PendingIntent.getBroadcast(
             context,
@@ -105,6 +141,7 @@ class AlarmScheduler @Inject constructor(
             Intent(context, MedLogAlarmReceiver::class.java).apply {
                 putExtra(EXTRA_MED_ID, medication.id)
                 putExtra(EXTRA_MED_NAME, medication.name)
+                putExtra(EXTRA_RECIPIENT_NAME, nameFor(medication.careRecipientId))
                 putExtra(EXTRA_TIME_INDEX, timeIndex)
                 putExtra(EXTRA_SCHEDULED_MS, triggerAtMs)
             },
@@ -131,7 +168,7 @@ class AlarmScheduler @Inject constructor(
             slotIndex = timeIndex,
             after = Instant.ofEpochMilli(afterMs),
             endAt = medication.endDate?.let(Instant::ofEpochMilli),
-            zoneId = reminderZoneId,
+            zoneId = zoneFor(medication.careRecipientId),
             startAt = Instant.ofEpochMilli(medication.startDate),
             lastTakenAt = actualTakenTimeMs?.let(Instant::ofEpochMilli),
         )?.scheduledAt?.toEpochMilli() ?: return
@@ -152,7 +189,7 @@ class AlarmScheduler @Inject constructor(
      * 取消某药品的所有时间槽闹钟（不影响通知 UI）。
      * 通知的取消由 [NotificationHelper.cancelAllReminderNotifications] 负责。
      */
-    fun cancelAllAlarms(medicationId: Long) {
+    fun cancelAllAlarms(medicationId: Long, recipientId: Long) {
         for (i in 0 until MAX_REMINDER_SLOTS) {
             val requestCode = (medicationId * 100 + i).toInt()
             val intent = PendingIntent.getBroadcast(
@@ -168,17 +205,63 @@ class AlarmScheduler @Inject constructor(
         cancelEarlyReminderAlarms(medicationId)
         // 一并取消漏服再提醒闹钟
         cancelFollowUpAlarms(medicationId)
-        unregisterProjection(medicationId)
+        unregisterProjection(medicationId, recipientId)
     }
 
-    /** Clears alarms for IDs absent from current Room truth after delete, import, or restore. */
+    /**
+     * 只取消该成员已登记的闹钟，返回被取消的药品 id（供调用方同步清理通知）。
+     *
+     * 这是阶段 1 的关键改动：重排一位成员不再清掉其他成员的闹钟。
+     */
+    @Synchronized
+    fun cancelAlarmsFor(recipientId: Long): Set<Long> {
+        val owned = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty()
+            .mapNotNull { entry -> entry.toOwnedMedication(recipientId) }
+        owned.forEach { medicationId -> cancelAllAlarms(medicationId, recipientId) }
+        return owned.toSet()
+    }
+
+    /**
+     * 清掉旧格式（阶段 0 写入的、不带成员前缀）登记项及其闹钟。
+     * 这些条目无法判定归属，且会被紧随其后的重排重新登记，因此一次性作废是安全的。
+     */
+    @Synchronized
+    fun cancelUnattributedAlarms(): Set<Long> {
+        val unattributed = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty()
+            .mapNotNull { entry -> entry.takeIf { ':' !in it }?.toLongOrNull() }
+        unattributed.forEach { medicationId ->
+            cancelAllAlarms(medicationId, ActiveRecipientStore.NO_RECIPIENT)
+        }
+        return unattributed.toSet()
+    }
+
+    /** 全量清理（删除/导入/恢复等场景）：返回被取消的药品 id。 */
     fun cancelAllKnownAlarms(): Set<Long> {
-        val ids = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet())
+        val entries = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet())
             .orEmpty()
-            .mapNotNull(String::toLongOrNull)
-            .toSet()
-        ids.forEach(::cancelAllAlarms)
+        val owned = entries.mapNotNull { entry ->
+            val parts = entry.split(':')
+            when (parts.size) {
+                2 -> parts[0].toLongOrNull()?.let { recipientId -> recipientId to parts[1].toLongOrNull() }
+                else -> parts[0].toLongOrNull()?.let { medicationId ->
+                    ActiveRecipientStore.NO_RECIPIENT to medicationId
+                }
+            }
+        }.mapNotNull { (recipientId, medicationId) ->
+            medicationId?.let { recipientId to it }
+        }
+        val ids = owned.map { it.second }.toSet()
+        owned.forEach { (recipientId, medicationId) -> cancelAllAlarms(medicationId, recipientId) }
         return ids
+    }
+
+    /** 登记项 → 该成员名下的药品 id（`<recipientId>:<medicationId>`；旧格式仅归入"无成员"）。 */
+    private fun String.toOwnedMedication(recipientId: Long): Long? {
+        val parts = split(':')
+        return when (parts.size) {
+            2 -> parts[1].toLongOrNull()?.takeIf { parts[0].toLongOrNull() == recipientId }
+            else -> parts[0].toLongOrNull()?.takeIf { recipientId == ActiveRecipientStore.NO_RECIPIENT }
+        }
     }
 
     /**
@@ -228,20 +311,23 @@ class AlarmScheduler @Inject constructor(
     }
 
     @Synchronized
-    private fun registerProjection(medicationId: Long) {
+    private fun registerProjection(medicationId: Long, recipientId: Long) {
         val ids = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty().toMutableSet()
-        if (ids.add(medicationId.toString())) {
+        if (ids.add(projectionKey(recipientId, medicationId))) {
             projectionRegistry.edit { putStringSet(REGISTERED_MEDICATION_IDS, ids) }
         }
     }
 
     @Synchronized
-    private fun unregisterProjection(medicationId: Long) {
+    private fun unregisterProjection(medicationId: Long, recipientId: Long) {
         val ids = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty().toMutableSet()
-        if (ids.remove(medicationId.toString())) {
+        if (ids.remove(projectionKey(recipientId, medicationId))) {
             projectionRegistry.edit { putStringSet(REGISTERED_MEDICATION_IDS, ids) }
         }
     }
+
+    /** 登记项格式：`<recipientId>:<medicationId>`；阶段 0 的裸 id 由 [cancelUnattributedAlarms] 一次性作废。 */
+    private fun projectionKey(recipientId: Long, medicationId: Long): String = "$recipientId:$medicationId"
 
     /**
      * 调度漏服再提醒闹钟。
@@ -263,7 +349,7 @@ class AlarmScheduler @Inject constructor(
         delayMs: Long,
         triggerAtMs: Long,
     ) {
-        registerProjection(medication.id)
+        registerProjection(medication.id, medication.careRecipientId)
         val requestCode = (medication.id * 100 + timeIndex).toInt() + FOLLOW_UP_CODE_OFFSET
         val intent = PendingIntent.getBroadcast(
             context,
@@ -271,6 +357,7 @@ class AlarmScheduler @Inject constructor(
             Intent(context, MedLogAlarmReceiver::class.java).apply {
                 putExtra(EXTRA_MED_ID, medication.id)
                 putExtra(EXTRA_MED_NAME, medication.name)
+                putExtra(EXTRA_RECIPIENT_NAME, nameFor(medication.careRecipientId))
                 putExtra(EXTRA_TIME_INDEX, timeIndex)
                 putExtra(EXTRA_IS_FOLLOW_UP, true)
                 putExtra(EXTRA_FOLLOW_UP_COUNT, followUpCount)
@@ -301,6 +388,7 @@ class AlarmScheduler @Inject constructor(
             Intent(context, MedLogAlarmReceiver::class.java).apply {
                 putExtra(EXTRA_MED_ID, medication.id)
                 putExtra(EXTRA_MED_NAME, medication.name)
+                putExtra(EXTRA_RECIPIENT_NAME, nameFor(medication.careRecipientId))
                 putExtra(EXTRA_TIME_INDEX, timeIndex)
                 putExtra(EXTRA_IS_EARLY, true)
                 putExtra("early_minutes", mins)

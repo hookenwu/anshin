@@ -22,6 +22,13 @@ class FakeMedicationRepository : MedicationRepository {
         medicationsState.map { list -> list.filter { it.isArchived } }
 
     override fun getAllMedications(): Flow<List<Medication>> = medicationsState
+
+    override suspend fun getMedicationsFor(recipientId: Long): List<Medication> =
+        medicationsState.value.filter { it.careRecipientId == recipientId && !it.isArchived }
+
+    override suspend fun getAllMedicationsFor(recipientId: Long): List<Medication> =
+        medicationsState.value.filter { it.careRecipientId == recipientId }
+
     val planRevisions = MutableStateFlow<List<MedicationPlanRevision>>(emptyList())
     override fun observePlanRevisions(): Flow<List<MedicationPlanRevision>> = planRevisions
 

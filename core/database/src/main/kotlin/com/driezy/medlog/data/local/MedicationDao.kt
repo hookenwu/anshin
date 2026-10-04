@@ -108,4 +108,8 @@ interface MedicationDao {
             "ORDER BY isHighPriority DESC, name",
     )
     suspend fun getAllMedicationsOnce(recipientId: Long): List<Medication>
+
+    /** 含已归档的整份清单：重排时用于清理归档药品的残留通知/闹钟。 */
+    @Query("SELECT * FROM medications WHERE careRecipientId = :recipientId ORDER BY name")
+    suspend fun getAllMedicationsIncludingArchivedOnce(recipientId: Long): List<Medication>
 }

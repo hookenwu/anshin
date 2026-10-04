@@ -525,6 +525,7 @@
     <string name="notif_live_short_take">服薬</string>
     <string name="notif_live_short_follow_up">再通知</string>
     <string name="notif_reminder_title">服薬時刻です：%s</string>
+    <string name="notif_title_with_member">%1$s・%2$s</string>
     <string name="notif_reminder_dose_label">用量：%s</string>
     <string name="notif_reminder_subtext">服薬リマインダー</string>
     <string name="notif_reminder_big_text">%2$s を %1$s 服用しましょう</string>
@@ -965,4 +966,9 @@
     <string name="recipients_delete_confirm_body">削除すると、このメンバーの薬・服薬記録・ログもすべて削除され、元に戻せません。</string>
     <string name="recipients_delete_confirm_action">削除</string>
     <string name="recipients_rename_failed">名前を変更できませんでした。名前を確認して再試行してください。</string>
+
+    <!-- 家族メンバー切り替え（ナビ見出し / ホームのアプリバー） -->
+    <string name="recipients_switcher_title">ご家族を切り替え</string>
+    <string name="recipients_switcher_action">メンバー切替</string>
+    <string name="recipients_switcher_manage">ご家族を管理</string>
 </resources>

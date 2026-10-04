@@ -13,11 +13,15 @@ import com.driezy.medlog.data.local.settingsDataStore
 import com.driezy.medlog.data.model.RoutineSchedule
 import com.driezy.medlog.data.model.RoutineTime
 import com.driezy.medlog.data.model.RoutineTimeSlot
+import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import com.driezy.medlog.feature.onboarding.model.OnboardingDraft
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 import java.time.ZoneId
@@ -172,8 +176,10 @@ fun SettingsPreferences.reminderZone(fallback: ZoneId): ZoneId = if (travelMode 
 }
 
 @Singleton
-class UserPreferencesRepository @Inject constructor(@param:ApplicationContext private val context: Context) :
-    AppearancePreferences,
+class UserPreferencesRepository @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    private val activeRecipient: ActiveRecipientStore,
+) : AppearancePreferences,
     ReminderPreferences,
     FeaturePreferences,
     AiPreferences,
@@ -265,8 +271,8 @@ class UserPreferencesRepository @Inject constructor(@param:ApplicationContext pr
         }
     }
 
-    /** 持续输出最新设置（Flow，app 生命周期内可观察） */
-    val settingsFlow: Flow<SettingsPreferences> = dataStore.data
+    /** 设备级设置（不含按成员拆分的作息/时区/身高）；对外请使用 [settingsFlow]。 */
+    private val deviceSettingsFlow: Flow<SettingsPreferences> = dataStore.data
         .catch { e ->
             if (e is IOException) {
                 emit(emptyPreferences())
@@ -379,6 +385,148 @@ class UserPreferencesRepository @Inject constructor(@param:ApplicationContext pr
             )
         }
 
+    // ── 按成员(per-recipient)的作息 / 时区 / 身高 ─────────────────────────────
+    //
+    // 落点决策（阶段 1）：仍存 DataStore，但按成员分键（`<legacy>#<recipientId>`）；
+    // 读取顺序是「成员键 → 改造前的全局键 → 默认值」，写入时若还没有成员则沿用全局键。
+    // 因此升级用户不需要任何数据迁移，也不必动 Room schema（v19 不变）。
+
+    /** 成员维度键；没有成员时返回旧全局键，首启/引导期的行为与改造前一致。 */
+    private fun intKey(legacy: Preferences.Key<Int>, recipientId: Long): Preferences.Key<Int> =
+        if (recipientId == ActiveRecipientStore.NO_RECIPIENT) {
+            legacy
+        } else {
+            intPreferencesKey("${legacy.name}#$recipientId")
+        }
+
+    private fun booleanKey(legacy: Preferences.Key<Boolean>, recipientId: Long): Preferences.Key<Boolean> =
+        if (recipientId == ActiveRecipientStore.NO_RECIPIENT) {
+            legacy
+        } else {
+            booleanPreferencesKey("${legacy.name}#$recipientId")
+        }
+
+    private fun stringKey(legacy: Preferences.Key<String>, recipientId: Long): Preferences.Key<String> =
+        if (recipientId == ActiveRecipientStore.NO_RECIPIENT) {
+            legacy
+        } else {
+            stringPreferencesKey("${legacy.name}#$recipientId")
+        }
+
+    private fun floatKey(legacy: Preferences.Key<Float>, recipientId: Long): Preferences.Key<Float> =
+        if (recipientId == ActiveRecipientStore.NO_RECIPIENT) {
+            legacy
+        } else {
+            floatPreferencesKey("${legacy.name}#$recipientId")
+        }
+
+    /** 读取顺序：成员键 → 旧全局键（升级用户的既有设置）。 */
+    private fun Preferences.memberInt(legacy: Preferences.Key<Int>, recipientId: Long): Int? =
+        this[intKey(legacy, recipientId)] ?: this[legacy]
+
+    private fun Preferences.memberBoolean(legacy: Preferences.Key<Boolean>, recipientId: Long): Boolean? =
+        this[booleanKey(legacy, recipientId)] ?: this[legacy]
+
+    private fun Preferences.memberString(legacy: Preferences.Key<String>, recipientId: Long): String? =
+        this[stringKey(legacy, recipientId)] ?: this[legacy]
+
+    private fun Preferences.memberFloat(legacy: Preferences.Key<Float>, recipientId: Long): Float? =
+        this[floatKey(legacy, recipientId)] ?: this[legacy]
+
+    /**
+     * 当前成员视角的设置：只覆盖作息、时区、身高三类字段，其余字段仍是设备级。
+     * 覆盖放在数据类层面，既有的整段映射逻辑保持不动。
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val settingsFlow: Flow<SettingsPreferences> = activeRecipient.recipientId
+        .flatMapLatest { recipientId ->
+            deviceSettingsFlow.map { device -> device.withMemberScopedPrefs(recipientId) }
+        }
+        .distinctUntilChanged()
+
+    private suspend fun SettingsPreferences.withMemberScopedPrefs(recipientId: Long): SettingsPreferences {
+        if (recipientId == ActiveRecipientStore.NO_RECIPIENT) return this
+        val prefs = dataStore.data.first()
+        val wake = RoutineTime(
+            prefs.memberInt(WAKE_HOUR, recipientId) ?: wakeHour,
+            prefs.memberInt(WAKE_MINUTE, recipientId) ?: wakeMinute,
+        )
+        val breakfast = RoutineTime(
+            prefs.memberInt(BREAKFAST_HOUR, recipientId) ?: breakfastHour,
+            prefs.memberInt(BREAKFAST_MIN, recipientId) ?: breakfastMinute,
+        )
+        val lunch = RoutineTime(
+            prefs.memberInt(LUNCH_HOUR, recipientId) ?: lunchHour,
+            prefs.memberInt(LUNCH_MIN, recipientId) ?: lunchMinute,
+        )
+        val dinner = RoutineTime(
+            prefs.memberInt(DINNER_HOUR, recipientId) ?: dinnerHour,
+            prefs.memberInt(DINNER_MIN, recipientId) ?: dinnerMinute,
+        )
+        val bed = RoutineTime(
+            prefs.memberInt(BED_HOUR, recipientId) ?: bedHour,
+            prefs.memberInt(BED_MIN, recipientId) ?: bedMinute,
+        )
+        return copy(
+            wakeHour = wake.hour,
+            wakeMinute = wake.minute,
+            breakfastHour = breakfast.hour,
+            breakfastMinute = breakfast.minute,
+            lunchHour = lunch.hour,
+            lunchMinute = lunch.minute,
+            dinnerHour = dinner.hour,
+            dinnerMinute = dinner.minute,
+            bedHour = bed.hour,
+            bedMinute = bed.minute,
+            travelMode = prefs.memberBoolean(TRAVEL_MODE, recipientId) ?: travelMode,
+            homeTimeZoneId = prefs.memberString(HOME_TIMEZONE_ID, recipientId) ?: homeTimeZoneId,
+            userHeightCm = prefs.memberFloat(USER_HEIGHT_CM, recipientId) ?: userHeightCm,
+        )
+    }
+
+    /** 指定成员的作息；供提醒重排等"非当前成员"场景使用（成员键缺失时回落旧全局键）。 */
+    suspend fun routineScheduleFor(recipientId: Long): RoutineSchedule {
+        val prefs = dataStore.data.first()
+        val base = RoutineSchedule()
+        fun time(hourKey: Preferences.Key<Int>, minuteKey: Preferences.Key<Int>, fallback: RoutineTime) = RoutineTime(
+            prefs.memberInt(hourKey, recipientId) ?: fallback.hour,
+            prefs.memberInt(minuteKey, recipientId) ?: fallback.minute,
+        )
+        return RoutineSchedule(
+            wake = time(WAKE_HOUR, WAKE_MINUTE, base.wake),
+            breakfast = time(BREAKFAST_HOUR, BREAKFAST_MIN, base.breakfast),
+            lunch = time(LUNCH_HOUR, LUNCH_MIN, base.lunch),
+            dinner = time(DINNER_HOUR, DINNER_MIN, base.dinner),
+            bed = time(BED_HOUR, BED_MIN, base.bed),
+        )
+    }
+
+    /** 指定成员的提醒时区（旅行模式 + 家乡时区按成员解析）。 */
+    suspend fun reminderZoneFor(recipientId: Long, fallback: ZoneId): ZoneId {
+        val prefs = dataStore.data.first()
+        val travelMode = prefs.memberBoolean(TRAVEL_MODE, recipientId) ?: false
+        val homeTimeZoneId = prefs.memberString(HOME_TIMEZONE_ID, recipientId).orEmpty()
+        return if (travelMode && homeTimeZoneId.isNotBlank()) {
+            runCatching { ZoneId.of(homeTimeZoneId) }.getOrDefault(fallback)
+        } else {
+            fallback
+        }
+    }
+
+    /** 删除成员时清理其成员维度的设置键。 */
+    suspend fun clearMemberScopedSettings(recipientId: Long) {
+        if (recipientId == ActiveRecipientStore.NO_RECIPIENT) return
+        dataStore.edit { prefs ->
+            listOf(WAKE_HOUR, WAKE_MINUTE, BREAKFAST_HOUR, BREAKFAST_MIN, LUNCH_HOUR, LUNCH_MIN)
+                .forEach { prefs.remove(intKey(it, recipientId)) }
+            listOf(DINNER_HOUR, DINNER_MIN, BED_HOUR, BED_MIN)
+                .forEach { prefs.remove(intKey(it, recipientId)) }
+            prefs.remove(booleanKey(TRAVEL_MODE, recipientId))
+            prefs.remove(stringKey(HOME_TIMEZONE_ID, recipientId))
+            prefs.remove(floatKey(USER_HEIGHT_CM, recipientId))
+        }
+    }
+
     override val appearance: Flow<AppearancePreferenceState> = settingsFlow.map { prefs ->
         AppearancePreferenceState(
             themeMode = prefs.themeMode,
@@ -458,44 +606,46 @@ class UserPreferencesRepository @Inject constructor(@param:ApplicationContext pr
     }
 
     override suspend fun updateRoutineTime(slot: RoutineTimeSlot, time: RoutineTime) {
+        val recipientId = activeRecipient.current()
         dataStore.edit { prefs ->
             when (slot) {
                 RoutineTimeSlot.WAKE -> {
-                    prefs[WAKE_HOUR] = time.hour
-                    prefs[WAKE_MINUTE] = time.minute
+                    prefs[intKey(WAKE_HOUR, recipientId)] = time.hour
+                    prefs[intKey(WAKE_MINUTE, recipientId)] = time.minute
                 }
                 RoutineTimeSlot.BREAKFAST -> {
-                    prefs[BREAKFAST_HOUR] = time.hour
-                    prefs[BREAKFAST_MIN] = time.minute
+                    prefs[intKey(BREAKFAST_HOUR, recipientId)] = time.hour
+                    prefs[intKey(BREAKFAST_MIN, recipientId)] = time.minute
                 }
                 RoutineTimeSlot.LUNCH -> {
-                    prefs[LUNCH_HOUR] = time.hour
-                    prefs[LUNCH_MIN] = time.minute
+                    prefs[intKey(LUNCH_HOUR, recipientId)] = time.hour
+                    prefs[intKey(LUNCH_MIN, recipientId)] = time.minute
                 }
                 RoutineTimeSlot.DINNER -> {
-                    prefs[DINNER_HOUR] = time.hour
-                    prefs[DINNER_MIN] = time.minute
+                    prefs[intKey(DINNER_HOUR, recipientId)] = time.hour
+                    prefs[intKey(DINNER_MIN, recipientId)] = time.minute
                 }
                 RoutineTimeSlot.BED -> {
-                    prefs[BED_HOUR] = time.hour
-                    prefs[BED_MIN] = time.minute
+                    prefs[intKey(BED_HOUR, recipientId)] = time.hour
+                    prefs[intKey(BED_MIN, recipientId)] = time.minute
                 }
             }
         }
     }
 
     override suspend fun updateRoutineSchedule(schedule: RoutineSchedule) {
+        val recipientId = activeRecipient.current()
         dataStore.edit { prefs ->
-            prefs[WAKE_HOUR] = schedule.wake.hour
-            prefs[WAKE_MINUTE] = schedule.wake.minute
-            prefs[BREAKFAST_HOUR] = schedule.breakfast.hour
-            prefs[BREAKFAST_MIN] = schedule.breakfast.minute
-            prefs[LUNCH_HOUR] = schedule.lunch.hour
-            prefs[LUNCH_MIN] = schedule.lunch.minute
-            prefs[DINNER_HOUR] = schedule.dinner.hour
-            prefs[DINNER_MIN] = schedule.dinner.minute
-            prefs[BED_HOUR] = schedule.bed.hour
-            prefs[BED_MIN] = schedule.bed.minute
+            prefs[intKey(WAKE_HOUR, recipientId)] = schedule.wake.hour
+            prefs[intKey(WAKE_MINUTE, recipientId)] = schedule.wake.minute
+            prefs[intKey(BREAKFAST_HOUR, recipientId)] = schedule.breakfast.hour
+            prefs[intKey(BREAKFAST_MIN, recipientId)] = schedule.breakfast.minute
+            prefs[intKey(LUNCH_HOUR, recipientId)] = schedule.lunch.hour
+            prefs[intKey(LUNCH_MIN, recipientId)] = schedule.lunch.minute
+            prefs[intKey(DINNER_HOUR, recipientId)] = schedule.dinner.hour
+            prefs[intKey(DINNER_MIN, recipientId)] = schedule.dinner.minute
+            prefs[intKey(BED_HOUR, recipientId)] = schedule.bed.hour
+            prefs[intKey(BED_MIN, recipientId)] = schedule.bed.minute
         }
     }
 
@@ -505,17 +655,18 @@ class UserPreferencesRepository @Inject constructor(@param:ApplicationContext pr
 
     /** Writes the complete onboarding draft atomically so observers never see a partially applied setup. */
     override suspend fun saveOnboardingDraft(draft: OnboardingDraft) {
+        val recipientId = activeRecipient.current()
         dataStore.edit { prefs ->
-            prefs[WAKE_HOUR] = draft.routineSchedule.wake.hour
-            prefs[WAKE_MINUTE] = draft.routineSchedule.wake.minute
-            prefs[BREAKFAST_HOUR] = draft.routineSchedule.breakfast.hour
-            prefs[BREAKFAST_MIN] = draft.routineSchedule.breakfast.minute
-            prefs[LUNCH_HOUR] = draft.routineSchedule.lunch.hour
-            prefs[LUNCH_MIN] = draft.routineSchedule.lunch.minute
-            prefs[DINNER_HOUR] = draft.routineSchedule.dinner.hour
-            prefs[DINNER_MIN] = draft.routineSchedule.dinner.minute
-            prefs[BED_HOUR] = draft.routineSchedule.bed.hour
-            prefs[BED_MIN] = draft.routineSchedule.bed.minute
+            prefs[intKey(WAKE_HOUR, recipientId)] = draft.routineSchedule.wake.hour
+            prefs[intKey(WAKE_MINUTE, recipientId)] = draft.routineSchedule.wake.minute
+            prefs[intKey(BREAKFAST_HOUR, recipientId)] = draft.routineSchedule.breakfast.hour
+            prefs[intKey(BREAKFAST_MIN, recipientId)] = draft.routineSchedule.breakfast.minute
+            prefs[intKey(LUNCH_HOUR, recipientId)] = draft.routineSchedule.lunch.hour
+            prefs[intKey(LUNCH_MIN, recipientId)] = draft.routineSchedule.lunch.minute
+            prefs[intKey(DINNER_HOUR, recipientId)] = draft.routineSchedule.dinner.hour
+            prefs[intKey(DINNER_MIN, recipientId)] = draft.routineSchedule.dinner.minute
+            prefs[intKey(BED_HOUR, recipientId)] = draft.routineSchedule.bed.hour
+            prefs[intKey(BED_MIN, recipientId)] = draft.routineSchedule.bed.minute
             prefs[ENABLE_SYMPTOM_DIARY] = draft.enableSymptomDiary
             prefs[ENABLE_DRUG_INTERACTION] = draft.enableDrugInteractionCheck
             prefs[ENABLE_DRUG_DATABASE] = draft.enableDrugDatabase
@@ -526,9 +677,10 @@ class UserPreferencesRepository @Inject constructor(@param:ApplicationContext pr
     }
 
     override suspend fun updateTravelMode(enabled: Boolean, homeTimeZoneId: String) {
+        val recipientId = activeRecipient.current()
         dataStore.edit {
-            it[TRAVEL_MODE] = enabled
-            if (homeTimeZoneId.isNotBlank()) it[HOME_TIMEZONE_ID] = homeTimeZoneId
+            it[booleanKey(TRAVEL_MODE, recipientId)] = enabled
+            if (homeTimeZoneId.isNotBlank()) it[stringKey(HOME_TIMEZONE_ID, recipientId)] = homeTimeZoneId
         }
     }
 
@@ -628,7 +780,8 @@ class UserPreferencesRepository @Inject constructor(@param:ApplicationContext pr
 
     /** 更新用户身高（cm），用于 BMI 计算 */
     suspend fun updateUserHeight(heightCm: Float) {
-        dataStore.edit { it[USER_HEIGHT_CM] = heightCm }
+        val recipientId = activeRecipient.current()
+        dataStore.edit { it[floatKey(USER_HEIGHT_CM, recipientId)] = heightCm }
     }
 
     /** 更新 OCR 识别模型类型 */

@@ -525,6 +525,7 @@
     <string name="notif_live_short_take">복용</string>
     <string name="notif_live_short_follow_up">재알림</string>
     <string name="notif_reminder_title">복약 시간: %s</string>
+    <string name="notif_title_with_member">%1$s · %2$s</string>
     <string name="notif_reminder_dose_label">용량: %s</string>
     <string name="notif_reminder_subtext">복약 알림</string>
     <string name="notif_reminder_big_text">%2$s %1$s를 복용하세요</string>
@@ -968,4 +969,9 @@
     <string name="recipients_delete_confirm_body">삭제하면 이 구성원의 약, 복약 기록, 로그도 함께 삭제되며 되돌릴 수 없습니다.</string>
     <string name="recipients_delete_confirm_action">삭제</string>
     <string name="recipients_rename_failed">이름을 변경하지 못했습니다. 이름을 확인한 후 다시 시도하세요.</string>
+
+    <!-- 가족 구성원 전환 (기본 내비 헤더 / 홈 상단 바) -->
+    <string name="recipients_switcher_title">가족 구성원 전환</string>
+    <string name="recipients_switcher_action">구성원 전환</string>
+    <string name="recipients_switcher_manage">가족 구성원 관리</string>
 </resources>

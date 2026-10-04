@@ -2,6 +2,8 @@ package com.driezy.medlog.capability.reminders
 
 import com.driezy.medlog.capability.widgets.WidgetRefresher
 import com.driezy.medlog.data.model.LogStatus
+import com.driezy.medlog.data.recipient.ActiveRecipientStore
+import com.driezy.medlog.data.repository.CareRecipientRepository
 import com.driezy.medlog.data.repository.LogRepository
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
@@ -15,6 +17,7 @@ import javax.inject.Singleton
 @Singleton
 class AndroidReminderReconciler @Inject constructor(
     private val medications: MedicationRepository,
+    private val careRecipients: CareRecipientRepository,
     private val logs: LogRepository,
     private val alarmScheduler: AlarmScheduler,
     private val notificationHelper: NotificationHelper,
@@ -22,7 +25,10 @@ class AndroidReminderReconciler @Inject constructor(
 ) : ReminderReconciler {
     override suspend fun reconcileMedication(id: MedicationId, reason: ReminderReconcileReason) {
         val medication = medications.getMedicationById(id.value)
-        alarmScheduler.cancelAllAlarms(id.value)
+        alarmScheduler.cancelAllAlarms(
+            id.value,
+            medication?.careRecipientId ?: ActiveRecipientStore.NO_RECIPIENT,
+        )
         notificationHelper.cancelAllReminderNotifications(id.value)
         if (medication != null && !medication.isArchived && !medication.isPRN) {
             schedule(medication)
@@ -30,13 +36,28 @@ class AndroidReminderReconciler @Inject constructor(
         widgetRefresher.refreshAll()
     }
 
+    /**
+     * 全量重排，按成员逐个进行。
+     *
+     * 阶段 0 的实现是"取消所有已登记闹钟 → 只为当前成员重排"，切成员会清掉别人的闹钟；
+     * 现在每位成员只清理并重建自己的那部分，互不影响。
+     */
     override suspend fun reconcileAll(reason: ReminderReconcileReason) {
-        alarmScheduler.cancelAllKnownAlarms().forEach(notificationHelper::cancelAllReminderNotifications)
-        medications.getAllMedications().first().forEach { medication ->
-            alarmScheduler.cancelAllAlarms(medication.id)
-            notificationHelper.cancelAllReminderNotifications(medication.id)
-            if (!medication.isArchived && !medication.isPRN) {
-                schedule(medication)
+        alarmScheduler.refreshRecipientCaches()
+        // 阶段 0 遗留的、无法判定归属的登记项一次性作废（紧随其后的重排会重建）
+        alarmScheduler.cancelUnattributedAlarms().forEach(notificationHelper::cancelAllReminderNotifications)
+        val recipientIds = careRecipients.getRecipients()
+            .map { it.id }
+            .ifEmpty { listOf(ActiveRecipientStore.NO_RECIPIENT) }
+        recipientIds.forEach { recipientId ->
+            alarmScheduler.cancelAlarmsFor(recipientId)
+                .forEach(notificationHelper::cancelAllReminderNotifications)
+            // 用"含归档"的整份清单做清理：归档药品的残留通知也要收掉（改造前就是这么做的）
+            medications.getAllMedicationsFor(recipientId).forEach { medication ->
+                notificationHelper.cancelAllReminderNotifications(medication.id)
+                if (!medication.isArchived && !medication.isPRN) {
+                    schedule(medication)
+                }
             }
         }
         widgetRefresher.refreshAll()

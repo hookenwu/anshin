@@ -1,6 +1,8 @@
 package com.driezy.medlog.ui.navigation
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -26,12 +28,16 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldLayout
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import com.driezy.medlog.R
+import com.driezy.medlog.data.model.CareRecipient
+import com.driezy.medlog.ui.components.FamilyMemberSwitcher
+import com.driezy.medlog.ui.components.FamilyMemberSwitcherVariant
 import com.driezy.medlog.ui.icons.MedLogIcon
 import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
@@ -43,6 +49,10 @@ fun MedLogNavigationWrapper(
     currentDestination: NavDestination?,
     navigateToTopLevel: (TopLevelDestination) -> Unit,
     destinations: List<TopLevelDestination> = TOP_LEVEL_DESTINATIONS,
+    recipients: List<CareRecipient> = emptyList(),
+    activeRecipientId: Long = 0L,
+    onSelectRecipient: (Long) -> Unit = {},
+    onManageRecipients: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val adaptiveInfo = currentWindowAdaptiveInfo()
@@ -60,6 +70,10 @@ fun MedLogNavigationWrapper(
                             currentDestination = currentDestination,
                             navigateToTopLevel = navigateToTopLevel,
                             destinations = destinations,
+                            recipients = recipients,
+                            activeRecipientId = activeRecipientId,
+                            onSelectRecipient = onSelectRecipient,
+                            onManageRecipients = onManageRecipients,
                         )
                     }
                 },
@@ -75,6 +89,10 @@ fun MedLogNavigationWrapper(
                         currentDestination = currentDestination,
                         navigateToTopLevel = navigateToTopLevel,
                         destinations = destinations,
+                        recipients = recipients,
+                        activeRecipientId = activeRecipientId,
+                        onSelectRecipient = onSelectRecipient,
+                        onManageRecipients = onManageRecipients,
                     )
                 },
                 content = { content() },
@@ -131,19 +149,34 @@ fun MedLogNavigationRail(
     currentDestination: NavDestination?,
     navigateToTopLevel: (TopLevelDestination) -> Unit,
     destinations: List<TopLevelDestination> = TOP_LEVEL_DESTINATIONS,
+    recipients: List<CareRecipient> = emptyList(),
+    activeRecipientId: Long = 0L,
+    onSelectRecipient: (Long) -> Unit = {},
+    onManageRecipients: () -> Unit = {},
 ) {
     NavigationRail(
         modifier = Modifier.fillMaxHeight(),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         header = {
-            MedLogIcon(
-                icon = MedLogIcons.Medication,
-                contentDescription = "Anshin",
-                modifier = Modifier
-                    .padding(top = MedLogSpacing.Small)
-                    .size(32.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
+            Column(
+                modifier = Modifier.padding(top = MedLogSpacing.Small),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
+            ) {
+                MedLogIcon(
+                    icon = MedLogIcons.Medication,
+                    contentDescription = "Anshin",
+                    modifier = Modifier.size(32.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                FamilyMemberSwitcher(
+                    recipients = recipients,
+                    activeRecipientId = activeRecipientId,
+                    onSelectRecipient = onSelectRecipient,
+                    onManageRecipients = onManageRecipients,
+                    variant = FamilyMemberSwitcherVariant.Rail,
+                )
+            }
         },
     ) {
         Spacer(Modifier.height(MedLogSpacing.Small))
@@ -164,6 +197,10 @@ fun MedLogNavDrawerContent(
     currentDestination: NavDestination?,
     navigateToTopLevel: (TopLevelDestination) -> Unit,
     destinations: List<TopLevelDestination> = TOP_LEVEL_DESTINATIONS,
+    recipients: List<CareRecipient> = emptyList(),
+    activeRecipientId: Long = 0L,
+    onSelectRecipient: (Long) -> Unit = {},
+    onManageRecipients: () -> Unit = {},
 ) {
     // 抽屉品牌区——图标 + 应用名称
     MedLogIcon(
@@ -179,6 +216,15 @@ fun MedLogNavDrawerContent(
         style = MaterialTheme.emphasizedTypography.titleLarge,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(horizontal = 28.dp),
+    )
+    Spacer(Modifier.height(MedLogSpacing.Medium))
+
+    FamilyMemberSwitcher(
+        recipients = recipients,
+        activeRecipientId = activeRecipientId,
+        onSelectRecipient = onSelectRecipient,
+        onManageRecipients = onManageRecipients,
+        variant = FamilyMemberSwitcherVariant.Drawer,
     )
     Spacer(Modifier.height(MedLogSpacing.Medium))
 

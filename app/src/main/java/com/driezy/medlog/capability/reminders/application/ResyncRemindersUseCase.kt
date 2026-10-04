@@ -4,6 +4,7 @@ import com.driezy.medlog.data.model.RoutineSchedule
 import com.driezy.medlog.data.model.TimePeriods
 import com.driezy.medlog.data.model.resolve
 import com.driezy.medlog.data.model.withResolvedRoutineTimes
+import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.domain.model.RoutineAnchor
@@ -30,6 +31,7 @@ import javax.inject.Singleton
 @Singleton
 class ResyncRemindersUseCase @Inject constructor(
     private val medicationRepository: MedicationRepository,
+    private val activeRecipient: ActiveRecipientStore,
     private val reconcileReminders: ReconcileRemindersUseCase,
 ) {
     /**
@@ -39,7 +41,13 @@ class ResyncRemindersUseCase @Inject constructor(
      * 3. 取消旧闹钟 → 调度新闹钟
      */
     suspend operator fun invoke(schedule: RoutineSchedule) {
-        val meds = medicationRepository.getActiveMedications().first()
+        // 作息现在是成员级的：只重算"当前成员"的药品；尚未选成员时保持改造前的整机行为。
+        val recipientId = activeRecipient.current()
+        val meds = if (recipientId == ActiveRecipientStore.NO_RECIPIENT) {
+            medicationRepository.getActiveMedications().first()
+        } else {
+            medicationRepository.getMedicationsFor(recipientId)
+        }
         val updates = meds.mapNotNull { med ->
             if (med.isPRN || med.intervalHours > 0) return@mapNotNull null
             val anchors = TimePeriods.parse(med.timePeriod)

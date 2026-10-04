@@ -30,6 +30,9 @@ const val CHANNEL_FOLLOW_UP = "follow_up" // 漏服再提醒
 private const val NOTIF_ID_PROGRESS = 9999
 const val EXTRA_MED_ID = "med_id"
 const val EXTRA_MED_NAME = "med_name"
+
+/** 提醒所属家庭成员显示名（阶段 1）：用于通知标题区分成员。 */
+const val EXTRA_RECIPIENT_NAME = "recipient_name"
 const val EXTRA_TIME_INDEX = "time_index" // 提醒时间在列表中的索引
 const val EXTRA_IS_EARLY = "is_early" // 是否为提前预告通知
 
@@ -175,7 +178,12 @@ class NotificationHelper @Inject constructor(
      * - taken == total 时自动取消固定状态，用户可手动关闭。
      * - total == 0 时移除通知。
      */
-    fun showOrUpdateProgressNotification(taken: Int, total: Int, pendingNames: List<String>) {
+    fun showOrUpdateProgressNotification(
+        taken: Int,
+        total: Int,
+        pendingNames: List<String>,
+        memberName: String? = null,
+    ) {
         if (!notificationManager.areNotificationsEnabled()) return
         if (total == 0) {
             dismissProgressNotification()
@@ -184,11 +192,12 @@ class NotificationHelper @Inject constructor(
 
         val allDone = taken == total
         val percent = (taken * 100) / total
-        val title = if (allDone) {
+        val baseTitle = if (allDone) {
             context.getString(R.string.notif_progress_done_title)
         } else {
             context.getString(R.string.notif_progress_title, taken, total)
         }
+        val title = memberTitle(memberName, baseTitle)
         val bigText = when {
             allDone -> context.getString(R.string.notif_progress_done_body)
             pendingNames.isNotEmpty() -> pendingNames.joinToString("、")
@@ -238,12 +247,21 @@ class NotificationHelper @Inject constructor(
     }
     // ─── 通知显示 ────────────────────────────────────────────
 
+    /**
+     * 标题带上家庭成员显示名（阶段 1）：两位成员的提醒不再长得一样。
+     * 没有成员名（尚未选成员 / 旧闹钟）时退回原标题，行为与改造前一致。
+     */
+    private fun memberTitle(memberName: String?, title: String): String = memberName?.takeIf { it.isNotBlank() }
+        ?.let { context.getString(R.string.notif_title_with_member, it, title) }
+        ?: title
+
     fun showReminderNotification(
         medicationId: Long,
         medicationName: String,
         dose: String,
         timeIndex: Int = 0,
         scheduledTimeMs: Long,
+        memberName: String? = null,
     ) {
         if (!notificationManager.areNotificationsEnabled()) return
         val notificationId = (medicationId * 100 + timeIndex).toInt()
@@ -285,7 +303,9 @@ class NotificationHelper @Inject constructor(
         val notification = NotificationCompat.Builder(context, CHANNEL_REMINDER)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(notificationColor)
-            .setContentTitle(context.getString(R.string.notif_reminder_title, medicationName))
+            .setContentTitle(
+                memberTitle(memberName, context.getString(R.string.notif_reminder_title, medicationName)),
+            )
             .setContentText(context.getString(R.string.notif_reminder_dose_label, dose))
             .setSubText(context.getString(R.string.notif_reminder_subtext))
             .setStyle(
@@ -392,6 +412,7 @@ class NotificationHelper @Inject constructor(
         dose: String,
         minutesBefore: Int,
         timeIndex: Int = 0,
+        memberName: String? = null,
     ) {
         if (!notificationManager.areNotificationsEnabled()) return
         val notificationId = (medicationId * 100 + timeIndex).toInt() + 50_000
@@ -399,7 +420,10 @@ class NotificationHelper @Inject constructor(
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(notificationColor)
             .setContentTitle(
-                context.resources.getQuantityString(R.plurals.notif_early_title, minutesBefore, minutesBefore),
+                memberTitle(
+                    memberName,
+                    context.resources.getQuantityString(R.plurals.notif_early_title, minutesBefore, minutesBefore),
+                ),
             )
             .setContentText(context.getString(R.string.notif_early_body, medicationName, dose))
             .setSubText(context.getString(R.string.notif_early_subtext))
@@ -438,6 +462,7 @@ class NotificationHelper @Inject constructor(
         timeIndex: Int,
         followUpCount: Int,
         scheduledTimeMs: Long,
+        memberName: String? = null,
     ) {
         if (!notificationManager.areNotificationsEnabled()) return
         val notificationId = (medicationId * 100 + timeIndex).toInt() + FOLLOW_UP_CODE_OFFSET
@@ -470,7 +495,9 @@ class NotificationHelper @Inject constructor(
         val notification = NotificationCompat.Builder(context, CHANNEL_FOLLOW_UP)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(notificationColor)
-            .setContentTitle(context.getString(R.string.notif_follow_up_title, medicationName))
+            .setContentTitle(
+                memberTitle(memberName, context.getString(R.string.notif_follow_up_title, medicationName)),
+            )
             .setContentText(context.getString(R.string.notif_follow_up_body, dose))
             .setSubText(context.getString(R.string.notif_follow_up_subtext, followUpCount))
             .setStyle(

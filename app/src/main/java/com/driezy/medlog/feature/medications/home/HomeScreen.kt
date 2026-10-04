@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
+import com.driezy.medlog.data.model.CareRecipient
+import com.driezy.medlog.ui.components.FamilyMemberPickerDialog
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
 import com.driezy.medlog.ui.components.MedicationCard
 import com.driezy.medlog.ui.components.MedicationMessageCard
@@ -49,6 +51,10 @@ fun HomeScreen(
     onAddMedication: () -> Unit,
     onMedicationClick: (Long) -> Unit,
     onOpenSettings: () -> Unit,
+    familyMembers: List<CareRecipient> = emptyList(),
+    activeRecipientId: Long = 0L,
+    onSelectFamilyMember: (Long) -> Unit = {},
+    onManageFamilyMembers: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -102,6 +108,10 @@ fun HomeScreen(
         onAddMedication = onAddMedication,
         onMedicationClick = onMedicationClick,
         onOpenSettings = onOpenSettings,
+        familyMembers = familyMembers,
+        activeRecipientId = activeRecipientId,
+        onSelectFamilyMember = onSelectFamilyMember,
+        onManageFamilyMembers = onManageFamilyMembers,
     )
 }
 
@@ -114,9 +124,14 @@ private fun HomeContent(
     onAddMedication: () -> Unit,
     onMedicationClick: (Long) -> Unit,
     onOpenSettings: () -> Unit,
+    familyMembers: List<CareRecipient> = emptyList(),
+    activeRecipientId: Long = 0L,
+    onSelectFamilyMember: (Long) -> Unit = {},
+    onManageFamilyMembers: () -> Unit = {},
 ) {
     val performHaptic = rememberMedLogHaptics()
     var overlay by remember { mutableStateOf<ScreenOverlay?>(null) }
+    var memberPickerOpen by remember { mutableStateOf(false) }
     fun toggleDose(item: MedicationWithStatus) {
         if (item.doseKey in uiState.savingDoses) return
         performHaptic(MedLogHapticEffect.CONFIRM)
@@ -139,6 +154,20 @@ private fun HomeContent(
         }
     }
 
+    // 首页顶栏常驻成员切换入口（手机端无需打开抽屉即可切换）
+    val memberActions = if (familyMembers.isNotEmpty()) {
+        listOf(
+            TopBarAction(
+                id = "family",
+                label = stringResource(R.string.recipients_switcher_action),
+                icon = MedLogIcons.VerifiedUser,
+                priority = TopBarActionPriority.Primary,
+            ),
+        )
+    } else {
+        emptyList<TopBarAction>()
+    }
+
     MedLogScreenScaffold(
         topBarSize = ScreenTopBarSize.Compact,
         title = {
@@ -151,7 +180,7 @@ private fun HomeContent(
                 )
             }
         },
-        actions = listOf(
+        actions = memberActions + listOf(
             TopBarAction(
                 id = "qr",
                 label = stringResource(R.string.home_share_qr_cd),
@@ -187,6 +216,7 @@ private fun HomeContent(
         onChromeAction = { id ->
             when (id) {
                 "add" -> onAddMedication()
+                "family" -> memberPickerOpen = true
                 "qr" -> {
                     overlay = ScreenOverlay.Custom(id = "home:qr") {
                         MedicationQrDialog(
@@ -437,4 +467,20 @@ private fun HomeContent(
             onAction(HomeUiAction.ClearImportPreview)
         },
     )
+
+    if (memberPickerOpen) {
+        FamilyMemberPickerDialog(
+            recipients = familyMembers,
+            activeRecipientId = activeRecipientId,
+            onSelect = { id ->
+                memberPickerOpen = false
+                onSelectFamilyMember(id)
+            },
+            onManage = {
+                memberPickerOpen = false
+                onManageFamilyMembers()
+            },
+            onDismiss = { memberPickerOpen = false },
+        )
+    }
 }

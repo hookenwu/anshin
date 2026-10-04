@@ -12,6 +12,7 @@ import javax.inject.Singleton
 class CareRecipientRepositoryImpl @Inject constructor(
     private val dao: CareRecipientDao,
     private val activeRecipient: ActiveRecipientStore,
+    private val preferences: UserPreferencesRepository,
     private val transactions: TransactionRunner,
 ) : CareRecipientRepository {
 
@@ -47,6 +48,8 @@ class CareRecipientRepositoryImpl @Inject constructor(
 
     override suspend fun delete(id: Long) = transactions.withTransaction {
         dao.deleteById(id)
+        // 成员维度的设置键（作息/时区/身高）随成员一并清理，避免 id 复用后串档
+        preferences.clearMemberScopedSettings(id)
         if (activeRecipient.current() == id) {
             val remaining = dao.getAll().firstOrNull()
             activeRecipient.set(remaining?.id ?: ActiveRecipientStore.NO_RECIPIENT)

@@ -559,6 +559,8 @@
     <string name="notif_live_short_take">服药</string>
     <string name="notif_live_short_follow_up">再提醒</string>
     <string name="notif_reminder_title">该服药了：%s</string>
+    <!-- 多成员：提醒标题带上成员名（阶段 1） -->
+    <string name="notif_title_with_member">%1$s · %2$s</string>
     <string name="notif_reminder_dose_label">剂量：%s</string>
     <string name="notif_reminder_subtext">用药提醒</string>
     <string name="notif_reminder_big_text">该服用 %1$s 的 %2$s</string>
@@ -947,4 +949,9 @@
     <string name="recipients_delete_confirm_body">删除后，该成员的药品、用药记录与日志都将一并删除，且无法恢复。</string>
     <string name="recipients_delete_confirm_action">删除</string>
     <string name="recipients_rename_failed">重命名失败，请检查名称后重试。</string>
+
+    <!-- 家庭成员切换器（一级导航头部 / 首页顶栏） -->
+    <string name="recipients_switcher_title">切换家庭成员</string>
+    <string name="recipients_switcher_action">切换成员</string>
+    <string name="recipients_switcher_manage">管理家庭成员</string>
 </resources>

@@ -3,6 +3,7 @@ package com.driezy.medlog.capability.reminders.application
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.RoutineSchedule
 import com.driezy.medlog.data.model.RoutineTime
+import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
 import kotlinx.coroutines.flow.flowOf
@@ -19,6 +20,8 @@ class ResyncRemindersUseCaseTest {
     @Test
     fun `routine plans are persisted as one atomic batch before projections reconcile`() = runTest {
         val medications: MedicationRepository = mock()
+        val activeRecipient: ActiveRecipientStore = mock()
+        whenever(activeRecipient.current()).thenReturn(ActiveRecipientStore.NO_RECIPIENT)
         val reconciler: ReconcileRemindersUseCase = mock()
         val breakfast = medication(id = 1L, timePeriod = "beforeBreakfast", reminderTimes = "08:00")
         val dinner = medication(id = 2L, timePeriod = "afterDinner", reminderTimes = "18:00")
@@ -28,7 +31,7 @@ class ResyncRemindersUseCaseTest {
             dinner = RoutineTime(19, 45),
         )
 
-        ResyncRemindersUseCase(medications, reconciler)(schedule)
+        ResyncRemindersUseCase(medications, activeRecipient, reconciler)(schedule)
 
         val expected = listOf(
             breakfast.copy(reminderTimes = "09:00", reminderHour = 9, reminderMinute = 0),
@@ -45,6 +48,8 @@ class ResyncRemindersUseCaseTest {
     @Test
     fun `exact and as-needed plans are not rewritten`() = runTest {
         val medications: MedicationRepository = mock()
+        val activeRecipient: ActiveRecipientStore = mock()
+        whenever(activeRecipient.current()).thenReturn(ActiveRecipientStore.NO_RECIPIENT)
         val reconciler: ReconcileRemindersUseCase = mock()
         whenever(medications.getActiveMedications()).thenReturn(
             flowOf(
@@ -55,7 +60,7 @@ class ResyncRemindersUseCaseTest {
             ),
         )
 
-        ResyncRemindersUseCase(medications, reconciler)(RoutineSchedule())
+        ResyncRemindersUseCase(medications, activeRecipient, reconciler)(RoutineSchedule())
 
         verify(medications, never()).updateMedications(any())
         verify(reconciler).all(ReminderReconcileReason.ROUTINE_CHANGED)
@@ -75,6 +80,8 @@ class ResyncRemindersUseCaseTest {
     @Test
     fun `multi period medication resolves every meal period into one write`() = runTest {
         val medications: MedicationRepository = mock()
+        val activeRecipient: ActiveRecipientStore = mock()
+        whenever(activeRecipient.current()).thenReturn(ActiveRecipientStore.NO_RECIPIENT)
         val reconciler: ReconcileRemindersUseCase = mock()
         val multi = medication(
             id = 7L,
@@ -87,7 +94,7 @@ class ResyncRemindersUseCaseTest {
             dinner = RoutineTime(19, 45),
         )
 
-        ResyncRemindersUseCase(medications, reconciler)(schedule)
+        ResyncRemindersUseCase(medications, activeRecipient, reconciler)(schedule)
 
         // 两个用餐时段各自换算，升序整体回写；主提醒列取最早的一个
         verify(medications).updateMedications(

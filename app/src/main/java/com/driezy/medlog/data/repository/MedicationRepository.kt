@@ -12,7 +12,15 @@ interface MedicationRepository {
     fun getActiveMedications(): Flow<List<Medication>>
     fun getArchivedMedications(): Flow<List<Medication>>
     fun getAllMedications(): Flow<List<Medication>>
+
+    /** 指定成员的活跃（未归档）药品；供按成员重排提醒等"非当前成员"场景使用。 */
+    suspend fun getMedicationsFor(recipientId: Long): List<Medication>
+
+    /** 指定成员的整份清单（含已归档），用于清理归档药品的残留提醒。 */
+    suspend fun getAllMedicationsFor(recipientId: Long): List<Medication>
+
     fun observePlanRevisions(): Flow<List<MedicationPlanRevision>>
+
     suspend fun getMedicationById(id: Long): Medication?
     suspend fun addMedication(medication: Medication): Long
     suspend fun updateMedication(medication: Medication)

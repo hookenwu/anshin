@@ -17,6 +17,7 @@ import com.driezy.medlog.data.repository.LogRepository
 import com.driezy.medlog.data.repository.LogRepositoryImpl
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.data.repository.MedicationRepositoryImpl
+import com.driezy.medlog.data.repository.UserPreferencesRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -63,7 +64,12 @@ class RecipientScopingRepositoryTest {
         )
         logs = LogRepositoryImpl(database.medicationLogDao(), activeRecipient)
         health = HealthRepositoryImpl(database.healthRecordDao(), activeRecipient)
-        recipients = CareRecipientRepositoryImpl(database.careRecipientDao(), activeRecipient, transactions)
+        recipients = CareRecipientRepositoryImpl(
+            database.careRecipientDao(),
+            activeRecipient,
+            UserPreferencesRepository(context, activeRecipient),
+            transactions,
+        )
     }
 
     @After

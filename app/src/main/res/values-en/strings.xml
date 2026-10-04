@@ -581,6 +581,8 @@
     <string name="notif_live_short_take">Take</string>
     <string name="notif_live_short_follow_up">Follow-up</string>
     <string name="notif_reminder_title">Time to take: %s</string>
+    <!-- Multi-member: prefix reminder titles with the family member (stage 1) -->
+    <string name="notif_title_with_member">%1$s · %2$s</string>
     <string name="notif_reminder_dose_label">Dose: %s</string>
     <string name="notif_reminder_subtext">Medication reminder</string>
     <string name="notif_reminder_big_text">Take %1$s of %2$s</string>
@@ -978,4 +980,9 @@ Path: Settings → Privacy → Permissions → Desktop shortcut → MedLog → A
     <string name="recipients_delete_confirm_body">Deleting this member also deletes their medications, records, and logs. This cannot be undone.</string>
     <string name="recipients_delete_confirm_action">Delete</string>
     <string name="recipients_rename_failed">Rename failed. Check the name and try again.</string>
+
+    <!-- Family member switcher (primary nav headers / Home top bar) -->
+    <string name="recipients_switcher_title">Switch family member</string>
+    <string name="recipients_switcher_action">Switch member</string>
+    <string name="recipients_switcher_manage">Manage family members</string>
 </resources>

@@ -23,6 +23,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.driezy.medlog.data.model.CareRecipient
 import com.driezy.medlog.feature.health.HealthScreen
 import com.driezy.medlog.feature.health.symptom.SymptomDiaryScreen
 import com.driezy.medlog.feature.history.HistoryScreen
@@ -33,6 +34,7 @@ import com.driezy.medlog.feature.medications.home.HomeScreen
 import com.driezy.medlog.feature.onboarding.WelcomeScreen
 import com.driezy.medlog.feature.recipients.CareRecipientGateScreen
 import com.driezy.medlog.feature.recipients.CareRecipientsScreen
+import com.driezy.medlog.feature.recipients.CareRecipientsUiAction
 import com.driezy.medlog.feature.recipients.CareRecipientsViewModel
 import com.driezy.medlog.feature.settings.AppearanceSettingsScreen
 import com.driezy.medlog.feature.settings.Bpx1DeviceSettingsScreen
@@ -134,11 +136,19 @@ fun MedLogApp(openAddMedication: Boolean = false) {
             currentDestination = currentDestination,
             navigateToTopLevel = navigateToTopLevel,
             destinations = enabledDestinations,
+            recipients = recipientState.recipients,
+            activeRecipientId = recipientState.activeRecipientId,
+            onSelectRecipient = { id -> recipientViewModel.onAction(CareRecipientsUiAction.SetActive(id)) },
+            onManageRecipients = { navController.navigate(Route.SettingsRecipients) },
         ) {
             MedLogNavHost(
                 navController = navController,
                 startDest = startDest,
                 catalogEnabled = featureFlags.enableDrugDatabase,
+                familyMembers = recipientState.recipients,
+                activeRecipientId = recipientState.activeRecipientId,
+                onSelectFamilyMember = { id -> recipientViewModel.onAction(CareRecipientsUiAction.SetActive(id)) },
+                onManageFamilyMembers = { navController.navigate(Route.SettingsRecipients) },
             )
         }
     } else {
@@ -146,6 +156,10 @@ fun MedLogApp(openAddMedication: Boolean = false) {
             navController = navController,
             startDest = startDest,
             catalogEnabled = featureFlags.enableDrugDatabase,
+            familyMembers = recipientState.recipients,
+            activeRecipientId = recipientState.activeRecipientId,
+            onSelectFamilyMember = { id -> recipientViewModel.onAction(CareRecipientsUiAction.SetActive(id)) },
+            onManageFamilyMembers = { navController.navigate(Route.SettingsRecipients) },
         )
     }
 }
@@ -156,6 +170,10 @@ private fun MedLogNavHost(
     navController: androidx.navigation.NavHostController,
     startDest: Route,
     catalogEnabled: Boolean,
+    familyMembers: List<CareRecipient> = emptyList(),
+    activeRecipientId: Long = 0L,
+    onSelectFamilyMember: (Long) -> Unit = {},
+    onManageFamilyMembers: () -> Unit = {},
 ) {
     val motionScheme = MaterialTheme.motionScheme
     val navFadeIn = fadeIn(animationSpec = motionScheme.fastEffectsSpec())
@@ -205,6 +223,10 @@ private fun MedLogNavHost(
                 onAddMedication = { navController.navigate(Route.AddMedication()) },
                 onMedicationClick = { id -> navController.navigate(Route.MedDetail(id)) },
                 onOpenSettings = { navController.navigate(Route.Settings) },
+                familyMembers = familyMembers,
+                activeRecipientId = activeRecipientId,
+                onSelectFamilyMember = onSelectFamilyMember,
+                onManageFamilyMembers = onManageFamilyMembers,
             )
         }
         composable<Route.History>(

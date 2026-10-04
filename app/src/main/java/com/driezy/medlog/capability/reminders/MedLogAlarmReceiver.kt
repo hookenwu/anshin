@@ -66,6 +66,7 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val medId = intent.getLongExtra(EXTRA_MED_ID, -1L)
         val medName = intent.getStringExtra(EXTRA_MED_NAME) ?: return
+        val memberName = intent.getStringExtra(EXTRA_RECIPIENT_NAME)
         val timeIndex = intent.getIntExtra(EXTRA_TIME_INDEX, 0)
         val isEarly = intent.getBooleanExtra(EXTRA_IS_EARLY, false)
         val isFollowUp = intent.getBooleanExtra(EXTRA_IS_FOLLOW_UP, false)
@@ -111,6 +112,7 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
                             "${med.doseQuantity} ${med.doseUnit}",
                             earlyMinutes,
                             timeIndex,
+                            memberName,
                         )
                     }
                     return
@@ -141,6 +143,7 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
                             timeIndex,
                             followUpCount,
                             scheduledMs,
+                            memberName,
                         )
                         // 若还没到最大次数，继续调度下一次
                         if (followUpCount < followUpMaxCount) {
@@ -165,6 +168,7 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
                         "${med.doseQuantity} ${med.doseUnit}",
                         timeIndex,
                         scheduledMs,
+                        memberName,
                     )
                     // 间隔给药：等用户服药后再调度（onReceive ACTION_TAKEN 时处理）
                     // 时钟模式：立即调度下一次固定时间触发

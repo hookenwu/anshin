@@ -49,6 +49,20 @@ class MedicationRepositoryImpl @Inject constructor(
 
     override fun getAllMedications(): Flow<List<Medication>> = scoped { medicationDao.getAllMedications(it) }
 
+    override suspend fun getMedicationsFor(recipientId: Long): List<Medication> =
+        if (recipientId == ActiveRecipientStore.NO_RECIPIENT) {
+            emptyList()
+        } else {
+            medicationDao.getAllMedicationsOnce(recipientId)
+        }
+
+    override suspend fun getAllMedicationsFor(recipientId: Long): List<Medication> =
+        if (recipientId == ActiveRecipientStore.NO_RECIPIENT) {
+            emptyList()
+        } else {
+            medicationDao.getAllMedicationsIncludingArchivedOnce(recipientId)
+        }
+
     override fun observePlanRevisions(): Flow<List<MedicationPlanRevision>> =
         activeRecipient.recipientId.flatMapLatest { recipientId ->
             if (recipientId == ActiveRecipientStore.NO_RECIPIENT) {
