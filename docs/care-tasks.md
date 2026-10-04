@@ -72,8 +72,8 @@
 
 改造为：
 
-- 目标标识 `ReminderTarget(type = MEDICATION | CARE_TASK, id)`，序列化成 `"med:<id>"` / `"task:<id>"`；
-- registry 改为单一的 target key 集合（键名更换即可：`BootReceiver` + WorkManager 的 reconcile 会重建闹钟，无需数据迁移）；
+- 目标标识 `ReminderTarget(type = MEDICATION | CARE_TASK, id)`，序列化成 `"<recipientId>:med:<id>"` / `"<recipientId>:task:<id>"`——**阶段 1 已把登记项改成 `<recipientId>:<medId>`，本步在其上加 target 段，两处设计合并、一次到位**；
+- registry 改为单一的 target key 集合（键名更换即可：`BootReceiver` + WorkManager 的 reconcile 会重建闹钟，无需数据迁移；阶段 1 已实现"无成员前缀的旧格式登记项在整表重排时作废重建"，同一机制继续适用）；
 - PendingIntent 编号空间分区，避免撞码：
   - `MEDICATION` 沿用 `id*100 + slotIndex`（+ `EARLY_REMINDER_CODE_OFFSET=50_000`、`FOLLOW_UP_CODE_OFFSET=100_000`）
   - `CARE_TASK` 使用独立基数 `CARE_TASK_CODE_BASE = 100_000_000`（`base + id*100 + slotIndex`，同上偏移）
@@ -110,7 +110,7 @@
 ## 5. 过程数据与「健康」模块（决策 4）
 
 - 测量值写入既有 `HealthRecord`：`type`（血氧 SpO2 / 氧流量 L/min / 读数次数）、`value`、`secondaryValue`（如需）、`timestamp`、`notes`、`source`；`sourceCacheKey` 用于防重；唯一键已是 `(careRecipientId, sourceCacheKey)`（`HealthRecord.kt:40`）。入口放在照护事项详情页的「记录一次」。
-- **需要你确认的一处细分**：`HealthRecord.value` 是 `Double`（`HealthRecord.kt:51`），**体位（左/右/平卧）是分类值，装不进数字字段**。建议把它归到 **CareTaskLog**（它本就是"这次翻身的结果"），而不是健康模块；健康模块只收数值型（血氧、氧流量、次数）。若你坚持体位也进健康模块，则需要给 HealthRecord 增加一个可选的分类列（属额外迁移，本期不建议）。
+- **已确认（用户决策）**：`HealthRecord.value` 是 `Double`（`HealthRecord.kt:51`），**体位（左/右/平卧）是分类值，装不进数字字段** → 体位归 **CareTaskLog**（它本就是"这次翻身的结果"），健康模块只收数值型（血氧、氧流量、次数），`HealthRecord` 不为分类值加列。
 - `HealthRecordSource` 现为 `MANUAL / LOCAL_OCR / CLOUD_OCR / IMPORT`（`HealthRecord.kt:8-13`）：本期用 `MANUAL`，不新增枚举值（避免存量字符串解析分支）。
 
 ---
