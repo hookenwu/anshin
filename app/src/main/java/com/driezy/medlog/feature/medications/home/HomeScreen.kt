@@ -51,6 +51,7 @@ fun HomeScreen(
     onAddMedication: () -> Unit,
     onMedicationClick: (Long) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenCareTasks: () -> Unit = {},
     familyMembers: List<CareRecipient> = emptyList(),
     activeRecipientId: Long = 0L,
     onSelectFamilyMember: (Long) -> Unit = {},
@@ -108,6 +109,7 @@ fun HomeScreen(
         onAddMedication = onAddMedication,
         onMedicationClick = onMedicationClick,
         onOpenSettings = onOpenSettings,
+        onOpenCareTasks = onOpenCareTasks,
         familyMembers = familyMembers,
         activeRecipientId = activeRecipientId,
         onSelectFamilyMember = onSelectFamilyMember,
@@ -124,6 +126,7 @@ private fun HomeContent(
     onAddMedication: () -> Unit,
     onMedicationClick: (Long) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenCareTasks: () -> Unit,
     familyMembers: List<CareRecipient> = emptyList(),
     activeRecipientId: Long = 0L,
     onSelectFamilyMember: (Long) -> Unit = {},
@@ -182,6 +185,12 @@ private fun HomeContent(
         },
         actions = memberActions + listOf(
             TopBarAction(
+                id = "care_tasks",
+                label = stringResource(R.string.care_task_nav_action),
+                icon = MedLogIcons.Favorite,
+                priority = TopBarActionPriority.Secondary,
+            ),
+            TopBarAction(
                 id = "qr",
                 label = stringResource(R.string.home_share_qr_cd),
                 icon = MedLogIcons.QrCode2,
@@ -235,6 +244,7 @@ private fun HomeContent(
                     onAction(HomeUiAction.ToggleGrouping)
                 }
                 "settings" -> onOpenSettings()
+                "care_tasks" -> onOpenCareTasks()
             }
         },
     ) { innerPadding ->

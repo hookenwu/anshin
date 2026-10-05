@@ -147,6 +147,23 @@
 - T4 `CareTaskScheduleMapper`（单测：FIXED/INTERVAL/AS_NEEDED、完成锚定顺延、多时段）
 - T5 完成语义 UseCase（打卡/开始/完成/跳过/撤销 + 时长统计；单测 + 事务性）
 - T6 照护事项 UI（列表/详情/编辑；UI 契约测试）
+
+### T6b 排期接入（T9 的前置，规格新增；改动集中在重排这条高风险路径上）
+
+- `AlarmScheduler`：新增 `scheduleCareTaskReminders(task, lastDoneMs, handledSlots)`，与用药版同构——
+  同一个 `ReminderPlanner`、同一套"下一次 = 上次完成 + 间隔"；requestCode 取
+  `ReminderTarget(careRecipientId, CARE_TASK, id).slotRequestCode(i)`；intent 带
+  `EXTRA_TARGET_TYPE="task"` / `EXTRA_TARGET_ID` / `EXTRA_RECIPIENT_NAME` / `EXTRA_TIME_INDEX` / `EXTRA_SCHEDULED_MS`。
+  **提前预告与漏服再提醒本期只服务用药**（照护事项只排正点提醒），`cancelTargetAlarms(CARE_TASK)` 落地替换 T3 的占位。
+- `AndroidReminderReconciler.reconcileAll`：每位成员在用药之后处理其照护事项——
+  含归档清单做清理（同用药的残留通知处理），`isArchived` 跳过排期，`AS_NEEDED` 不排闹钟，
+  `INTERVAL` 用该事项最后一条 `DONE` 的 `actualEndMs` 作锚点（与用药的 `lastTaken` 同义）。
+- 编辑/归档后重排：在照护事项的保存路径上触发重排（对齐用药侧 `ResyncRemindersUseCase` 的用法）。
+- 完成后顺延：`CareTaskCompletionUseCase` 的 `complete`/`skip`/`undo` 成功后重排该事项一次
+  （T5 刻意留出的缺口；领域能力见 T4 的 `completionInterval()`）。
+- **门禁**：改动后必须重跑 `bash ~/t3-gate.sh`（用药闹钟时刻多重集与基线一致）+ 全套单测 +
+  `core:database` 设备端 instrumentation；照护事项的闹钟条数与 `taskId*100` 编号空间另做一次核对。
+
 - T7 今日页统一时间轴 + 筛选/分组（UI 契约测试：混排顺序、筛选、进度口径）
 - T8 过程数据入口 → HealthRecord（单测：写库与防重）
 - T9 真机全链路：新建「吸氧 每天3次每次30分钟」「翻身 每2小时」「读数 固定时段」，验证提醒、完成/时长记录、时间轴混排、健康记录落库

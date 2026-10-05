@@ -41,6 +41,9 @@ import kotlinx.serialization.Serializable
 
     @Serializable data object SettingsRecipients : Route
 
+    /** 照护事项（非药物干预）列表。 */
+    @Serializable data object CareTasks : Route
+
     @Serializable data class MedDetail(val medicationId: Long) : Route
 
     /**
@@ -51,6 +54,11 @@ import kotlinx.serialization.Serializable
     @Serializable
     data class AddMedication(val medicationId: Long = -1, val drugName: String = "", val drugCategory: String = "") :
         Route
+
+    @Serializable data class CareTaskDetail(val careTaskId: Long) : Route
+
+    /** @param careTaskId 编辑模式已有记录的 id（-1 代表新增） */
+    @Serializable data class CareTaskEditor(val careTaskId: Long = -1) : Route
 }
 
 // ── Top-level navigation destinations ────────────────────────────────────────

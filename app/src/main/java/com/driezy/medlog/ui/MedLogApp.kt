@@ -24,6 +24,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.driezy.medlog.data.model.CareRecipient
+import com.driezy.medlog.feature.caretasks.CareTaskDetailScreen
+import com.driezy.medlog.feature.caretasks.CareTaskEditorScreen
+import com.driezy.medlog.feature.caretasks.CareTasksScreen
 import com.driezy.medlog.feature.health.HealthScreen
 import com.driezy.medlog.feature.health.symptom.SymptomDiaryScreen
 import com.driezy.medlog.feature.history.HistoryScreen
@@ -223,6 +226,7 @@ private fun MedLogNavHost(
                 onAddMedication = { navController.navigate(Route.AddMedication()) },
                 onMedicationClick = { id -> navController.navigate(Route.MedDetail(id)) },
                 onOpenSettings = { navController.navigate(Route.Settings) },
+                onOpenCareTasks = { navController.navigate(Route.CareTasks) },
                 familyMembers = familyMembers,
                 activeRecipientId = activeRecipientId,
                 onSelectFamilyMember = onSelectFamilyMember,
@@ -406,6 +410,44 @@ private fun MedLogNavHost(
                 medicationId = route.medicationId.takeIf { it != -1L },
                 drugName = route.drugName.ifEmpty { null },
                 drugCategory = route.drugCategory.ifEmpty { null },
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
+            )
+        }
+        composable<Route.CareTasks>(
+            enterTransition = { materialSharedAxisX(forward = true) },
+            exitTransition = { navFadeOut },
+            popEnterTransition = { materialSharedAxisX(forward = false) },
+            popExitTransition = { materialSharedAxisXOut(forward = true) },
+        ) {
+            CareTasksScreen(
+                onAdd = { navController.navigate(Route.CareTaskEditor()) },
+                onOpen = { id -> navController.navigate(Route.CareTaskDetail(id)) },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable<Route.CareTaskDetail>(
+            enterTransition = { materialSharedAxisX(forward = true) },
+            exitTransition = { navFadeOut },
+            popEnterTransition = { materialSharedAxisX(forward = false) },
+            popExitTransition = { materialSharedAxisXOut(forward = true) },
+        ) { backStackEntry ->
+            val route: Route.CareTaskDetail = backStackEntry.toRoute()
+            CareTaskDetailScreen(
+                careTaskId = route.careTaskId,
+                onBack = { navController.popBackStack() },
+                onEdit = { id -> navController.navigate(Route.CareTaskEditor(id)) },
+            )
+        }
+        composable<Route.CareTaskEditor>(
+            enterTransition = { materialSharedAxisX(forward = true) },
+            exitTransition = { navFadeOut },
+            popEnterTransition = { materialSharedAxisX(forward = false) },
+            popExitTransition = { materialSharedAxisXOut(forward = true) },
+        ) { backStackEntry ->
+            val route: Route.CareTaskEditor = backStackEntry.toRoute()
+            CareTaskEditorScreen(
+                careTaskId = route.careTaskId.takeIf { it != -1L },
                 onBack = { navController.popBackStack() },
                 onSaved = { navController.popBackStack() },
             )
