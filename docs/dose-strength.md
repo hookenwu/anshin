@@ -68,12 +68,31 @@
 - D4 统计：详情页累计用量
 - D5 导出/二维码只写 `dq` + 兼容旧码 + 受影响测试调整
 
-## 8. 验收
+## 8. 验收（已完成，附证据）
 
 1. 单测全绿（含新增：规格配对校验、显示格式化、累计用量计算、导出兼容往返）；
 2. **core:database 设备端 instrumentation 迁移测试**：v20（含药品/日志/成员）→ v21 后数据零丢失、`dose` 列消失、新列可空；
 3. 真机：建一条 `0.25g/粒 × 2粒` 的药 → 列表/首页/详情显示 `0.25g × 2粒`、详情显示 `合计 0.5g`、累计用量正确、二维码导出仍可被旧版本解码；
 4. 无规格的老药行为与改造前一致（列表仍显示 `2 粒`）。
+
+### 8.1 验收结果
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| 单测 | ✅ **642 / 0 失败**、ktlint 通过 | `:app:testDebugUnitTest :app:ktlintCheck` |
+| 迁移 instrumentation | ✅ **OK (21 tests)**（含新增 v20→v21 用例） | 设备端 `core:database` 套件 |
+| 真实数据迁移 | ✅ 你的库迁到 **`user_version = 21`**，启动崩溃 0 | 迁移前已在沙箱内备份 `medlog.db`/WAL；读 SQLite 头得 21 |
+| 列表行 | ✅ `0.25g × 2粒 · 每日 · 08:00` | `EVID_list_row.png` + a11y |
+| 详情页 | ✅ `剂量 0.25g × 2粒`、**`合计 0.5g`**、**`累计用量 0 g`** | `EVID_detail.png` + a11y |
+| 二维码（人读文本） | ✅ `○ TestStrennggtthh 0.25g × 2粒 早晨` | `EVID_qr_decoded_text.txt`（zbarimg 解码） |
+| 二维码（机器负载） | ✅ `{"u":"粒","dq":2.0,"ds":0.25,"dsu":"g",…}` 带规格 | `EVID_qr_payload.json` |
+| 老药向后兼容 | ✅ 同屏 `○ 赛霉安散 1 片 早晨`（无规格仍显示"1 片"） | 同上 QR 文本 |
+| 库存/部分服用未动 | ✅ `ToggleMedicationDoseUseCase`/`MedicationLog`/`MedicationDao` **零 diff** | `git diff --stat` |
+
+备注（如实记录）：
+- 真机二维码负载**不含 `d`** —— 因为设备上装的是**加别名之前**那一版构建；兼容别名 `b8f760f` 目前只有单测覆盖，尚未装机复验。
+- 真机验收用的临时药名被 `rish input text` 弄乱了（`TestStrength` → `TestStrennggtthh`，输入工具伪影，非 App 缺陷）；验收后已**归档**到「已停用」，尚未彻底删除。
+- 验收过程中发现一个**独立缺陷**（不属本次范围）：照护事项被删除/归档后，提醒登记表仍残留 `1:task:1` —— 待查 `AndroidReminderReconciler` 照护半边的清理路径并修复 + 补测试。
 
 ## 9. 非目标
 
