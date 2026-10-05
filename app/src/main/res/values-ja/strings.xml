@@ -98,6 +98,9 @@
     <string name="home_share_chooser">今日の服薬計画を共有</string>
     <string name="home_group_toggle_by_category">カテゴリ別に切替</string>
     <string name="home_group_toggle_by_time">時間帯別に切替</string>
+    <string name="home_filter_all">すべて</string>
+    <string name="home_filter_medication">服薬</string>
+    <string name="home_filter_care">ケア</string>
     <string name="home_snackbar_undo_skip">%s のスキップを取り消し、未服用に戻しました</string>
     <string name="home_snackbar_reset">%s を未服用にリセットしました</string>
     <string name="home_snackbar_taken">%s を服用済みにしました</string>

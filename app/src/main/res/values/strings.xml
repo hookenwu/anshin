@@ -101,6 +101,9 @@
     <string name="home_share_chooser">分享今日用药计划</string>
     <string name="home_group_toggle_by_category">切换为分类分组</string>
     <string name="home_group_toggle_by_time">切换为时间分组</string>
+    <string name="home_filter_all">全部</string>
+    <string name="home_filter_medication">用药</string>
+    <string name="home_filter_care">照护</string>
     <string name="home_now_group_title">现在要做</string>
     <string name="home_now_group_body">已到时间或即将到点的服药任务</string>
     <string name="home_later_group_title">今日稍后</string>

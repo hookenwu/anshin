@@ -46,7 +46,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.TimePeriod
-import com.driezy.medlog.ui.components.MedicationCard
 import com.driezy.medlog.ui.icons.MedLogIcon
 import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
@@ -54,26 +53,28 @@ import com.driezy.medlog.ui.util.displayName
 import com.driezy.medlog.ui.util.formatDose
 import com.driezy.medlog.ui.util.labelRes
 import com.driezy.medlog.ui.util.primaryTimePeriod
+import com.driezy.medlog.ui.utils.MedLogHapticEffect
+import com.driezy.medlog.ui.utils.rememberMedLogHaptics
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-internal fun MedicationTaskGroupCard(
+internal fun TodayTaskGroupCard(
     title: String,
     subtitle: String,
     icon: Int,
-    items: List<MedicationWithStatus>,
-    onToggleTaken: (MedicationWithStatus) -> Unit,
-    onSkip: (MedicationWithStatus) -> Unit,
-    onTakeAll: () -> Unit,
-    onClick: (Long) -> Unit,
+    items: List<TodayItem>,
+    onAction: (HomeUiAction) -> Unit,
+    onMedicationClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
     autoCollapse: Boolean = true,
-    onPartialTake: ((MedicationWithStatus, Double) -> Unit)? = null,
 ) {
     val pendingCount = items.count { !it.isHandled }
+    // 「全部服用」只对用药生效（照护事项各有完成语义，不能一律打卡）。
+    val pendingMedications = items.filter { it.isMedication && !it.isHandled }
     val allDone = pendingCount == 0
     val motionScheme = MaterialTheme.motionScheme
+    val performHaptic = rememberMedLogHaptics()
     var isExpanded by remember(allDone, autoCollapse) {
         mutableStateOf(!allDone || !autoCollapse)
     }
@@ -116,9 +117,12 @@ internal fun MedicationTaskGroupCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (pendingCount > 1) {
+            if (pendingMedications.size > 1) {
                 Button(
-                    onClick = onTakeAll,
+                    onClick = {
+                        performHaptic(MedLogHapticEffect.CONFIRM)
+                        pendingMedications.forEach { onAction(HomeUiAction.ToggleDose(requireNotNull(it.medication))) }
+                    },
                     contentPadding = PaddingValues(horizontal = MedLogSpacing.Large, vertical = 0.dp),
                     modifier = Modifier.height(40.dp),
                 ) {
@@ -154,8 +158,8 @@ internal fun MedicationTaskGroupCard(
                 )
                 items.forEachIndexed { idx, item ->
                     val animationsEnabled = remember { ValueAnimator.areAnimatorsEnabled() }
-                    var visible by remember(item.doseKey) { mutableStateOf(false) }
-                    LaunchedEffect(item.doseKey, animationsEnabled) {
+                    var visible by remember(item.listKey) { mutableStateOf(false) }
+                    LaunchedEffect(item.listKey, animationsEnabled) {
                         if (animationsEnabled) {
                             delay(idx * STAGGER_DELAY_MS)
                         }
@@ -167,18 +171,11 @@ internal fun MedicationTaskGroupCard(
                             slideInVertically(motionScheme.defaultSpatialSpec()) { it / 3 },
                     ) {
                         Column {
-                            MedicationCard(
+                            TodayTimelineRow(
                                 item = item,
-                                onToggleTaken = { onToggleTaken(item) },
-                                onSkip = { onSkip(item) },
-                                onClick = { onClick(item.medication.id) },
-                                modifier = Modifier,
                                 flatStyle = true,
-                                onPartialTake = if (onPartialTake != null) {
-                                    { qty -> onPartialTake(item, qty) }
-                                } else {
-                                    null
-                                },
+                                onAction = onAction,
+                                onMedicationClick = onMedicationClick,
                             )
                             if (idx < items.lastIndex) {
                                 HorizontalDivider(

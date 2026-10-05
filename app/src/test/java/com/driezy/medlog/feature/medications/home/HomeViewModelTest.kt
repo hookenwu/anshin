@@ -36,12 +36,24 @@ class HomeViewModelTest {
             }
         }
         val dose = ToggleMedicationDoseUseCase(transactions, logs, meds, mock(), mock(), clock)
+        val careTasks = mock<CareTaskRepository> {
+            on { getActiveTasks() } doReturn flowOf(emptyList())
+            onBlocking { getLogsForToday(any()) } doReturn emptyList()
+        }
         return HomeViewModel(
-            meds, logs, mock(), dose, mock(), mock(), prefs, mock(), clock,
-            FuturePlanCalculator(
-                clock,
-            ),
-            dispatcher,
+            medicationRepo = meds,
+            logRepo = logs,
+            notificationHelper = mock(),
+            toggleDoseUseCase = dose,
+            importPlanUseCase = mock(),
+            interactionEngine = mock(),
+            prefsRepository = prefs,
+            progressNotif = mock(),
+            clock = clock,
+            planCalculator = FuturePlanCalculator(clock),
+            careTaskRepo = careTasks,
+            careTaskCompletion = mock(),
+            computationDispatcher = dispatcher,
         )
     }
 

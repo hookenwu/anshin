@@ -98,6 +98,9 @@
     <string name="home_share_chooser">오늘의 복약 계획 공유</string>
     <string name="home_group_toggle_by_category">카테고리별로 전환</string>
     <string name="home_group_toggle_by_time">시간대별로 전환</string>
+    <string name="home_filter_all">전체</string>
+    <string name="home_filter_medication">복약</string>
+    <string name="home_filter_care">돌봄</string>
     <string name="home_snackbar_undo_skip">%s — 건너뜀 취소, 복용 전으로 복원</string>
     <string name="home_snackbar_reset">%s 복용 전으로 초기화</string>
     <string name="home_snackbar_taken">%s 복용 완료로 표시</string>

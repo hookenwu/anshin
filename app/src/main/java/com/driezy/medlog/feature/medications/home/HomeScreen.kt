@@ -4,16 +4,19 @@ import android.animation.ValueAnimator
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -21,9 +24,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.CareRecipient
+import com.driezy.medlog.feature.caretasks.careTaskCategoryLabel
 import com.driezy.medlog.ui.components.FamilyMemberPickerDialog
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
-import com.driezy.medlog.ui.components.MedicationCard
 import com.driezy.medlog.ui.components.MedicationMessageCard
 import com.driezy.medlog.ui.components.RefreshWhileVisible
 import com.driezy.medlog.ui.components.ScreenChromeState
@@ -119,7 +122,7 @@ fun HomeScreen(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun HomeContent(
+internal fun HomeContent(
     uiState: HomeUiState,
     snackbarHostState: SnackbarHostState,
     onAction: (HomeUiAction) -> Unit,
@@ -271,6 +274,8 @@ private fun HomeContent(
                     presentation = uiState.heroPresentation,
                     style = uiState.homeHeroStyle,
                     currentStreak = uiState.currentStreak,
+                    overallHandled = uiState.overallHandled,
+                    overallTotal = uiState.overallTotal,
                     onTakeNext = ::toggleDose,
                     onSkipNext = ::skipDose,
                     onViewDetails = { onMedicationClick(it.medication.id) },
@@ -298,7 +303,49 @@ private fun HomeContent(
                     )
                 }
             }
-            if (uiState.heroPresentation.totalCount > 0) {
+            // ── 时间轴筛选 chips（全部 / 用药 / 照护 / 照护子类）──────
+            if (uiState.overallTotal > 0) {
+                item(key = "todayFilters", contentType = "filters") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(vertical = MedLogSpacing.Tiny),
+                        horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
+                    ) {
+                        FilterChip(
+                            selected = uiState.todayFilter == TodayFilter.All,
+                            onClick = { onAction(HomeUiAction.SetTodayFilter(TodayFilter.All)) },
+                            label = { Text(stringResource(R.string.home_filter_all)) },
+                            modifier = Modifier.testTag("todayFilterAll"),
+                        )
+                        FilterChip(
+                            selected = uiState.todayFilter == TodayFilter.Medication,
+                            onClick = { onAction(HomeUiAction.SetTodayFilter(TodayFilter.Medication)) },
+                            label = { Text(stringResource(R.string.home_filter_medication)) },
+                            modifier = Modifier.testTag("todayFilterMedication"),
+                        )
+                        FilterChip(
+                            selected = uiState.todayFilter == TodayFilter.CareTask,
+                            onClick = { onAction(HomeUiAction.SetTodayFilter(TodayFilter.CareTask)) },
+                            label = { Text(stringResource(R.string.home_filter_care)) },
+                            modifier = Modifier.testTag("todayFilterCare"),
+                        )
+                        uiState.careCategoriesPresent.forEach { category ->
+                            FilterChip(
+                                selected = uiState.todayFilter == TodayFilter.CareCategory(category),
+                                onClick = {
+                                    onAction(HomeUiAction.SetTodayFilter(TodayFilter.CareCategory(category)))
+                                },
+                                label = { Text(careTaskCategoryLabel(category)) },
+                                modifier = Modifier.testTag("todayFilterCareCategory:$category"),
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (uiState.overallTotal > 0) {
                 item(key = "todayPlanHeader", contentType = "header") {
                     Row(
                         modifier = Modifier
@@ -314,9 +361,10 @@ private fun HomeContent(
                         Text(
                             text = pluralStringResource(
                                 R.plurals.home_hero_plan_count,
-                                uiState.heroPresentation.totalCount,
-                                uiState.heroPresentation.totalCount,
+                                uiState.overallTotal,
+                                uiState.overallTotal,
                             ),
+                            modifier = Modifier.testTag("homePlanCount"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -324,14 +372,19 @@ private fun HomeContent(
                 }
             }
 
-            // ── 药品卡片列表（可按时段或分类分组）────────────────
+            // ── 统一时间轴（用药 + 照护事项同一渲染器，可按时段或分类分组）──
             val focusedPlanItem = uiState.heroPresentation.nextPendingItem
+            val focusedDoseKey = focusedPlanItem?.doseKey
+
+            // 仅当英雄卡确实聚焦某剂药时才从时间轴剔除该剂；照护事项不受影响。
+            fun isFocusedMedication(item: TodayItem): Boolean =
+                focusedDoseKey != null && item.medication?.doseKey == focusedDoseKey
             if (uiState.groupByTime) {
                 val taskGroups = listOf(
-                    "now" to uiState.nowTaskItems,
-                    "later" to uiState.laterTaskItems,
+                    "now" to uiState.timelineNowItems,
+                    "later" to uiState.timelineLaterItems,
                 ).map { (key, groupItems) ->
-                    key to groupItems.filterNot { it.doseKey == focusedPlanItem?.doseKey }
+                    key to groupItems.filterNot { isFocusedMedication(it) }
                 }.filter { (_, groupItems) -> groupItems.isNotEmpty() }
                 taskGroups.forEach { (key, groupItems) ->
                     item(key = "task_group_$key", contentType = "taskGroup") {
@@ -340,7 +393,7 @@ private fun HomeContent(
                         } else {
                             stringResource(R.string.home_later_group_title)
                         }
-                        MedicationTaskGroupCard(
+                        TodayTaskGroupCard(
                             title = groupTitle,
                             subtitle = if (key == "now") {
                                 stringResource(R.string.home_now_group_body)
@@ -349,28 +402,17 @@ private fun HomeContent(
                             },
                             icon = if (key == "now") MedLogIcons.CheckCircle else MedLogIcons.AccessTime,
                             items = groupItems,
-                            onToggleTaken = ::toggleDose,
-                            onSkip = ::skipDose,
-                            onPartialTake = { item, qty ->
-                                performHaptic(MedLogHapticEffect.CONFIRM)
-                                onAction(HomeUiAction.MarkPartial(item, qty))
-                            },
-                            onTakeAll = {
-                                performHaptic(MedLogHapticEffect.CONFIRM)
-                                groupItems
-                                    .filter { !it.isHandled }
-                                    .forEach { onAction(HomeUiAction.ToggleDose(it)) }
-                            },
-                            onClick = onMedicationClick,
+                            onAction = onAction,
+                            onMedicationClick = onMedicationClick,
                             modifier = Modifier.animateItem(),
                             autoCollapse = uiState.autoCollapseCompletedGroups,
                         )
                     }
                 }
             } else {
-                // 分类分组：扁平卡片列表
-                uiState.groupedItems.forEach { (category, groupItems) ->
-                    val visibleItems = groupItems.filterNot { it.doseKey == focusedPlanItem?.doseKey }
+                // 分类分组：扁平卡片列表（用药与照护事项按各自 category 归并）
+                uiState.timelineCategoryGroups.forEach { (category, groupItems) ->
+                    val visibleItems = groupItems.filterNot { isFocusedMedication(it) }
                     if (category.isNotBlank() && visibleItems.isNotEmpty()) {
                         item(key = "header_$category", contentType = "header") {
                             Row(
@@ -394,12 +436,12 @@ private fun HomeContent(
                     }
                     itemsIndexed(
                         visibleItems,
-                        key = { _, it -> it.doseKey.listKey },
+                        key = { _, it -> it.listKey },
                     ) { idx, item ->
                         val motionScheme = MaterialTheme.motionScheme
                         val animationsEnabled = remember { ValueAnimator.areAnimatorsEnabled() }
-                        var visible by remember(item.doseKey) { mutableStateOf(false) }
-                        LaunchedEffect(item.doseKey, animationsEnabled) {
+                        var visible by remember(item.listKey) { mutableStateOf(false) }
+                        LaunchedEffect(item.listKey, animationsEnabled) {
                             if (animationsEnabled) {
                                 delay(idx * STAGGER_DELAY_MS) // 基于组内索引，而非全局，避免底部首次出现延迟
                             }
@@ -410,16 +452,12 @@ private fun HomeContent(
                             enter = fadeIn(motionScheme.defaultEffectsSpec()) +
                                 slideInVertically(motionScheme.defaultSpatialSpec()) { it / 4 },
                         ) {
-                            MedicationCard(
+                            TodayTimelineRow(
                                 item = item,
-                                onToggleTaken = { toggleDose(item) },
-                                onSkip = { skipDose(item) },
-                                onClick = { onMedicationClick(item.medication.id) },
+                                flatStyle = false,
+                                onAction = onAction,
+                                onMedicationClick = onMedicationClick,
                                 modifier = Modifier.animateItem(),
-                                onPartialTake = {
-                                    performHaptic(MedLogHapticEffect.CONFIRM)
-                                    onAction(HomeUiAction.MarkPartial(item, it))
-                                },
                             )
                         }
                     }

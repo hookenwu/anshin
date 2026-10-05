@@ -4,10 +4,13 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.driezy.medlog.capability.reminders.NotificationHelper
 import com.driezy.medlog.capability.reminders.application.ProgressNotificationUseCase
+import com.driezy.medlog.data.model.CareTask
+import com.driezy.medlog.data.model.CareTaskLog
 import com.driezy.medlog.data.model.DrugInteraction
 import com.driezy.medlog.data.model.LogStatus
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
+import com.driezy.medlog.data.repository.CareTaskRepository
 import com.driezy.medlog.data.repository.HomeHeroStyle
 import com.driezy.medlog.data.repository.LogRepository
 import com.driezy.medlog.data.repository.MedicationRepository
@@ -17,6 +20,7 @@ import com.driezy.medlog.data.repository.reminderZone
 import com.driezy.medlog.di.ComputationDispatcher
 import com.driezy.medlog.domain.StreakCalculator
 import com.driezy.medlog.domain.todayRange
+import com.driezy.medlog.feature.caretasks.application.CareTaskCompletionUseCase
 import com.driezy.medlog.feature.medications.application.DoseChange
 import com.driezy.medlog.feature.medications.application.FuturePlanCalculator
 import com.driezy.medlog.feature.medications.application.ImportMode
@@ -84,31 +88,46 @@ data class HomeUiState(
     val importError: String? = null,
     val exportUri: String? = null,
     val savingDoses: Set<MedicationDoseKey> = emptySet(),
+    /** 今日时间轴：药物与照护事项混排后的唯一输入（docs/care-tasks.md §4）。 */
+    val todayItems: List<TodayItem> = emptyList(),
+    /** 时间轴筛选（全部 / 用药 / 照护 / 照护子类）。 */
+    val todayFilter: TodayFilter = TodayFilter.All,
+    /** 正在写入的照护事项槽位 key（`"<taskId>:<scheduled>"`），防重复点击。 */
+    val savingCareKeys: Set<String> = emptySet(),
 ) {
     val heroPresentation: HomeHeroPresentation by lazy {
         HomeHeroPresentation.from(items)
     }
 
-    /**
-     * 药品按分类分组（分类为空的归入"其他"组，统一展示）。
-     * 当所有药品无分类时返回单个 "" -> all 分组（供卡片列表扁平化渲染）。
-     * 注意：PRN 按需药品不参与分组，见 [prnItems]。
-     */
-    val groupedItems: List<Pair<String, List<MedicationWithStatus>>> by lazy {
-        val regularItems = items.filter { !it.medication.isPRN }
-        val hasCat = regularItems.any { it.medication.category.isNotBlank() }
-        if (!hasCat) return@lazy listOf("" to regularItems)
-        regularItems
-            .groupBy { it.medication.category.ifBlank { UNCATEGORIZED_KEY } }
-            .entries
-            .sortedWith(
-                // 中成药相关分类排序靠前，其次按药名首字母
-                compareBy(
-                    { if (it.key.contains("中成药") || TCM_CATEGORY_KEYWORDS.any { kw -> it.key.contains(kw) }) 0 else 1 },
-                    { it.key },
-                ),
-            )
-            .map { it.key to it.value }
+    /** 顶部进度口径：全部条目（用药 + 照护）。 */
+    val overallTotal: Int get() = todayItems.size
+    val overallHandled: Int get() = todayItems.count { it.isHandled }
+
+    /** 命中当前筛选的时间轴条目。 */
+    val filteredTodayItems: List<TodayItem> by lazy {
+        todayItems.filter { todayFilter.matches(it) }
+    }
+
+    /** 「现在要做」：未处理且已到点（或 30 分钟内到点）的条目，按合并顺序。 */
+    val timelineNowItems: List<TodayItem> by lazy {
+        val cutoffMinutes = currentMinuteOfDay + 30
+        filteredTodayItems.filter { !it.isHandled && it.scheduledMinuteOfDay <= cutoffMinutes }
+    }
+
+    /** 「今日稍后」：其余全部条目（含已处理作为弱化历史），按合并顺序。 */
+    val timelineLaterItems: List<TodayItem> by lazy {
+        val nowKeys = timelineNowItems.map { it.listKey }.toSet()
+        filteredTodayItems.filter { it.listKey !in nowKeys }
+    }
+
+    /** 按分类分组（药物与照护事项按各自 category 归并）。 */
+    val timelineCategoryGroups: List<Pair<String, List<TodayItem>>> by lazy {
+        groupTodayItemsByCategory(filteredTodayItems)
+    }
+
+    /** 当前时间轴里出现过的照护子类（供筛选 chips 展示）。 */
+    val careCategoriesPresent: List<String> by lazy {
+        todayItems.filter { it.isCareTask }.map { it.category }.distinct()
     }
 
     /** PRN 按需药品列表（单独渲染为"随时需要"区域） */
@@ -116,28 +135,9 @@ data class HomeUiState(
         items.filter { it.medication.isPRN }
     }
 
-    /** 当前最需要处理的剂量：未完成，且计划时间已经到达或在未来 30 分钟内。 */
-    val nowTaskItems: List<MedicationWithStatus> by lazy {
-        val cutoffMinutes = currentMinuteOfDay + 30
-        items.filter { item ->
-            !item.medication.isPRN && !item.isHandled && item.scheduledMinuteOfDay() <= cutoffMinutes
-        }
-    }
-
-    /** 今日稍后：非 PRN 且不属于当前行动组的全部剂量，包含已完成项作为弱化历史。 */
-    val laterTaskItems: List<MedicationWithStatus> by lazy {
-        val nowIds = nowTaskItems.map { it.doseKey }.toSet()
-        items.filter { item ->
-            !item.medication.isPRN && item.doseKey !in nowIds
-        }
-    }
-
     companion object {
         /** 哨兵键：无分类药品归入此组，Compose UI 层用 stringResource 解析显示文本 */
-        const val UNCATEGORIZED_KEY = "\u0000__uncategorized__"
-        private val TCM_CATEGORY_KEYWORDS = listOf(
-            "理气", "补益", "清热", "祛湿", "活血", "止咳", "安神", "妇科", "骨伤", "外科",
-        )
+        const val UNCATEGORIZED_KEY = TODAY_UNCATEGORIZED_KEY
     }
 }
 
@@ -149,9 +149,16 @@ sealed interface HomeUiAction {
     data object RefreshTime : HomeUiAction
     data class RestoreDose(val change: DoseChange) : HomeUiAction
     data object ToggleGrouping : HomeUiAction
+    data class SetTodayFilter(val filter: TodayFilter) : HomeUiAction
     data class QrScanned(val raw: String) : HomeUiAction
     data class ConfirmImport(val mode: ImportMode) : HomeUiAction
     data object ClearImportPreview : HomeUiAction
+
+    // ── 照护事项完成语义：全部经 CareTaskCompletionUseCase，不另写日志 ──
+    data class CareTaskComplete(val taskId: Long, val scheduledAtMs: Long) : HomeUiAction
+    data class CareTaskStart(val taskId: Long, val scheduledAtMs: Long) : HomeUiAction
+    data class CareTaskSkip(val taskId: Long, val scheduledAtMs: Long) : HomeUiAction
+    data class CareTaskUndo(val taskId: Long, val scheduledAtMs: Long) : HomeUiAction
 }
 
 sealed interface HomeUiEffect {
@@ -168,6 +175,12 @@ private data class HomeDatedLogs(
     val zone: ZoneId,
 )
 
+/** 照护事项时间轴的输入快照（活跃事项 + 当日日志），由独立协程在事项/时间变化时刷新。 */
+private data class CareTimelineInput(
+    val tasks: List<CareTask> = emptyList(),
+    val logs: List<CareTaskLog> = emptyList(),
+)
+
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val medicationRepo: MedicationRepository,
@@ -180,6 +193,8 @@ class HomeViewModel @Inject constructor(
     private val progressNotif: ProgressNotificationUseCase,
     private val clock: Clock,
     private val planCalculator: FuturePlanCalculator,
+    private val careTaskRepo: CareTaskRepository,
+    private val careTaskCompletion: CareTaskCompletionUseCase,
     @param:ComputationDispatcher private val computationDispatcher: CoroutineDispatcher,
 ) : BaseViewModel() {
 
@@ -188,6 +203,10 @@ class HomeViewModel @Inject constructor(
 
     private val currentTime = MutableStateFlow(clock.instant())
     private val busyDoses = mutableSetOf<MedicationDoseKey>()
+    private val busyCareSlots = mutableSetOf<String>()
+
+    /** 照护事项时间轴输入；活跃事项流每次发射时刷新一次当日日志。 */
+    private val careTimeline = MutableStateFlow(CareTimelineInput())
 
     private val effectChannel = Channel<HomeUiEffect>(Channel.BUFFERED)
     val effects = effectChannel.receiveAsFlow()
@@ -208,6 +227,7 @@ class HomeViewModel @Inject constructor(
 
     init {
         observeMedications()
+        observeCareTasks()
         computeStreak()
         scanLowStockOnLaunch()
     }
@@ -221,13 +241,88 @@ class HomeViewModel @Inject constructor(
             HomeUiAction.RefreshTime -> {
                 currentTime.value = clock.instant()
                 if (_uiState.value.errorMessage != null) observeMedications()
+                safeLaunch { refreshCareLogs() }
             }
             is HomeUiAction.RestoreDose -> restoreDose(action.change)
             HomeUiAction.ToggleGrouping -> toggleGroupBy()
+            is HomeUiAction.SetTodayFilter -> setTodayFilter(action.filter)
             is HomeUiAction.QrScanned -> onQrScanned(action.raw)
             is HomeUiAction.ConfirmImport -> confirmImport(action.mode)
             HomeUiAction.ClearImportPreview -> clearImportPreview()
+            is HomeUiAction.CareTaskComplete ->
+                runCareCommand(action.taskId, action.scheduledAtMs) {
+                    careTaskCompletion.complete(it, action.scheduledAtMs)
+                }
+            is HomeUiAction.CareTaskStart ->
+                runCareCommand(action.taskId, action.scheduledAtMs) {
+                    careTaskCompletion.start(it, action.scheduledAtMs)
+                }
+            is HomeUiAction.CareTaskSkip ->
+                runCareCommand(action.taskId, action.scheduledAtMs) {
+                    careTaskCompletion.skip(it, action.scheduledAtMs)
+                }
+            is HomeUiAction.CareTaskUndo ->
+                runCareCommand(action.taskId, action.scheduledAtMs) {
+                    careTaskCompletion.undo(it, action.scheduledAtMs)
+                }
         }
+    }
+
+    /**
+     * 照护事项时间轴的观察：活跃事项流（成员作用域）每次发射时重取当日日志。
+     * 与 [com.driezy.medlog.feature.caretasks.CareTasksViewModel] 同一策略，不新建数据通路。
+     */
+    private fun observeCareTasks() {
+        safeLaunch { refreshCareLogs() }
+        safeLaunch {
+            careTaskRepo.getActiveTasks()
+                .catch { error -> _uiState.update { it.copy(errorMessage = error.localizedMessage) } }
+                .collect { tasks ->
+                    careTimeline.update { it.copy(tasks = tasks) }
+                    refreshCareLogs()
+                }
+        }
+    }
+
+    private suspend fun refreshCareLogs() {
+        val zone = runCatching { prefsRepository.settingsFlow.first().reminderZone(clock.zone) }
+            .getOrDefault(clock.zone)
+        val startMs = clock.instant().atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+        val logs = runCatching { careTaskRepo.getLogsForToday(startMs) }.getOrDefault(emptyList())
+        careTimeline.update { it.copy(logs = logs) }
+    }
+
+    /**
+     * 照护事项完成语义的唯一入口：命令经 [CareTaskCompletionUseCase]，
+     * 成功后刷新当日日志（日志流本身不发射）。**不直接写 log**。
+     */
+    private fun runCareCommand(taskId: Long, scheduledAtMs: Long, command: suspend (Long) -> Unit) {
+        val key = careSlotKey(taskId, scheduledAtMs)
+        if (!busyCareSlots.add(key)) return
+        _uiState.update { it.copy(savingCareKeys = busyCareSlots.toSet(), errorMessage = null) }
+        safeLaunch(
+            onError = { error ->
+                _uiState.update {
+                    busyCareSlots.remove(key)
+                    it.copy(savingCareKeys = busyCareSlots.toSet(), errorMessage = error.localizedMessage)
+                }
+            },
+        ) {
+            try {
+                command(taskId)
+                refreshCareLogs()
+            } finally {
+                busyCareSlots.remove(key)
+                _uiState.update { it.copy(savingCareKeys = busyCareSlots.toSet()) }
+            }
+        }
+    }
+
+    private fun careSlotKey(taskId: Long, scheduledAtMs: Long) = "$taskId:$scheduledAtMs"
+
+    /** 设置时间轴筛选（全部 / 用药 / 照护 / 照护子类）。 */
+    fun setTodayFilter(filter: TodayFilter) {
+        _uiState.update { it.copy(todayFilter = filter) }
     }
 
     private var observation: Job? = null
@@ -257,8 +352,9 @@ class HomeViewModel @Inject constructor(
                 datedLogs,
                 interactionsFlow,
                 medicationRepo.observePlanRevisions(),
-                currentTime,
-            ) { meds, dated, interactions, revisions, now ->
+                combine(currentTime, careTimeline) { now, careInput -> now to careInput },
+            ) { meds, dated, interactions, revisions, timeAndCare ->
+                val (now, careInput) = timeAndCare
                 val logs = dated.logs.filter {
                     Instant.ofEpochMilli(it.scheduledTimeMs).atZone(dated.zone).toLocalDate() ==
                         dated.today
@@ -291,6 +387,14 @@ class HomeViewModel @Inject constructor(
                 } + meds.filter { it.isPRN && !it.isArchived }.map { med ->
                     MedicationWithStatus(medication = med, log = logsByMedication[med.id]?.lastOrNull())
                 }
+                // ── 统一时间轴：两个映射器产出 TodayItem，合并器保证零照护事项时用药序列不变 ──
+                val medicationItems = medicationsToTodayItems(items)
+                val careTaskItems = careTasksToTodayItems(
+                    tasks = careInput.tasks,
+                    logs = careInput.logs,
+                    zone = dated.zone,
+                    nowMs = now.toEpochMilli(),
+                )
                 HomeObservation(
                     state = HomeUiState(
                         today = dated.today,
@@ -301,6 +405,7 @@ class HomeViewModel @Inject constructor(
                         homeHeroStyle = prefs.homeHeroStyle,
                         currentMinuteOfDay = now.atZone(dated.zone).toLocalTime().toSecondOfDay() / 60,
                         exportUri = PlanExportCodec.encode(meds.filterNot { it.isArchived }, dated.zone),
+                        todayItems = mergeTodayItems(medicationItems, careTaskItems),
                     ),
                     showProgressNotification = prefs.persistentReminder,
                 )
@@ -308,14 +413,16 @@ class HomeViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "load_failed") }
             }.collect { observation ->
                 val state = observation.state
-                // 保留用户的分组偏好，不被新状态覆盖
+                // 保留用户的分组/筛选偏好与写入中的槽位，不被新状态覆盖
                 val previous = _uiState.value
                 _uiState.value = state.copy(
                     groupByTime = previous.groupByTime,
+                    todayFilter = previous.todayFilter,
                     currentStreak = previous.currentStreak,
                     importPreview = previous.importPreview,
                     importError = previous.importError,
                     savingDoses = previous.savingDoses,
+                    savingCareKeys = previous.savingCareKeys,
                 )
                 // 实时更新今日进度通知（去重：仅在 taken/total 真正变化时更新）
                 val hero = state.heroPresentation

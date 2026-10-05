@@ -68,6 +68,9 @@ internal fun HomeHero(
     onViewDetails: (MedicationWithStatus) -> Unit,
     onAddMedication: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 顶部进度口径：全部条目（用药 + 照护）。默认退回药物进度，保证用药单一路径不变。 */
+    overallHandled: Int = presentation.handledCount,
+    overallTotal: Int = presentation.totalCount,
 ) {
     val motionScheme = MaterialTheme.motionScheme
     AnimatedContent(
@@ -100,16 +103,22 @@ internal fun HomeHero(
                 HomeHeroStyle.ACTION -> ActionHomeHero(
                     presentation = target.presentation,
                     currentStreak = currentStreak,
+                    overallHandled = overallHandled,
+                    overallTotal = overallTotal,
                     onTakeNext = onTakeNext,
                     onSkipNext = onSkipNext,
                 )
                 HomeHeroStyle.PROGRESS -> ProgressHomeHero(
                     presentation = target.presentation,
+                    overallHandled = overallHandled,
+                    overallTotal = overallTotal,
                     onTakeNext = onTakeNext,
                     onViewDetails = onViewDetails,
                 )
                 HomeHeroStyle.TIMELINE -> TimelineHomeHero(
                     presentation = target.presentation,
+                    overallHandled = overallHandled,
+                    overallTotal = overallTotal,
                     onTakeNext = onTakeNext,
                     onSkipNext = onSkipNext,
                 )
@@ -122,6 +131,8 @@ internal fun HomeHero(
 private fun ActionHomeHero(
     presentation: HomeHeroPresentation,
     currentStreak: Int,
+    overallHandled: Int,
+    overallTotal: Int,
     onTakeNext: (MedicationWithStatus) -> Unit,
     onSkipNext: (MedicationWithStatus) -> Unit,
 ) {
@@ -149,7 +160,7 @@ private fun ActionHomeHero(
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold,
                 )
-                HeroCountPill(presentation)
+                HeroCountPill(handled = overallHandled, total = overallTotal)
             }
             Column(verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Tiny)) {
                 Text(
@@ -205,6 +216,8 @@ private fun ActionHomeHero(
 @Composable
 private fun ProgressHomeHero(
     presentation: HomeHeroPresentation,
+    overallHandled: Int,
+    overallTotal: Int,
     onTakeNext: (MedicationWithStatus) -> Unit,
     onViewDetails: (MedicationWithStatus) -> Unit,
 ) {
@@ -232,8 +245,9 @@ private fun ProgressHomeHero(
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             ProgressDial(
-                presentation = presentation,
                 progress = progress,
+                handled = overallHandled,
+                total = overallTotal,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
             Text(
@@ -276,7 +290,7 @@ private fun ProgressHomeHero(
 }
 
 @Composable
-private fun ProgressDial(presentation: HomeHeroPresentation, progress: Float, modifier: Modifier = Modifier) {
+private fun ProgressDial(progress: Float, handled: Int, total: Int, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier,
         contentAlignment = Alignment.Center,
@@ -291,12 +305,12 @@ private fun ProgressDial(presentation: HomeHeroPresentation, progress: Float, mo
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    text = presentation.handledCount.toString(),
+                    text = handled.toString(),
                     style = MaterialTheme.emphasizedTypography.displayMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
                 Text(
-                    text = "/${presentation.totalCount}",
+                    text = "/$total",
                     modifier = Modifier.padding(bottom = 7.dp),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f),
@@ -369,6 +383,8 @@ private fun ProgressNextDose(next: MedicationWithStatus, modifier: Modifier = Mo
 @Composable
 private fun TimelineHomeHero(
     presentation: HomeHeroPresentation,
+    overallHandled: Int,
+    overallTotal: Int,
     onTakeNext: (MedicationWithStatus) -> Unit,
     onSkipNext: (MedicationWithStatus) -> Unit,
 ) {
@@ -396,7 +412,7 @@ private fun TimelineHomeHero(
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold,
                 )
-                HeroCountPill(presentation)
+                HeroCountPill(handled = overallHandled, total = overallTotal)
             }
             Column(verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Tiny)) {
                 Text(
@@ -675,7 +691,7 @@ private fun EmptyHomeHero(onAddMedication: () -> Unit) {
 }
 
 @Composable
-private fun HeroCountPill(presentation: HomeHeroPresentation) {
+private fun HeroCountPill(handled: Int, total: Int) {
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
@@ -684,10 +700,12 @@ private fun HeroCountPill(presentation: HomeHeroPresentation) {
         Text(
             text = stringResource(
                 R.string.home_hero_today_count,
-                presentation.handledCount,
-                presentation.totalCount,
+                handled,
+                total,
             ),
-            modifier = Modifier.padding(horizontal = MedLogSpacing.Medium, vertical = 6.dp),
+            modifier = Modifier
+                .padding(horizontal = MedLogSpacing.Medium, vertical = 6.dp)
+                .testTag("homeTodayCount"),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
         )
