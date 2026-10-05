@@ -40,7 +40,6 @@ class SeedDataFormatTest {
             val med = seeded.medication
             assertTrue(seeded.key.isNotBlank())
             assertTrue(med.name.isNotBlank())
-            assertTrue(med.dose > 0.0)
             assertTrue(med.doseQuantity > 0.0)
             assertTrue(med.doseUnit.isNotBlank())
             assertTrue(med.reminderHour in 0..23)

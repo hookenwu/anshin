@@ -30,8 +30,13 @@ data class Medication(
     /** 所属家庭成员（v19）。0 = 未归属，写入前必须由 repository 绑定当前成员。 */
     val careRecipientId: Long = 0L,
     val name: String,
-    val dose: Double,
     val doseUnit: String, // 片 / 粒 / ml ...
+    /**
+     * 单份规格（每 1 个 [doseUnit] 的强度，如 0.25 g/粒）。药品属性，一次填写长期复用。
+     * 与 [doseStrengthUnit] 成对：要么都为 null，要么都非空。仅描述「规格」，不参与库存扣减。
+     */
+    val doseStrength: Double? = null,
+    val doseStrengthUnit: String? = null,
     val category: String = "",
     val form: String = "tablet", // tablet / capsule / liquid / powder
 

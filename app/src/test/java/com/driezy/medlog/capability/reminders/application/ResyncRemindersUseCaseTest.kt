@@ -70,7 +70,6 @@ class ResyncRemindersUseCaseTest {
         Medication(
             id = id,
             name = "Medication $id",
-            dose = 1.0,
             doseUnit = "tablet",
             timePeriod = timePeriod,
             reminderTimes = reminderTimes,

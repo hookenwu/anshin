@@ -199,5 +199,5 @@ class InteractionRuleEngineTest {
 
     /** 创建仅含 name 字段的最简 [Medication]（其余字段使用默认值）。 */
     private fun med(name: String, fullPath: String = "", category: String = "") =
-        Medication(name = name, dose = 1.0, doseUnit = "片", fullPath = fullPath, category = category)
+        Medication(name = name, doseUnit = "片", fullPath = fullPath, category = category)
 }

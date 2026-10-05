@@ -31,13 +31,15 @@ import java.util.zip.GZIPOutputStream
 @Serializable
 data class MedExportEntry(
     @SerialName("n") val name: String,
-    @SerialName("d") val dose: Double, // 兼容旧 dose 字段 = doseQuantity
     @SerialName("u") val doseUnit: String,
     @SerialName("tp") val timePeriod: String,
     @SerialName("rt") val reminderTimes: String,
     @SerialName("rh") val reminderHour: Int,
     @SerialName("rm") val reminderMinute: Int,
     @SerialName("dq") val doseQuantity: Double = 1.0,
+    /** 每 1 个 doseUnit 的规格（如 0.25 g/粒）。旧版本无此字段，缺省为 null。 */
+    @SerialName("ds") val doseStrength: Double? = null,
+    @SerialName("dsu") val doseStrengthUnit: String? = null,
     @SerialName("ft") val frequencyType: String = "daily",
     @SerialName("cat") val category: String = "",
     @SerialName("form") val form: String = "tablet",
@@ -125,13 +127,14 @@ object PlanExportCodec {
 
     private fun Medication.toEntry(zoneId: ZoneId) = MedExportEntry(
         name = name,
-        dose = doseQuantity, // 兼容旧字段
         doseUnit = doseUnit,
         timePeriod = timePeriod,
         reminderTimes = reminderTimes,
         reminderHour = reminderHour,
         reminderMinute = reminderMinute,
         doseQuantity = doseQuantity,
+        doseStrength = doseStrength,
+        doseStrengthUnit = doseStrengthUnit,
         frequencyType = frequencyType,
         category = category,
         form = form,
@@ -151,13 +154,14 @@ object PlanExportCodec {
 
     fun MedExportEntry.toMedication(defaultStart: Instant, zoneId: ZoneId): Medication = Medication(
         name = name,
-        dose = dose,
         doseUnit = doseUnit,
         timePeriod = timePeriod,
         reminderTimes = reminderTimes,
         reminderHour = reminderHour,
         reminderMinute = reminderMinute,
         doseQuantity = doseQuantity,
+        doseStrength = doseStrength,
+        doseStrengthUnit = doseStrengthUnit,
         frequencyType = frequencyType,
         category = category,
         form = form,

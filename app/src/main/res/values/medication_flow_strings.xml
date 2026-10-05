@@ -26,6 +26,10 @@
     <string name="error_schedule_invalid">请检查提醒时间、间隔和服药日期</string>
     <string name="error_date_order">结束日期不能早于开始日期</string>
     <string name="error_stock_invalid">库存和补药阈值须为不小于 0 的数字</string>
+    <string name="error_dose_strength_invalid">规格需同时填写数值与单位，且数值须大于 0</string>
+    <string name="add_dose_strength_label">每粒规格（可选）</string>
+    <string name="add_dose_strength_hint">规格数值，如 0.25</string>
+    <string name="add_dose_strength_preview">将显示为 %1$s</string>
     <string name="adherence_explanation">坚持率 = 完整服用次数 / 已到期计划次数；部分服用单独记录，按需用药不计入。</string>
     <string name="adherence_no_due">暂无到期计划</string>
     <string name="adherence_due_count">已到期计划</string>

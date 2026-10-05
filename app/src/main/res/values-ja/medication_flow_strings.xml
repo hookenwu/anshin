@@ -26,6 +26,10 @@
     <string name="error_schedule_invalid">通知時刻、間隔、曜日を確認してください</string>
     <string name="error_date_order">終了日は開始日以降にしてください</string>
     <string name="error_stock_invalid">残量と補充基準には0以上の数値を入力してください</string>
+    <string name="error_dose_strength_invalid">規格は数値と単位を両方入力し、数値は0より大きくしてください</string>
+    <string name="add_dose_strength_label">1単位あたりの規格（任意）</string>
+    <string name="add_dose_strength_hint">規格の数値（例 0.25）</string>
+    <string name="add_dose_strength_preview">表示：%1$s</string>
     <string name="adherence_explanation">継続率＝全量服用した回数／時刻を迎えた予定回数。一部服用は別に記録し、必要時の服用は含めません。</string>
     <string name="adherence_no_due">時刻を迎えた予定はありません</string>
     <string name="adherence_due_count">時刻を迎えた予定</string>

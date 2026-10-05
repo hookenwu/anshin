@@ -26,6 +26,10 @@
     <string name="error_schedule_invalid">Check reminder times, interval, and selected weekdays</string>
     <string name="error_date_order">End date must not precede start date</string>
     <string name="error_stock_invalid">Stock and refill threshold must be nonnegative numbers</string>
+    <string name="error_dose_strength_invalid">Enter both the strength value and its unit, with a value greater than 0</string>
+    <string name="add_dose_strength_label">Strength per unit (optional)</string>
+    <string name="add_dose_strength_hint">Strength value, e.g. 0.25</string>
+    <string name="add_dose_strength_preview">Will show as %1$s</string>
     <string name="adherence_explanation">Adherence = full doses / scheduled doses due. Partial doses are recorded separately; as-needed doses are excluded.</string>
     <string name="adherence_no_due">No scheduled doses due yet</string>
     <string name="adherence_due_count">Scheduled doses due</string>

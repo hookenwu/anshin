@@ -174,7 +174,7 @@ class ImportPlanUseCaseTest {
 
     private suspend fun addExisting(name: String) {
         medicationRepo.addMedication(
-            com.driezy.medlog.data.model.Medication(name = name, dose = 1.0, doseUnit = "片"),
+            com.driezy.medlog.data.model.Medication(name = name, doseUnit = "片"),
         )
     }
 
@@ -182,7 +182,6 @@ class ImportPlanUseCaseTest {
         val entries = names.map { name ->
             MedExportEntry(
                 name = name,
-                dose = 1.0,
                 doseUnit = "片",
                 timePeriod = "exact",
                 reminderTimes = "08:00",

@@ -35,7 +35,6 @@ class FuturePlanCalculatorTest {
     ) = Medication(
         id = 1,
         name = name,
-        dose = 10.0,
         doseUnit = "mg",
         frequencyType = frequencyType,
         frequencyInterval = frequencyInterval,

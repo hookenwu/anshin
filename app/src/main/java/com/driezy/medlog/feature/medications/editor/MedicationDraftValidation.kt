@@ -12,6 +12,7 @@ internal fun AddMedicationUiState.validationError(throughStep: Int = 2): Int? {
     if (name.isBlank()) return R.string.error_name_required
     if (throughStep == 0) return null
     if (!doseQuantity.isFinite() || doseQuantity <= 0 || doseUnit.isBlank()) return R.string.error_dose_invalid
+    if (!doseStrength.isValidDoseStrength(doseStrengthUnit)) return R.string.error_dose_strength_invalid
     if (isPRN && maxDailyDose.isNotBlank() && !maxDailyDose.isPositiveNumber()) return R.string.error_daily_dose_invalid
     if (!isPRN) {
         if (intervalHours < 0 || frequencyInterval <= 0) return R.string.error_schedule_invalid
@@ -46,3 +47,16 @@ internal fun AddMedicationUiState.validationError(throughStep: Int = 2): Int? {
 
 private fun String.isPositiveNumber(): Boolean = toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true
 private fun String.isNonNegativeNumber(): Boolean = toDoubleOrNull()?.let { it.isFinite() && it >= 0 } == true
+
+/**
+ * 规格必须「数值 + 单位」成对：两者都空 = 无规格；只填一个、或数值 <= 0 = 非法。
+ */
+private fun String.isValidDoseStrength(unit: String): Boolean {
+    val value = trim()
+    val strengthUnit = unit.trim()
+    return when {
+        value.isEmpty() && strengthUnit.isEmpty() -> true
+        value.isEmpty() || strengthUnit.isEmpty() -> false
+        else -> isPositiveNumber()
+    }
+}

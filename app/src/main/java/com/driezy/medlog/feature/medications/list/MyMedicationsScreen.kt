@@ -19,6 +19,7 @@ import com.driezy.medlog.data.repository.MedicationSortOrder
 import com.driezy.medlog.ui.components.*
 import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
+import com.driezy.medlog.ui.util.doseDisplayText
 import com.driezy.medlog.ui.util.formatDose
 import java.time.DayOfWeek
 import java.time.format.TextStyle
@@ -157,7 +158,7 @@ internal fun MyMedicationsContent(
                     ) {
                         Text(med.name, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "${med.doseQuantity.formatDose()} ${med.doseUnit} · ${scheduleLabel(med)}",
+                            "${med.doseDisplayText()} · ${scheduleLabel(med)}",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         med.stock?.let { stock ->

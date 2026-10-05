@@ -50,7 +50,7 @@ import com.driezy.medlog.ui.icons.MedLogIcon
 import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
 import com.driezy.medlog.ui.util.displayName
-import com.driezy.medlog.ui.util.formatDose
+import com.driezy.medlog.ui.util.doseDisplayText
 import com.driezy.medlog.ui.util.labelRes
 import com.driezy.medlog.ui.util.primaryTimePeriod
 import com.driezy.medlog.ui.utils.MedLogHapticEffect
@@ -266,7 +266,7 @@ internal fun CompactMedicationPlanRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${medication.doseQuantity.formatDose()} ${medication.doseUnit}",
+                    text = medication.doseDisplayText(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

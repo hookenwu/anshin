@@ -214,5 +214,5 @@ class RecipientScopingRepositoryTest {
         assertTrue("记录不得移动到其他成员", symptoms.getAllLogs().first().isEmpty())
     }
 
-    private fun medication(name: String) = Medication(name = name, dose = 1.0, doseUnit = "片")
+    private fun medication(name: String) = Medication(name = name, doseUnit = "片")
 }

@@ -10,6 +10,7 @@ import com.driezy.medlog.data.repository.LogRepository
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.data.repository.UserPreferencesRepository
 import com.driezy.medlog.feature.medications.application.ToggleMedicationDoseUseCase
+import com.driezy.medlog.ui.util.formatDose
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -131,7 +132,7 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
                         notificationHelper.showEarlyReminderNotification(
                             medId,
                             medName,
-                            "${med.doseQuantity} ${med.doseUnit}",
+                            "${med.doseQuantity.formatDose()} ${med.doseUnit}",
                             earlyMinutes,
                             timeIndex,
                             memberName,
@@ -161,7 +162,7 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
                         notificationHelper.showFollowUpNotification(
                             medId,
                             medName,
-                            "${med.doseQuantity} ${med.doseUnit}",
+                            "${med.doseQuantity.formatDose()} ${med.doseUnit}",
                             timeIndex,
                             followUpCount,
                             scheduledMs,
@@ -187,7 +188,7 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
                     notificationHelper.showReminderNotification(
                         medId,
                         medName,
-                        "${med.doseQuantity} ${med.doseUnit}",
+                        "${med.doseQuantity.formatDose()} ${med.doseUnit}",
                         timeIndex,
                         scheduledMs,
                         memberName,

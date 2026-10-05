@@ -54,7 +54,7 @@ class AddMedicationViewModelTest {
         model.loadExisting(1)
         runCurrent()
         model.onAction(AddMedicationUiAction.NotesChanged("用户刚输入的草稿"))
-        ready.complete(Medication(id = 1, name = "旧值", dose = 1.0, doseUnit = "片", notes = "旧备注"))
+        ready.complete(Medication(id = 1, name = "旧值", doseUnit = "片", notes = "旧备注"))
         advanceUntilIdle()
         assertEquals("用户刚输入的草稿", model.uiState.value.notes)
         assertEquals("旧值", model.uiState.value.name)
@@ -63,7 +63,7 @@ class AddMedicationViewModelTest {
 
     @Test fun `restored editor draft is not replaced by repeated load`() = runTest {
         val repository = FakeMedicationRepository()
-        val id = repository.addMedication(Medication(name = "药品", dose = 1.0, doseUnit = "片"))
+        val id = repository.addMedication(Medication(name = "药品", doseUnit = "片"))
         val handle = SavedStateHandle()
         val first = vm(repository, handle)
         first.loadExisting(id)
@@ -91,7 +91,7 @@ class AddMedicationViewModelTest {
     @Test fun `editing notes preserves concurrent inventory and original metadata`() = runTest {
         val repository = FakeMedicationRepository()
         val id = repository.addMedication(
-            Medication(name = "药品", dose = 1.0, doseUnit = "片", stock = 10.0, createdAt = 123, isArchived = true),
+            Medication(name = "药品", doseUnit = "片", stock = 10.0, createdAt = 123, isArchived = true),
         )
         val model = vm(repository)
         model.loadExisting(id)

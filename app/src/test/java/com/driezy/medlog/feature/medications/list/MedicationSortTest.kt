@@ -22,7 +22,6 @@ class MedicationSortTest {
     ) = Medication(
         id = id,
         name = name,
-        dose = 1.0,
         doseUnit = "片",
         reminderTimes = reminderTimes,
         timePeriod = timePeriod,

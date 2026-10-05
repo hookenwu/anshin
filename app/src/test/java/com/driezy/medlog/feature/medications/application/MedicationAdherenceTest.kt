@@ -16,7 +16,6 @@ class MedicationAdherenceTest {
     private fun medication() = Medication(
         id = 1,
         name = "药",
-        dose = 1.0,
         doseUnit = "片",
         startDate = at(today.minusDays(29), 0),
         reminderTimes = "08:00,20:00",

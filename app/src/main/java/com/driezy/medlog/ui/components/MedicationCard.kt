@@ -30,6 +30,7 @@ import com.driezy.medlog.ui.icons.MedLogIcon
 import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
 import com.driezy.medlog.ui.util.displayName
+import com.driezy.medlog.ui.util.doseDisplayText
 import com.driezy.medlog.ui.util.formIcon
 import com.driezy.medlog.ui.util.formatDose
 import com.driezy.medlog.ui.util.icon
@@ -242,7 +243,7 @@ fun MedicationCard(
                         } else {
                             timePeriodsLabel(med.timePeriod).orEmpty()
                         }
-                        val doseDisplay = "${med.doseQuantity.formatDose()} ${med.doseUnit}"
+                        val doseDisplay = med.doseDisplayText()
                         Text(
                             text = "$doseDisplay  ·  $timeText",
                             style = MaterialTheme.typography.bodySmall,

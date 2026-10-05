@@ -58,7 +58,7 @@ class HomeViewModelTest {
     }
 
     @Test fun `success is emitted only after storage finishes and double clicks write once`() = runTest {
-        meds.addMedication(Medication(name = "药", dose = 1.0, doseUnit = "片", startDate = clock.millis(), stock = 10.0))
+        meds.addMedication(Medication(name = "药", doseUnit = "片", startDate = clock.millis(), stock = 10.0))
         val model = viewModel()
         advanceUntilIdle()
         val item = model.uiState.value.items.single()
@@ -78,7 +78,7 @@ class HomeViewModelTest {
     }
 
     @Test fun `failed write emits failure without a success receipt`() = runTest {
-        meds.addMedication(Medication(name = "药", dose = 1.0, doseUnit = "片", startDate = clock.millis()))
+        meds.addMedication(Medication(name = "药", doseUnit = "片", startDate = clock.millis()))
         val model = viewModel()
         advanceUntilIdle()
         failWrite = true
@@ -97,7 +97,6 @@ class HomeViewModelTest {
         meds.addMedication(
             Medication(
                 name = "药",
-                dose = 1.0,
                 doseUnit = "片",
                 startDate = clock.millis(),
                 frequencyType = "interval",

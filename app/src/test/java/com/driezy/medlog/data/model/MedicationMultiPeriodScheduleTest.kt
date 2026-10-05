@@ -13,7 +13,6 @@ class MedicationMultiPeriodScheduleTest {
     private fun medication(timePeriod: String, reminderTimes: String) = Medication(
         id = 1L,
         name = "多时段药",
-        dose = 1.0,
         doseUnit = "片",
         timePeriod = timePeriod,
         reminderTimes = reminderTimes,

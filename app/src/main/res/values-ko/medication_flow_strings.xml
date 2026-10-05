@@ -26,6 +26,10 @@
     <string name="error_schedule_invalid">알림 시간, 간격 및 요일을 확인하세요</string>
     <string name="error_date_order">종료일은 시작일보다 빠를 수 없습니다</string>
     <string name="error_stock_invalid">재고 및 보충 기준은 0 이상의 숫자여야 합니다</string>
+    <string name="error_dose_strength_invalid">규격 값과 단위를 모두 입력하고 값은 0보다 커야 합니다</string>
+    <string name="add_dose_strength_label">단위당 규격(선택)</string>
+    <string name="add_dose_strength_hint">규격 값, 예: 0.25</string>
+    <string name="add_dose_strength_preview">표시: %1$s</string>
     <string name="adherence_explanation">이행률 = 전량 복용 횟수 / 시간이 된 예정 횟수. 일부 복용은 별도로 기록하며 필요 시 복용은 제외합니다.</string>
     <string name="adherence_no_due">아직 시간이 된 복용 일정이 없습니다</string>
     <string name="adherence_due_count">시간이 된 예정 횟수</string>

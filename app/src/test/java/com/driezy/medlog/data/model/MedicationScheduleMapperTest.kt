@@ -11,7 +11,7 @@ import java.time.Duration
 import java.time.LocalTime
 
 class MedicationScheduleMapperTest {
-    private fun medication() = Medication(name = "Test", dose = 1.0, doseUnit = "tablet")
+    private fun medication() = Medication(name = "Test", doseUnit = "tablet")
 
     @Test
     fun `maps persisted exact times and weekdays to typed schedule`() {

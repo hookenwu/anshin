@@ -49,6 +49,90 @@ abstract class MedLogDatabase : RoomDatabase() {
         private const val LEGACY_RECIPIENT_NAME = "本人"
 
         /**
+         * v20 → v21：用药「规格（单粒强度）」建模 + 清理死列 `dose`。
+         *
+         * 纯结构变更：新增两列可空规格（`doseStrength` / `doseStrengthUnit`，成对），
+         * 删除零读取的死列 `dose`（NOT NULL）→ medications 按 Room 的表重建模式迁移，
+         * 其余列与全部数据原样搬运，无回填。原有两条索引随表重建一并恢复。
+         */
+        val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `_new_medications` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `careRecipientId` INTEGER NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `doseUnit` TEXT NOT NULL,
+                        `doseStrength` REAL,
+                        `doseStrengthUnit` TEXT,
+                        `category` TEXT NOT NULL,
+                        `form` TEXT NOT NULL,
+                        `isHighPriority` INTEGER NOT NULL,
+                        `frequencyType` TEXT NOT NULL,
+                        `frequencyInterval` INTEGER NOT NULL,
+                        `frequencyDays` TEXT NOT NULL,
+                        `timePeriod` TEXT NOT NULL,
+                        `reminderTimes` TEXT NOT NULL,
+                        `reminderHour` INTEGER NOT NULL,
+                        `reminderMinute` INTEGER NOT NULL,
+                        `doseQuantity` REAL NOT NULL,
+                        `isPRN` INTEGER NOT NULL,
+                        `maxDailyDose` REAL,
+                        `startDate` INTEGER NOT NULL,
+                        `endDate` INTEGER,
+                        `stock` REAL,
+                        `refillThreshold` REAL,
+                        `refillReminderDays` INTEGER NOT NULL,
+                        `notes` TEXT NOT NULL,
+                        `isCustomDrug` INTEGER NOT NULL,
+                        `isArchived` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `isTcm` INTEGER NOT NULL,
+                        `fullPath` TEXT NOT NULL,
+                        `intervalHours` INTEGER NOT NULL,
+                        `planEffectiveFromMs` INTEGER NOT NULL,
+                        FOREIGN KEY(`careRecipientId`) REFERENCES `care_recipients`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `_new_medications` (
+                        `id`, `careRecipientId`, `name`, `doseUnit`, `category`, `form`,
+                        `isHighPriority`, `frequencyType`, `frequencyInterval`, `frequencyDays`,
+                        `timePeriod`, `reminderTimes`, `reminderHour`, `reminderMinute`,
+                        `doseQuantity`, `isPRN`, `maxDailyDose`, `startDate`, `endDate`, `stock`,
+                        `refillThreshold`, `refillReminderDays`, `notes`, `isCustomDrug`,
+                        `isArchived`, `createdAt`, `isTcm`, `fullPath`, `intervalHours`,
+                        `planEffectiveFromMs`
+                    )
+                    SELECT
+                        `id`, `careRecipientId`, `name`, `doseUnit`, `category`, `form`,
+                        `isHighPriority`, `frequencyType`, `frequencyInterval`, `frequencyDays`,
+                        `timePeriod`, `reminderTimes`, `reminderHour`, `reminderMinute`,
+                        `doseQuantity`, `isPRN`, `maxDailyDose`, `startDate`, `endDate`, `stock`,
+                        `refillThreshold`, `refillReminderDays`, `notes`, `isCustomDrug`,
+                        `isArchived`, `createdAt`, `isTcm`, `fullPath`, `intervalHours`,
+                        `planEffectiveFromMs`
+                    FROM `medications`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `medications`")
+                db.execSQL("ALTER TABLE `_new_medications` RENAME TO `medications`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_medications_isArchived` " +
+                        "ON `medications` (`isArchived`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_medications_careRecipientId` " +
+                        "ON `medications` (`careRecipientId`)",
+                )
+            }
+        }
+
+        /**
          * v19 → v20：新增照护事项两张表（CareTask / CareTaskLog）。
          *
          * 纯新增，不改任何既有列：两表分别挂 CareRecipient / CareTask 外键（CASCADE），

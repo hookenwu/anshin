@@ -28,8 +28,9 @@ import com.driezy.medlog.ui.icons.MedLogIcon
 import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
 import com.driezy.medlog.ui.util.displayName
+import com.driezy.medlog.ui.util.doseDisplayText
 import com.driezy.medlog.ui.util.formIcon
-import com.driezy.medlog.ui.util.formatDosePrecise
+import com.driezy.medlog.ui.util.perDoseTotalText
 import com.driezy.medlog.ui.util.timePeriodsLabel
 import java.time.Instant
 import java.time.format.DateTimeFormatter
@@ -202,6 +203,7 @@ private fun MedicationDetailContent(
                     uiState.taken30d,
                     uiState.partial30d,
                     uiState.total30d,
+                    accumulatedUsage = uiState.accumulatedUsage,
                 )
             }
 
@@ -275,8 +277,11 @@ private fun MedicationDetailContent(
                         }
                         DetailRow(
                             stringResource(R.string.detail_label_dose),
-                            "${med.doseQuantity.formatDosePrecise()} ${med.doseUnit}",
+                            med.doseDisplayText(),
                         )
+                        med.perDoseTotalText()?.let { total ->
+                            DetailRow(stringResource(R.string.detail_label_dose_total), total)
+                        }
                         if (med.isPRN) {
                             DetailRow(
                                 stringResource(R.string.detail_label_usage),

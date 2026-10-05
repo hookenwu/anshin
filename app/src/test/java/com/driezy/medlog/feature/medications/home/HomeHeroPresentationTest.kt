@@ -148,7 +148,6 @@ class HomeHeroPresentationTest {
         val medication = Medication(
             id = id,
             name = "Medication $id",
-            dose = 1.0,
             doseUnit = "tablet",
             reminderTimes = scheduledTime,
             isPRN = isPrn,

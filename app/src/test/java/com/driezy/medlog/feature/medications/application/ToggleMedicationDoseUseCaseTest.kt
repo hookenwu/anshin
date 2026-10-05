@@ -55,7 +55,6 @@ class ToggleMedicationDoseUseCaseTest {
     private fun med(id: Long = 1L, stock: Double? = null) = Medication(
         id = id,
         name = "测试药品",
-        dose = 1.0,
         doseUnit = "片",
         doseQuantity = 2.0,
         reminderHour = 8,

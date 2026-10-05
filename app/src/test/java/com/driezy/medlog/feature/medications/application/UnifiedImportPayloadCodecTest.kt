@@ -16,7 +16,6 @@ class UnifiedImportPayloadCodecTest {
             listOf(
                 Medication(
                     name = "阿司匹林",
-                    dose = 1.0,
                     doseUnit = "片",
                     timePeriod = "exact",
                     reminderTimes = "08:00",

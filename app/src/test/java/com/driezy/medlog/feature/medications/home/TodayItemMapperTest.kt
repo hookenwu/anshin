@@ -203,7 +203,6 @@ class TodayItemMapperTest {
         val med = Medication(
             id = id,
             name = "Med $id",
-            dose = 1.0,
             doseUnit = "tablet",
             reminderTimes = time,
             category = category,

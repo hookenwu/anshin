@@ -57,7 +57,7 @@ import com.driezy.medlog.feature.medications.application.PlanExportCodec
 import com.driezy.medlog.ui.icons.MedLogIcon
 import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
-import com.driezy.medlog.ui.util.formatDose
+import com.driezy.medlog.ui.util.doseDisplayText
 import com.driezy.medlog.ui.util.labelRes
 import com.driezy.medlog.ui.utils.generateQrBitmap
 import kotlinx.coroutines.Dispatchers
@@ -105,7 +105,7 @@ internal fun MedicationQrDialog(
                     else -> "○"
                 }
                 val med = item.medication
-                val dose = "${med.doseQuantity.formatDose()}${med.doseUnit}"
+                val dose = med.doseDisplayText()
                 val period = TimePeriods.parse(med.timePeriod)
                     .mapNotNull { periodStrings[it.key] }
                     .joinToString("、")

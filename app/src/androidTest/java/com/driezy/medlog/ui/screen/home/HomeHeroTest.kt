@@ -107,7 +107,6 @@ class HomeHeroTest {
         medication = Medication(
             id = 42L,
             name = "Aspirin",
-            dose = 1.0,
             doseUnit = "tablet",
             doseQuantity = 1.0,
             reminderTimes = "08:00",

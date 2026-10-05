@@ -105,7 +105,6 @@ class SeedDemoDataUseCase @Inject constructor(
                     key = "bp_lisinopril",
                     medication = Medication(
                         name = "Seed ${profile.label} Lisinopril",
-                        dose = 10.0,
                         doseUnit = "mg",
                         category = "cardio",
                         form = "tablet",
@@ -126,7 +125,6 @@ class SeedDemoDataUseCase @Inject constructor(
                     key = "glucose_metformin",
                     medication = Medication(
                         name = "Seed ${profile.label} Metformin",
-                        dose = 500.0,
                         doseUnit = "mg",
                         category = "diabetes",
                         form = "tablet",
@@ -147,7 +145,6 @@ class SeedDemoDataUseCase @Inject constructor(
                     key = "vitamin_d",
                     medication = Medication(
                         name = "Seed ${profile.label} Vitamin D",
-                        dose = 1000.0,
                         doseUnit = "IU",
                         category = "supplement",
                         form = "capsule",
@@ -166,7 +163,6 @@ class SeedDemoDataUseCase @Inject constructor(
                     key = "antibiotic_amoxicillin",
                     medication = Medication(
                         name = "Seed ${profile.label} Amoxicillin",
-                        dose = 250.0,
                         doseUnit = "mg",
                         category = "antibiotic",
                         form = "capsule",
@@ -187,7 +183,6 @@ class SeedDemoDataUseCase @Inject constructor(
                     key = "inhaler_prn",
                     medication = Medication(
                         name = "Seed ${profile.label} Rescue Inhaler",
-                        dose = 90.0,
                         doseUnit = "mcg",
                         category = "respiratory",
                         form = "inhaler",

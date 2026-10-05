@@ -48,6 +48,7 @@ class MedLogDatabaseMigrationTest {
             MedLogDatabase.MIGRATION_17_18,
             MedLogDatabase.MIGRATION_18_19,
             MedLogDatabase.MIGRATION_19_20,
+            MedLogDatabase.MIGRATION_20_21,
         ).use { database ->
             database.query("SELECT name, intervalHours, refillReminderDays FROM medications WHERE id = 1").use {
                 check(it.moveToFirst())
@@ -96,6 +97,7 @@ class MedLogDatabaseMigrationTest {
             MedLogDatabase.MIGRATION_17_18,
             MedLogDatabase.MIGRATION_18_19,
             MedLogDatabase.MIGRATION_19_20,
+            MedLogDatabase.MIGRATION_20_21,
         ).use { database ->
             database.query(
                 "SELECT id, type, value, secondaryValue, timestamp, notes FROM health_records WHERE id = 7",
@@ -137,6 +139,7 @@ class MedLogDatabaseMigrationTest {
             MedLogDatabase.MIGRATION_17_18,
             MedLogDatabase.MIGRATION_18_19,
             MedLogDatabase.MIGRATION_19_20,
+            MedLogDatabase.MIGRATION_20_21,
         ).use { database ->
             database.query(
                 "SELECT COUNT(*), MAX(id) FROM medication_logs WHERE medicationId = 42 AND scheduledTimeMs = 1717000000000",
@@ -233,6 +236,7 @@ class MedLogDatabaseMigrationTest {
             MedLogDatabase.MIGRATION_17_18,
             MedLogDatabase.MIGRATION_18_19,
             MedLogDatabase.MIGRATION_19_20,
+            MedLogDatabase.MIGRATION_20_21,
         ).use { database ->
             // 验证 5 条记录均被完整保留，无任何数据丢失
             database.query("SELECT COUNT(*) FROM health_records").use { cursor ->
@@ -278,6 +282,96 @@ class MedLogDatabaseMigrationTest {
                 }
                 assertEquals(true, recipientScopedIndexIsUnique)
             }
+        }
+    }
+
+    /**
+     * v20 → v21：新增两列可空规格、删除死列 `dose`（表重建）。有数据时应零丢失：
+     * 旧行内容不变、`dose` 列确实消失、新列可空。
+     */
+    @Test
+    fun migrate20To21_rebuildsMedicationsWithoutLosingRowsAndDropsDeadDoseColumn() {
+        helper.createDatabase(TEST_DATABASE, 20).use { database ->
+            database.execSQL(
+                "INSERT INTO care_recipients (uuid, displayName, createdAtMs, updatedAtMs) " +
+                    "VALUES ('uuid-self', '本人', 1, 1)",
+            )
+            database.execSQL(
+                """
+                INSERT INTO medications (
+                    careRecipientId, name, dose, doseUnit, category, form, isHighPriority,
+                    frequencyType, frequencyInterval, frequencyDays, timePeriod, reminderTimes,
+                    reminderHour, reminderMinute, doseQuantity, isPRN, maxDailyDose, startDate,
+                    endDate, stock, refillThreshold, refillReminderDays, notes, isCustomDrug,
+                    isArchived, createdAt, isTcm, fullPath, intervalHours, planEffectiveFromMs
+                ) VALUES (
+                    1, '二甲双胍', 2.0, '片', '降糖', 'tablet', 0,
+                    'daily', 1, '1,2,3,4,5,6,7', 'exact', '08:00,20:00',
+                    8, 0, 2.0, 0, NULL, 1700000000000,
+                    NULL, 30.0, 5.0, 30, '饭前', 0,
+                    0, 1700000000000, 0, '', 0, 1700000000000
+                )
+                """.trimIndent(),
+            )
+            database.execSQL(
+                "INSERT INTO medication_logs (medicationId, scheduledTimeMs, status, notes, " +
+                    "actualDoseQuantity, createdAtMs, revisionType) " +
+                    "VALUES (1, 1700000000000, 'TAKEN', '', 2.0, 1700000000000, 'ORIGINAL')",
+            )
+        }
+
+        helper.runMigrationsAndValidate(
+            TEST_DATABASE,
+            DatabaseSchema.VERSION,
+            true,
+            MedLogDatabase.MIGRATION_20_21,
+        ).use { database ->
+            // 旧行完整保留，内容逐项不变
+            database.query(
+                "SELECT name, doseQuantity, doseUnit, stock, notes, planEffectiveFromMs " +
+                    "FROM medications WHERE id = 1",
+            ).use { cursor ->
+                check(cursor.moveToFirst())
+                assertEquals("二甲双胍", cursor.getString(0))
+                assertEquals(2.0, cursor.getDouble(1), 0.0)
+                assertEquals("片", cursor.getString(2))
+                assertEquals(30.0, cursor.getDouble(3), 0.0)
+                assertEquals("饭前", cursor.getString(4))
+                assertEquals(1_700_000_000_000L, cursor.getLong(5))
+            }
+            database.query("SELECT COUNT(*) FROM medication_logs").use { cursor ->
+                check(cursor.moveToFirst())
+                assertEquals(1, cursor.getInt(0))
+            }
+
+            // 死列 `dose` 消失；新列存在且可空
+            var doseColumnPresent = false
+            var strengthNullable = false
+            var strengthUnitNullable = false
+            var strengthSeen = false
+            var strengthUnitSeen = false
+            database.query("PRAGMA table_info('medications')").use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                val notNullIndex = cursor.getColumnIndexOrThrow("notnull")
+                while (cursor.moveToNext()) {
+                    when (cursor.getString(nameIndex)) {
+                        "dose" -> doseColumnPresent = true
+                        "doseStrength" -> {
+                            strengthSeen = true
+                            strengthNullable = cursor.getInt(notNullIndex) == 0
+                        }
+                        "doseStrengthUnit" -> {
+                            strengthUnitSeen = true
+                            strengthUnitNullable = cursor.getInt(notNullIndex) == 0
+                        }
+                    }
+                }
+            }
+            assertEquals("死列 dose 必须消失", false, doseColumnPresent)
+            assertEquals(true, strengthSeen)
+            assertEquals(true, strengthUnitSeen)
+            assertEquals("doseStrength 必须可空", true, strengthNullable)
+            assertEquals("doseStrengthUnit 必须可空", true, strengthUnitNullable)
         }
     }
 

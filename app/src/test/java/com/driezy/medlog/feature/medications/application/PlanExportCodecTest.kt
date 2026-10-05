@@ -3,9 +3,12 @@ package com.driezy.medlog.feature.medications.application
 import com.driezy.medlog.data.model.Medication
 import org.junit.Assert.*
 import org.junit.Test
+import java.io.ByteArrayOutputStream
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.Base64
+import java.util.zip.GZIPOutputStream
 
 /**
  * [PlanExportCodec] 单元测试。
@@ -26,16 +29,21 @@ class PlanExportCodecTest {
         reminderHour: Int = 8,
         reminderMinute: Int = 0,
         isArchived: Boolean = false,
+        doseQuantity: Double = 1.0,
+        doseStrength: Double? = null,
+        doseStrengthUnit: String? = null,
     ) = Medication(
         id = 0,
         name = name,
-        dose = 1.0,
         doseUnit = doseUnit,
         timePeriod = timePeriod,
         reminderTimes = reminderTimes,
         reminderHour = reminderHour,
         reminderMinute = reminderMinute,
         isArchived = isArchived,
+        doseQuantity = doseQuantity,
+        doseStrength = doseStrength,
+        doseStrengthUnit = doseStrengthUnit,
     )
 
     // ── encode / decode 基本往返 ───────────────────────────────────────────────
@@ -127,7 +135,6 @@ class PlanExportCodecTest {
         val fallback = Instant.parse("2026-08-02T04:00:00Z")
         val entry = MedExportEntry(
             name = "药品A",
-            dose = 1.0,
             doseUnit = "片",
             timePeriod = "exact",
             reminderTimes = "08:00",
@@ -201,5 +208,77 @@ class PlanExportCodecTest {
         val plan = PlanExportCodec.decode(encoded)!!
         assertEquals(1, plan.version)
         assertEquals("anshin", plan.app)
+    }
+
+    // ── 规格（单粒强度）与旧码兼容 ─────────────────────────────────────────────
+
+    @Test
+    fun `encode then decode round-trips dose strength and restores it`() {
+        val original = med(
+            name = "格华止",
+            doseUnit = "粒",
+            doseQuantity = 2.0,
+            doseStrength = 0.25,
+            doseStrengthUnit = "g",
+        )
+        val encoded = PlanExportCodec.encode(listOf(original), utc)!!
+        val entry = PlanExportCodec.decode(encoded)!!.meds.single()
+
+        assertEquals(0.25, entry.doseStrength!!, 0.0)
+        assertEquals("g", entry.doseStrengthUnit)
+
+        val restored = with(PlanExportCodec) { entry.toMedication(Instant.EPOCH, utc) }
+        assertEquals(0.25, restored.doseStrength!!, 0.0)
+        assertEquals("g", restored.doseStrengthUnit)
+        assertEquals(2.0, restored.doseQuantity, 0.0)
+    }
+
+    @Test
+    fun `medication without strength round-trips with null strength`() {
+        val encoded = PlanExportCodec.encode(listOf(med()), utc)!!
+        val entry = PlanExportCodec.decode(encoded)!!.meds.single()
+
+        assertNull(entry.doseStrength)
+        assertNull(entry.doseStrengthUnit)
+    }
+
+    @Test
+    fun `legacy payload carrying the removed d field still decodes`() {
+        // 旧版本同时写 d 与 dq（都等于 doseQuantity）；d 已被移除，解码端必须忽略未知键。
+        val legacyJson = """
+            {"v":1,"app":"anshin","meds":[
+              {"n":"旧药","d":2.0,"u":"片","tp":"exact","rt":"08:00","rh":8,"rm":0,"dq":2.0}
+            ]}
+        """.trimIndent()
+
+        val plan = PlanExportCodec.decode(legacyPayload(legacyJson))
+
+        assertNotNull(plan)
+        val entry = plan!!.meds.single()
+        assertEquals("旧药", entry.name)
+        assertEquals("片", entry.doseUnit)
+        assertEquals(2.0, entry.doseQuantity, 0.0)
+    }
+
+    @Test
+    fun `legacy payload without dq still decodes without crashing`() {
+        // 极旧码只带 d：d 被忽略，dq 回落默认值；关键是解码不失败、名称与单位保留。
+        val legacyJson = """
+            {"v":1,"app":"anshin","meds":[
+              {"n":"更旧药","d":3.0,"u":"粒","tp":"exact","rt":"08:00","rh":8,"rm":0}
+            ]}
+        """.trimIndent()
+
+        val plan = PlanExportCodec.decode(legacyPayload(legacyJson))
+
+        assertNotNull(plan)
+        assertEquals("更旧药", plan!!.meds.single().name)
+    }
+
+    /** 复刻旧版本的压缩管道：JSON → gzip → URL-safe Base64（无 padding）。 */
+    private fun legacyPayload(json: String): String {
+        val bos = ByteArrayOutputStream()
+        GZIPOutputStream(bos).use { it.write(json.toByteArray(Charsets.UTF_8)) }
+        return PlanExportCodec.SCHEME + Base64.getUrlEncoder().withoutPadding().encodeToString(bos.toByteArray())
     }
 }

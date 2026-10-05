@@ -9,6 +9,7 @@ import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.domain.model.MedicationId
 import com.driezy.medlog.feature.medications.application.ObserveMedicationAdherence
+import com.driezy.medlog.feature.medications.application.accumulatedDoseUsage
 import com.driezy.medlog.ui.BaseViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -29,6 +30,8 @@ data class DetailUiState(
     val partial30d: Int = 0,
     /** 近30天计划次数 */
     val total30d: Int = 0,
+    /** 累计用量文本（如 `0.5 g` / `4 粒`），无服药记录时为 null。 */
+    val accumulatedUsage: String? = null,
     /** 当前库存占初始设置的比率（0-1） */
     val isLoading: Boolean = true,
     val error: Boolean = false,
@@ -81,12 +84,16 @@ class MedicationDetailViewModel @Inject constructor(
             observeAdherence(time, id)
                 .catch { _uiState.update { it.copy(isLoading = false, error = true) } }
                 .collect { summary ->
+                    val medication = summary.medications.firstOrNull()
                     _uiState.update {
                         it.copy(
                             zone = summary.zone,
-                            medication = summary.medications.firstOrNull(),
+                            medication = medication,
                             logs = summary.logs.sortedByDescending { log ->
                                 log.scheduledTimeMs
+                            },
+                            accumulatedUsage = medication?.let { med ->
+                                accumulatedDoseUsage(med, summary.logs).formatted()
                             },
                             taken30d = summary.taken30d,
                             partial30d = summary.partial30d,

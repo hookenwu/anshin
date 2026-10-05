@@ -139,7 +139,7 @@
     <string name="home_prn_btn_take">Take</string>
     <string name="home_hero_next_label">Up next</string>
     <string name="home_hero_today_count">Today %1$d/%2$d</string>
-    <string name="home_hero_schedule_and_dose">Today %1$s · %2$s %3$s</string>
+    <string name="home_hero_schedule_and_dose">Today %1$s · %2$s</string>
     <string name="home_hero_take_named">Take %s</string>
     <string name="home_hero_skip_dose">Skip this dose</string>
     <string name="home_hero_today_progress">Today’s progress</string>
@@ -151,7 +151,7 @@
     <string name="home_hero_next_dose">Next dose</string>
     <string name="home_hero_take_next">Take next dose</string>
     <string name="home_hero_view_details">View details</string>
-    <string name="home_hero_name_and_dose">%1$s · %2$s %3$s</string>
+    <string name="home_hero_name_and_dose">%1$s · %2$s</string>
     <string name="home_hero_take_now">Take now</string>
     <string name="home_hero_plan_title">Today’s plan</string>
     <plurals name="home_hero_plan_count">
@@ -369,6 +369,8 @@
     <string name="detail_label_form">Form</string>
     <string name="detail_label_category">Category</string>
     <string name="detail_label_dose">Dose</string>
+    <string name="detail_label_dose_total">Total</string>
+    <string name="detail_accumulated_usage">Accumulated %1$s</string>
     <string name="detail_label_usage">Usage</string>
     <string name="detail_label_period">Time Period</string>
     <string name="detail_label_frequency">Frequency</string>

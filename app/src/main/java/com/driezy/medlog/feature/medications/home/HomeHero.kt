@@ -53,7 +53,7 @@ import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
 import com.driezy.medlog.ui.theme.emphasizedTypography
 import com.driezy.medlog.ui.util.displayName
-import com.driezy.medlog.ui.util.formatDose
+import com.driezy.medlog.ui.util.doseDisplayText
 
 private data class HomeHeroRenderTarget(val style: HomeHeroStyle, val presentation: HomeHeroPresentation)
 
@@ -424,8 +424,7 @@ private fun TimelineHomeHero(
                     text = stringResource(
                         R.string.home_hero_name_and_dose,
                         next.medication.displayName(),
-                        next.medication.doseQuantity.formatDose(),
-                        next.medication.doseUnit,
+                        next.medication.doseDisplayText(),
                     ),
                     style = MaterialTheme.emphasizedTypography.titleLarge,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -716,6 +715,5 @@ private fun HeroCountPill(handled: Int, total: Int) {
 private fun doseScheduleLabel(item: MedicationWithStatus): String = stringResource(
     R.string.home_hero_schedule_and_dose,
     item.displayTime(),
-    item.medication.doseQuantity.formatDose(),
-    item.medication.doseUnit,
+    item.medication.doseDisplayText(),
 )

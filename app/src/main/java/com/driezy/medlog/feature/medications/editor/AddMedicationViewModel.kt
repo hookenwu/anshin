@@ -20,6 +20,7 @@ import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.domain.model.MedicationId
 import com.driezy.medlog.domain.todayStart
 import com.driezy.medlog.ui.BaseViewModel
+import com.driezy.medlog.ui.util.formatDosePrecise
 import com.driezy.medlog.util.ReminderTimeUtils
 import com.driezy.medlog.voice.VoiceInputController
 import com.driezy.medlog.voice.VoiceInputEvent
@@ -58,6 +59,9 @@ data class AddMedicationUiState(
     // ── 剂量 ──────────────────────────────────────────────────────
     val doseQuantity: Double = 1.0, // 每次几片/粒/ml
     val doseUnit: String = "", // 由 ViewModel 初始化时从 R.string.default_dose_unit 填充
+    /** 每 1 个 [doseUnit] 的规格（可选）。留空 = 无规格，行为与改造前一致。 */
+    val doseStrength: String = "",
+    val doseStrengthUnit: String = "",
 
     // ── 按需 / PRN ────────────────────────────────────────────────
     val isPRN: Boolean = false,
@@ -119,6 +123,8 @@ sealed interface AddMedicationUiAction {
     data class HighPriorityChanged(val enabled: Boolean) : AddMedicationUiAction
     data class DoseQuantityChanged(val value: Double) : AddMedicationUiAction
     data class DoseUnitChanged(val value: String) : AddMedicationUiAction
+    data class DoseStrengthChanged(val value: String) : AddMedicationUiAction
+    data class DoseStrengthUnitChanged(val value: String) : AddMedicationUiAction
     data class PrnChanged(val enabled: Boolean) : AddMedicationUiAction
     data class MaxDailyDoseChanged(val value: String) : AddMedicationUiAction
     data class IntervalHoursChanged(val value: Int) : AddMedicationUiAction
@@ -258,6 +264,8 @@ class AddMedicationViewModel @Inject constructor(
             is AddMedicationUiAction.HighPriorityChanged -> onHighPriorityChange(action.enabled)
             is AddMedicationUiAction.DoseQuantityChanged -> onDoseQuantityChange(action.value)
             is AddMedicationUiAction.DoseUnitChanged -> onDoseUnitChange(action.value)
+            is AddMedicationUiAction.DoseStrengthChanged -> onDoseStrengthChange(action.value)
+            is AddMedicationUiAction.DoseStrengthUnitChanged -> onDoseStrengthUnitChange(action.value)
             is AddMedicationUiAction.PrnChanged -> onIsPRNChange(action.enabled)
             is AddMedicationUiAction.MaxDailyDoseChanged -> onMaxDailyDoseChange(action.value)
             is AddMedicationUiAction.IntervalHoursChanged -> onIntervalHoursChange(action.value)
@@ -328,6 +336,8 @@ class AddMedicationViewModel @Inject constructor(
                 isCustomDrug = med.isCustomDrug,
                 doseQuantity = med.doseQuantity,
                 doseUnit = med.doseUnit,
+                doseStrength = med.doseStrength?.let { it.formatDosePrecise() } ?: "",
+                doseStrengthUnit = med.doseStrengthUnit ?: "",
                 isPRN = med.isPRN,
                 maxDailyDose = med.maxDailyDose?.toString() ?: "",
                 timePeriods = TimePeriods.parse(med.timePeriod).toSet(),
@@ -393,6 +403,16 @@ class AddMedicationViewModel @Inject constructor(
 
     fun onDoseQuantityChange(v: Double) = update { copy(doseQuantity = v) }
     fun onDoseUnitChange(v: String) = update { copy(doseUnit = v) }
+
+    /** 规格数值：清空时同步清空单位，保证「要么都空、要么都非空」。 */
+    fun onDoseStrengthChange(v: String) = update {
+        copy(doseStrength = v, doseStrengthUnit = if (v.isBlank()) "" else doseStrengthUnit)
+    }
+
+    /** 规格单位：数值尚未填写时不接受选择，避免出现只有单位的半成品。 */
+    fun onDoseStrengthUnitChange(v: String) = update {
+        if (doseStrength.isBlank()) this else copy(doseStrengthUnit = v)
+    }
 
     fun onIsPRNChange(v: Boolean) = update { copy(isPRN = v) }
     fun onMaxDailyDoseChange(v: String) = update { copy(maxDailyDose = v) }
@@ -508,7 +528,6 @@ class AddMedicationViewModel @Inject constructor(
                     latest
                         ?: Medication(
                             name = state.name,
-                            dose = state.doseQuantity,
                             doseUnit = state.doseUnit,
                             createdAt = clock.millis(),
                         )
@@ -521,9 +540,12 @@ class AddMedicationViewModel @Inject constructor(
                     form = state.form,
                     isHighPriority = state.isHighPriority,
                     isCustomDrug = state.isCustomDrug,
-                    dose = state.doseQuantity, // 兼容旧字段
                     doseUnit = state.doseUnit,
                     doseQuantity = state.doseQuantity,
+                    doseStrength = state.doseStrength.trim().toDoubleOrNull(),
+                    doseStrengthUnit = state.doseStrength.trim().toDoubleOrNull()?.let {
+                        state.doseStrengthUnit.trim().ifBlank { null }
+                    },
                     isPRN = state.isPRN,
                     maxDailyDose = state.maxDailyDose.toDoubleOrNull(),
                     timePeriod = TimePeriods.encode(state.timePeriods),

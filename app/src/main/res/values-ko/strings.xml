@@ -129,7 +129,7 @@
     <string name="home_prn_btn_take">복용</string>
     <string name="home_hero_next_label">다음 할 일</string>
     <string name="home_hero_today_count">오늘 %1$d/%2$d</string>
-    <string name="home_hero_schedule_and_dose">오늘 %1$s · %2$s %3$s</string>
+    <string name="home_hero_schedule_and_dose">오늘 %1$s · %2$s</string>
     <string name="home_hero_take_named">%s 복용</string>
     <string name="home_hero_skip_dose">이번 복약 건너뛰기</string>
     <string name="home_hero_today_progress">오늘의 진행</string>
@@ -138,7 +138,7 @@
     <string name="home_hero_next_dose">다음 복약</string>
     <string name="home_hero_take_next">다음 복약하기</string>
     <string name="home_hero_view_details">상세 보기</string>
-    <string name="home_hero_name_and_dose">%1$s · %2$s %3$s</string>
+    <string name="home_hero_name_and_dose">%1$s · %2$s</string>
     <string name="home_hero_take_now">지금 복용</string>
     <string name="home_hero_plan_title">오늘 계획</string>
     <plurals name="home_hero_plan_count"><item quantity="other">%d회</item></plurals>
@@ -324,6 +324,8 @@
     <string name="detail_label_form">제형</string>
     <string name="detail_label_category">분류</string>
     <string name="detail_label_dose">용량</string>
+    <string name="detail_label_dose_total">합계</string>
+    <string name="detail_accumulated_usage">누적 사용량 %1$s</string>
     <string name="detail_label_usage">용법</string>
     <string name="detail_label_period">복약 시간대</string>
     <string name="detail_label_frequency">빈도</string>

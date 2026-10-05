@@ -15,3 +15,9 @@ internal fun doseUnitOptions(
     tube: String,
     patch: String,
 ): List<String> = listOf(tablet, capsule, "ml", "mg", "g", drop, bag, tube, patch)
+
+/**
+ * 规格（每粒强度）的计量单位候选项：仅计量类 mg/g/ml（见 docs/dose-strength.md §6）。
+ * 抽成纯函数以便 JVM 单测锁住档位。
+ */
+internal fun doseStrengthUnitOptions(): List<String> = listOf("mg", "g", "ml")

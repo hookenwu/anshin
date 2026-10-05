@@ -14,7 +14,7 @@ import org.junit.Test
 class RoomModelContractTest {
     @Test
     fun `database module publishes stable persistence entities without application resources`() {
-        val medication = Medication(name = "Test", dose = 1.0, doseUnit = "tablet")
+        val medication = Medication(name = "Test", doseUnit = "tablet")
         val log = MedicationLog(medicationId = 7L, scheduledTimeMs = 1_000L)
         val record = HealthRecord(type = "WEIGHT", value = 70.0, timestamp = 2_000L)
         val symptom = SymptomLog(symptoms = "头痛")
@@ -23,12 +23,12 @@ class RoomModelContractTest {
         assertEquals(7L, log.medicationId)
         assertEquals("WEIGHT", record.type)
         assertEquals("", symptom.medicationName)
-        assertEquals(19, DatabaseSchema.VERSION)
+        assertEquals(21, DatabaseSchema.VERSION)
     }
 
     @Test
     fun `recipient-scoped entities default to unassigned and recipients keep a stable uuid`() {
-        val medication = Medication(name = "Test", dose = 1.0, doseUnit = "tablet")
+        val medication = Medication(name = "Test", doseUnit = "tablet")
         assertEquals(0L, medication.careRecipientId)
         assertEquals(0L, HealthRecord(type = "WEIGHT", value = 70.0).careRecipientId)
         assertEquals(0L, SymptomLog().careRecipientId)

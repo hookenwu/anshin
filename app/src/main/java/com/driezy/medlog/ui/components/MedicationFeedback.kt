@@ -10,6 +10,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.driezy.medlog.R
 import com.driezy.medlog.ui.theme.MedLogSpacing
@@ -38,7 +39,14 @@ fun MedicationMessageCard(
 
 /** History and details display identical quantities, colours and empty-state semantics. */
 @Composable
-fun MedicationAdherenceCard(taken: Int, partial: Int, total: Int, modifier: Modifier = Modifier) {
+fun MedicationAdherenceCard(
+    taken: Int,
+    partial: Int,
+    total: Int,
+    modifier: Modifier = Modifier,
+    /** 累计用量文本（如 `0.5 g` / `4 粒`）；无数据时为 null，不占位。 */
+    accumulatedUsage: String? = null,
+) {
     val rate = if (total == 0) 0f else (taken.toFloat() / total).coerceIn(0f, 1f)
     val colors = MaterialTheme.colorScheme
     val tint = when {
@@ -83,6 +91,13 @@ fun MedicationAdherenceCard(taken: Int, partial: Int, total: Int, modifier: Modi
                         AdherenceCount(stringResource(R.string.adherence_due_count), total)
                     }
                 }
+            }
+            accumulatedUsage?.let { usage ->
+                Text(
+                    stringResource(R.string.detail_accumulated_usage, usage),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
             Text(
                 stringResource(R.string.adherence_explanation),

@@ -154,7 +154,6 @@ class CareRecipientIsolationTest {
     private fun medication(recipientId: Long, name: String) = Medication(
         careRecipientId = recipientId,
         name = name,
-        dose = 1.0,
         doseUnit = "片",
     )
 

@@ -264,7 +264,6 @@ class AndroidReminderReconcilerTest {
         id = id,
         careRecipientId = RECIPIENT_ID,
         name = "Medication $id",
-        dose = 1.0,
         doseUnit = "tablet",
         isArchived = archived,
         isPRN = asNeeded,

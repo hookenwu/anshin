@@ -129,7 +129,7 @@
     <string name="home_prn_btn_take">服用</string>
     <string name="home_hero_next_label">次にすること</string>
     <string name="home_hero_today_count">今日 %1$d/%2$d</string>
-    <string name="home_hero_schedule_and_dose">今日 %1$s · %2$s %3$s</string>
+    <string name="home_hero_schedule_and_dose">今日 %1$s · %2$s</string>
     <string name="home_hero_take_named">%sを服用</string>
     <string name="home_hero_skip_dose">今回をスキップ</string>
     <string name="home_hero_today_progress">今日の進捗</string>
@@ -138,7 +138,7 @@
     <string name="home_hero_next_dose">次の服薬</string>
     <string name="home_hero_take_next">次の分を服用</string>
     <string name="home_hero_view_details">詳細を見る</string>
-    <string name="home_hero_name_and_dose">%1$s · %2$s %3$s</string>
+    <string name="home_hero_name_and_dose">%1$s · %2$s</string>
     <string name="home_hero_take_now">今すぐ服用</string>
     <string name="home_hero_plan_title">今日の予定</string>
     <plurals name="home_hero_plan_count"><item quantity="other">%d回</item></plurals>
@@ -324,6 +324,8 @@
     <string name="detail_label_form">剤型</string>
     <string name="detail_label_category">カテゴリー</string>
     <string name="detail_label_dose">投与量</string>
+    <string name="detail_label_dose_total">合計</string>
+    <string name="detail_accumulated_usage">累計用量 %1$s</string>
     <string name="detail_label_usage">用法</string>
     <string name="detail_label_period">服薬時間帯</string>
     <string name="detail_label_frequency">頻度</string>

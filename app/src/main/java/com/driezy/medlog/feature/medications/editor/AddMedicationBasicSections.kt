@@ -7,11 +7,13 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.driezy.medlog.R
 import com.driezy.medlog.ui.icons.MedLogIcon
@@ -19,6 +21,7 @@ import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
 import com.driezy.medlog.ui.theme.emphasizedTypography
 import com.driezy.medlog.ui.util.formatDosePrecise
+import com.driezy.medlog.ui.util.formatStrengthPair
 import com.driezy.medlog.ui.util.icon
 import java.util.*
 
@@ -274,6 +277,48 @@ internal fun MedicationDoseSection(
                     label = { Text(unit) },
                 )
             }
+        }
+
+        // ── 每粒规格（可选）─────────────────────────────────────
+        Spacer(Modifier.height(MedLogSpacing.Medium))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        Spacer(Modifier.height(MedLogSpacing.Small))
+        Text(
+            stringResource(R.string.add_dose_strength_label),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = uiState.doseStrength,
+            onValueChange = { onAction(AddMedicationUiAction.DoseStrengthChanged(it)) },
+            label = { Text(stringResource(R.string.add_dose_strength_hint)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        )
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
+        ) {
+            doseStrengthUnitOptions().forEach { unit ->
+                FilterChip(
+                    selected = uiState.doseStrengthUnit == unit,
+                    onClick = { onAction(AddMedicationUiAction.DoseStrengthUnitChanged(unit)) },
+                    label = { Text(unit) },
+                    enabled = uiState.doseStrength.isNotBlank(),
+                )
+            }
+        }
+        val strength = uiState.doseStrength.trim().toDoubleOrNull()
+        if (strength != null && uiState.doseStrengthUnit.isNotBlank()) {
+            Text(
+                stringResource(
+                    R.string.add_dose_strength_preview,
+                    formatStrengthPair(strength, uiState.doseStrengthUnit, uiState.doseQuantity, uiState.doseUnit),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

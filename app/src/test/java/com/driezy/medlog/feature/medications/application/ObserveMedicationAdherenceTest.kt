@@ -20,7 +20,7 @@ class ObserveMedicationAdherenceTest {
         val clock = Clock.fixed(Instant.parse("2026-09-19T00:00:00Z"), zone)
         val time = MutableStateFlow(clock.instant().minusSeconds(60))
         val meds = FakeMedicationRepository()
-        meds.addMedication(Medication(name = "Medication", dose = 1.0, doseUnit = "tablet", startDate = clock.millis()))
+        meds.addMedication(Medication(name = "Medication", doseUnit = "tablet", startDate = clock.millis()))
         var queries = 0
         val delegate = FakeLogRepository()
         val logs = object : LogRepository by delegate {

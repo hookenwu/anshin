@@ -15,7 +15,7 @@ class FakeMedicationRepositoryTest {
 
     /** 最小化构造的测试用药 */
     private fun medication(name: String = "TestMed", archived: Boolean = false) =
-        Medication(name = name, dose = 1.0, doseUnit = "片", isArchived = archived)
+        Medication(name = name, doseUnit = "片", isArchived = archived)
 
     @Before
     fun setUp() {
@@ -126,7 +126,7 @@ class FakeMedicationRepositoryTest {
 
         val med = repo.getMedicationById(id)!!
         assertEquals("Lisinopril", med.name)
-        assertEquals(1.0, med.dose, 0.001)
+        assertEquals(1.0, med.doseQuantity, 0.001)
     }
 
     @Test

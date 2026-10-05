@@ -136,7 +136,7 @@
     <string name="home_prn_btn_take">服用</string>
     <string name="home_hero_next_label">接下来</string>
     <string name="home_hero_today_count">今日 %1$d/%2$d</string>
-    <string name="home_hero_schedule_and_dose">今天 %1$s · %2$s %3$s</string>
+    <string name="home_hero_schedule_and_dose">今天 %1$s · %2$s</string>
     <string name="home_hero_take_named">服用 %s</string>
     <string name="home_hero_skip_dose">跳过本次</string>
     <string name="home_hero_today_progress">今日进度</string>
@@ -147,7 +147,7 @@
     <string name="home_hero_next_dose">下一次服药</string>
     <string name="home_hero_take_next">服用下一剂</string>
     <string name="home_hero_view_details">查看详情</string>
-    <string name="home_hero_name_and_dose">%1$s · %2$s %3$s</string>
+    <string name="home_hero_name_and_dose">%1$s · %2$s</string>
     <string name="home_hero_take_now">现在服用</string>
     <string name="home_hero_plan_title">今日计划</string>
     <plurals name="home_hero_plan_count">
@@ -356,6 +356,8 @@
     <string name="detail_label_form">剂型</string>
     <string name="detail_label_category">分类</string>
     <string name="detail_label_dose">剂量</string>
+    <string name="detail_label_dose_total">合计</string>
+    <string name="detail_accumulated_usage">累计用量 %1$s</string>
     <string name="detail_label_usage">用法</string>
     <string name="detail_label_period">服药时段</string>
     <string name="detail_label_frequency">频率</string>

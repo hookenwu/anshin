@@ -57,7 +57,6 @@ class HomeTimelineContractTest {
         val medication = Medication(
             id = id,
             name = name,
-            dose = 1.0,
             doseUnit = "tablet",
             reminderTimes = "%02d:00".format(hour),
         )

@@ -56,7 +56,7 @@ class MedicationFlowUiTest {
     @Test fun ownMedicationsAndCatalogHaveSeparateActionsAndStoppedItemsRemainReachable() {
         var opened = 0L
         var catalog = 0
-        val active = Medication(id = 1, name = "Active medicine", dose = 1.0, doseUnit = "tablet")
+        val active = Medication(id = 1, name = "Active medicine", doseUnit = "tablet")
         val stopped = active.copy(id = 2, name = "Stopped medicine", isArchived = true)
         compose.setContent {
             MedLogTheme(dynamicColor = false) {
@@ -75,7 +75,7 @@ class MedicationFlowUiTest {
     }
 
     @Test fun disablingCatalogDoesNotHideMyMedicationManagement() {
-        val active = Medication(id = 1, name = "My medicine", dose = 1.0, doseUnit = "tablet")
+        val active = Medication(id = 1, name = "My medicine", doseUnit = "tablet")
         compose.setContent {
             MedLogTheme(dynamicColor = false) {
                 MyMedicationsContent(MyMedicationsState(listOf(active), loading = false), {}, {}, null, {}, {}, {})
@@ -87,7 +87,7 @@ class MedicationFlowUiTest {
 
     @Test fun timeSortChipsReflectSelectionAndDispatchTheChosenOrder() {
         val chosen = mutableListOf<MedicationSortOrder>()
-        val active = Medication(id = 1, name = "My medicine", dose = 1.0, doseUnit = "tablet")
+        val active = Medication(id = 1, name = "My medicine", doseUnit = "tablet")
         compose.setContent {
             MedLogTheme(dynamicColor = false) {
                 MyMedicationsContent(
