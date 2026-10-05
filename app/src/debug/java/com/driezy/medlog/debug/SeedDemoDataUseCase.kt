@@ -256,6 +256,8 @@ class SeedDemoDataUseCase @Inject constructor(
                 health(HealthType.HEART_RATE, 72.0, null, calendar.todayAtMs(7, 12), "$tag:health:heart"),
                 health(HealthType.TEMPERATURE, 36.6, null, calendar.todayAtMs(7, 18), "$tag:health:temp"),
                 health(HealthType.SPO2, 98.0, null, calendar.todayAtMs(7, 15), "$tag:health:spo2"),
+                health(HealthType.OXYGEN_FLOW, 2.0, null, calendar.todayAtMs(7, 16), "$tag:health:o2flow"),
+                health(HealthType.READING_COUNT, 20.0, null, calendar.todayAtMs(9, 30), "$tag:health:reading"),
             )
 
             return SeedDemoDataset(

@@ -780,6 +780,8 @@ private fun healthMetricIcon(type: HealthType): Int = when (type) {
     HealthType.HEART_RATE -> MedLogIcons.Favorite
     HealthType.TEMPERATURE -> MedLogIcons.Thermostat
     HealthType.SPO2 -> MedLogIcons.AirlineStops
+    HealthType.OXYGEN_FLOW -> MedLogIcons.Speed
+    HealthType.READING_COUNT -> MedLogIcons.Mic
 }
 
 /** 格式化体征值（血压 sys/dia，其他值+单位） */

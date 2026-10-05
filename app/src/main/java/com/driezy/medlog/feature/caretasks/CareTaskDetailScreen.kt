@@ -8,11 +8,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,13 +28,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.CareTaskCompletionMode
 import com.driezy.medlog.data.model.CareTaskLog
 import com.driezy.medlog.data.model.CareTaskLogStatus
+import com.driezy.medlog.data.model.HealthType
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
 import com.driezy.medlog.ui.components.RefreshWhileVisible
 import com.driezy.medlog.ui.components.ScreenChromeState
@@ -41,6 +48,7 @@ import com.driezy.medlog.ui.components.TopBarActionPriority
 import com.driezy.medlog.ui.icons.MedLogIcon
 import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
+import com.driezy.medlog.ui.util.labelRes
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -58,6 +66,8 @@ fun CareTaskDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val failedMessage = stringResource(R.string.care_task_load_failed)
+    val recordedMessage = stringResource(R.string.care_task_record_saved)
+    val duplicateMessage = stringResource(R.string.care_task_record_duplicate)
 
     RefreshWhileVisible { viewModel.onAction(CareTaskDetailUiAction.RefreshTime) }
     LaunchedEffect(careTaskId) { viewModel.onAction(CareTaskDetailUiAction.Load(careTaskId)) }
@@ -66,6 +76,8 @@ fun CareTaskDetailScreen(
             when (effect) {
                 CareTaskDetailUiEffect.NavigateBack -> onBack()
                 is CareTaskDetailUiEffect.Failed -> snackbarHostState.showSnackbar(failedMessage)
+                CareTaskDetailUiEffect.MeasurementRecorded -> snackbarHostState.showSnackbar(recordedMessage)
+                CareTaskDetailUiEffect.MeasurementDuplicate -> snackbarHostState.showSnackbar(duplicateMessage)
             }
         }
     }
@@ -88,6 +100,8 @@ internal fun CareTaskDetailContent(
     onAction: (CareTaskDetailUiAction) -> Unit,
 ) {
     var overlay by remember { mutableStateOf<ScreenOverlay?>(null) }
+    var recordFor by remember { mutableStateOf<CareTaskOccurrenceUi?>(null) }
+    var completeFor by remember { mutableStateOf<CareTaskOccurrenceUi?>(null) }
     val task = uiState.task
     val actionEdit = stringResource(R.string.care_task_edit_action)
     val deleteTitle = stringResource(R.string.care_task_delete_title)
@@ -152,6 +166,9 @@ internal fun CareTaskDetailContent(
                     occurrence = occurrence,
                     completionMode = task?.completionMode ?: CareTaskCompletionMode.TOGGLE,
                     onAction = onAction,
+                    onComplete = { onAction(CareTaskDetailUiAction.Complete(occurrence.scheduledTimeMs)) },
+                    onCompleteDetails = { completeFor = occurrence },
+                    onRecordMeasurement = { recordFor = occurrence },
                 )
             }
             item(key = "history_header") {
@@ -178,6 +195,40 @@ internal fun CareTaskDetailContent(
             if (resolved.id == "delete") onAction(CareTaskDetailUiAction.Delete)
         },
     )
+
+    recordFor?.let { occurrence ->
+        RecordMeasurementDialog(
+            onDismiss = { recordFor = null },
+            onConfirm = { type, value, secondary, notes ->
+                onAction(
+                    CareTaskDetailUiAction.RecordMeasurement(
+                        scheduledTimeMs = occurrence.scheduledTimeMs,
+                        type = type,
+                        value = value,
+                        secondaryValue = secondary,
+                        notes = notes,
+                    ),
+                )
+                recordFor = null
+            },
+        )
+    }
+
+    completeFor?.let { occurrence ->
+        CompleteTaskDialog(
+            onDismiss = { completeFor = null },
+            onConfirm = { posture, notes ->
+                onAction(
+                    CareTaskDetailUiAction.Complete(
+                        scheduledTimeMs = occurrence.scheduledTimeMs,
+                        postureNote = posture,
+                        notes = notes,
+                    ),
+                )
+                completeFor = null
+            },
+        )
+    }
 }
 
 @Composable
@@ -235,6 +286,9 @@ private fun OccurrenceCard(
     occurrence: CareTaskOccurrenceUi,
     completionMode: CareTaskCompletionMode,
     onAction: (CareTaskDetailUiAction) -> Unit,
+    onComplete: () -> Unit,
+    onCompleteDetails: () -> Unit,
+    onRecordMeasurement: () -> Unit,
 ) {
     val scheduledMs = occurrence.scheduledTimeMs
     Card(
@@ -264,7 +318,7 @@ private fun OccurrenceCard(
                         }
                     }
                     CareTaskLogStatus.IN_PROGRESS -> {
-                        TextButton(onClick = { onAction(CareTaskDetailUiAction.Complete(scheduledMs)) }) {
+                        TextButton(onClick = onComplete) {
                             Text(stringResource(R.string.care_task_action_complete))
                         }
                         TextButton(onClick = { onAction(CareTaskDetailUiAction.Skip(scheduledMs)) }) {
@@ -280,7 +334,7 @@ private fun OccurrenceCard(
                                 Text(stringResource(R.string.care_task_action_start))
                             }
                         }
-                        TextButton(onClick = { onAction(CareTaskDetailUiAction.Complete(scheduledMs)) }) {
+                        TextButton(onClick = onComplete) {
                             Text(stringResource(R.string.care_task_action_complete))
                         }
                         TextButton(onClick = { onAction(CareTaskDetailUiAction.Skip(scheduledMs)) }) {
@@ -288,6 +342,14 @@ private fun OccurrenceCard(
                         }
                     }
                 }
+            }
+            // T8：任何状态下都能补记过程数据（血氧 / 氧流量 / 次数）。
+            TextButton(onClick = onRecordMeasurement) {
+                Text(stringResource(R.string.care_task_record_measurement))
+            }
+            // 一键打卡是主路径；体位/备注是可选补充（已完成的记录同日可补记，见 T5 的编辑语义）。
+            TextButton(onClick = onCompleteDetails) {
+                Text(stringResource(R.string.care_task_action_posture_notes))
             }
         }
     }
@@ -335,4 +397,135 @@ private fun historyStatusText(log: CareTaskLog): String {
     }
     val minutes = log.actualDurationMinutes
     return if (minutes != null) "$status · ${stringResource(R.string.care_task_duration_value, minutes)}" else status
+}
+
+// ─── T8 过程数据入口 ────────────────────────────────────────────────────────
+
+/** 照护事项可记录的过程数据指标；体位是分类值，走 CareTaskLog，不在此列。 */
+private val careTaskMetricOptions = listOf(
+    HealthType.SPO2,
+    HealthType.OXYGEN_FLOW,
+    HealthType.READING_COUNT,
+)
+
+private const val TAG_MEASUREMENT_VALUE = "care_task_measurement_value"
+private const val TAG_MEASUREMENT_SECONDARY = "care_task_measurement_secondary"
+private const val TAG_MEASUREMENT_NOTES = "care_task_measurement_notes"
+private const val TAG_MEASUREMENT_SAVE = "care_task_measurement_save"
+private const val TAG_POSTURE_INPUT = "care_task_posture_input"
+private const val TAG_COMPLETION_NOTES = "care_task_completion_notes"
+private const val TAG_COMPLETE_CONFIRM = "care_task_complete_confirm"
+
+/** 「记录一次」：选指标 + 数值（+ 可选次值/备注），确认后交给 UseCase 写入健康表。 */
+@Composable
+private fun RecordMeasurementDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (type: HealthType, value: Double, secondaryValue: Double?, notes: String) -> Unit,
+) {
+    var selected by remember { mutableStateOf(careTaskMetricOptions.first()) }
+    var valueText by remember { mutableStateOf("") }
+    var secondaryText by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.care_task_record_measurement)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small)) {
+                Text(
+                    stringResource(R.string.care_task_record_metric_label),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small)) {
+                    careTaskMetricOptions.forEach { type ->
+                        // 先取 label 再放进 Chip：stringResource 不能在非 composable lambda 里调用。
+                        val label = stringResource(type.labelRes)
+                        FilterChip(
+                            selected = type == selected,
+                            onClick = { selected = type },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = valueText,
+                    onValueChange = { valueText = it },
+                    label = { Text(stringResource(R.string.care_task_record_value_label)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_MEASUREMENT_VALUE),
+                )
+                OutlinedTextField(
+                    value = secondaryText,
+                    onValueChange = { secondaryText = it },
+                    label = { Text(stringResource(R.string.care_task_record_secondary_label)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_MEASUREMENT_SECONDARY),
+                )
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text(stringResource(R.string.care_task_record_notes_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_MEASUREMENT_NOTES),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val value = valueText.trim().toDoubleOrNull() ?: return@TextButton
+                    onConfirm(selected, value, secondaryText.trim().toDoubleOrNull(), notes.trim())
+                },
+                modifier = Modifier.testTag(TAG_MEASUREMENT_SAVE),
+            ) {
+                Text(stringResource(R.string.care_task_record_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+}
+
+/** 完成本次：可选的体位（左/右/平卧，落 CareTaskLog）与本次备注。 */
+@Composable
+private fun CompleteTaskDialog(onDismiss: () -> Unit, onConfirm: (postureNote: String?, notes: String) -> Unit) {
+    var posture by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.care_task_complete_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small)) {
+                OutlinedTextField(
+                    value = posture,
+                    onValueChange = { posture = it },
+                    label = { Text(stringResource(R.string.care_task_posture_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_POSTURE_INPUT),
+                )
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text(stringResource(R.string.care_task_completion_notes_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_COMPLETION_NOTES),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(posture.trim().ifEmpty { null }, notes.trim()) },
+                modifier = Modifier.testTag(TAG_COMPLETE_CONFIRM),
+            ) {
+                Text(stringResource(R.string.care_task_action_complete))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }

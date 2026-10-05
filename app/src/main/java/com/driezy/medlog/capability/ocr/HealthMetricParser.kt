@@ -329,6 +329,8 @@ object HealthMetricParser {
         HealthType.WEIGHT -> value in 10.0..500.0
         HealthType.BODY_FAT -> value in 3.0..70.0
         HealthType.SPO2 -> value in 50.0..100.0
+        HealthType.OXYGEN_FLOW -> value in 0.0..20.0
+        HealthType.READING_COUNT -> value in 1.0..300.0
     }
 
     /**
@@ -357,6 +359,8 @@ object HealthMetricParser {
             HealthType.HEART_RATE -> 50.0
             HealthType.BLOOD_PRESSURE -> 40.0
             HealthType.WEIGHT -> 30.0
+            HealthType.OXYGEN_FLOW -> 20.0
+            HealthType.READING_COUNT -> 10.0
         }
         var score = baseScore
 
@@ -380,6 +384,8 @@ object HealthMetricParser {
             HealthType.HEART_RATE -> if (value in 50.0..120.0) 15.0 else 0.0
             HealthType.BLOOD_PRESSURE -> if (value in 80.0..180.0) 10.0 else 0.0
             HealthType.WEIGHT -> if (value in 30.0..150.0) 5.0 else 0.0
+            HealthType.OXYGEN_FLOW -> if (value in 0.0..10.0) 5.0 else 0.0
+            HealthType.READING_COUNT -> 0.0
         }
 
         return score

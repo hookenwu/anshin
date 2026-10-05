@@ -46,6 +46,8 @@ internal fun healthTypeIcon(type: HealthType) = when (type) {
     HealthType.HEART_RATE -> MedLogIcons.Favorite
     HealthType.TEMPERATURE -> MedLogIcons.Thermostat
     HealthType.SPO2 -> MedLogIcons.AirlineStops
+    HealthType.OXYGEN_FLOW -> MedLogIcons.Speed
+    HealthType.READING_COUNT -> MedLogIcons.Mic
 }
 
 internal fun HealthType.formatMetricValue(value: Double, secondaryValue: Double?): String = when (this) {
@@ -58,7 +60,9 @@ internal fun HealthType.formatMetricValue(value: Double, secondaryValue: Double?
     HealthType.BLOOD_GLUCOSE,
     HealthType.WEIGHT,
     HealthType.BODY_FAT,
+    HealthType.OXYGEN_FLOW,
     -> "%.1f".format(value)
+    HealthType.READING_COUNT -> "${value.toInt()}"
     else -> "${value.toInt()}"
 }
 

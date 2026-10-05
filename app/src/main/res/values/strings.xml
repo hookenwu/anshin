@@ -620,6 +620,8 @@
     <string name="health_type_label_heart_rate">心率</string>
     <string name="health_type_label_temperature">体温</string>
     <string name="health_type_label_spo2">血氧</string>
+    <string name="health_type_label_oxygen_flow">氧流量</string>
+    <string name="health_type_label_reading_count">读数次数</string>
     <string name="health_insights_section_title">智能建议</string>
     <string name="health_insights_section_subtitle">基于最近记录自动整理，不能替代医生建议</string>
     <string name="health_insights_pending_body">正在汇总最近记录，生成简短建议…</string>

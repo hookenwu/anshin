@@ -5,8 +5,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.driezy.medlog.R
@@ -15,6 +17,7 @@ import com.driezy.medlog.data.model.CareTaskCategory
 import com.driezy.medlog.data.model.CareTaskCompletionMode
 import com.driezy.medlog.data.model.CareTaskLogStatus
 import com.driezy.medlog.data.model.CareTaskScheduleKind
+import com.driezy.medlog.data.model.HealthType
 import com.driezy.medlog.ui.theme.MedLogTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -103,7 +106,7 @@ class CareTasksFlowTest {
     }
 
     @Test
-    fun detailDispatchesCompleteAndSkip() {
+    fun detailDispatchesSkip() {
         val actions = mutableListOf<CareTaskDetailUiAction>()
         composeRule.setContent {
             MedLogTheme(dynamicColor = false) {
@@ -121,14 +124,103 @@ class CareTasksFlowTest {
             }
         }
 
-        composeRule.onNodeWithText(text(R.string.care_task_action_complete)).performClick()
         composeRule.onNodeWithText(text(R.string.care_task_action_skip)).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(listOf(CareTaskDetailUiAction.Skip(scheduledMs)), actions)
+        }
+    }
+
+    @Test
+    fun detailCompleteDialogCarriesPostureAndNotes() {
+        val actions = mutableListOf<CareTaskDetailUiAction>()
+        composeRule.setContent {
+            MedLogTheme(dynamicColor = false) {
+                CareTaskDetailContent(
+                    uiState = CareTaskDetailUiState(
+                        task = task(),
+                        occurrences = listOf(CareTaskOccurrenceUi(scheduledMs, "08:00", null)),
+                        isLoading = false,
+                    ),
+                    snackbarHostState = remember { SnackbarHostState() },
+                    onBack = {},
+                    onEdit = {},
+                    onAction = actions::add,
+                )
+            }
+        }
+
+        // 体位/备注是可选入口；一键打卡见 detailCompleteIsOneTap
+        composeRule.onNodeWithText(text(R.string.care_task_action_posture_notes)).performClick()
+        composeRule.onNodeWithTag("care_task_posture_input").performTextInput("左侧")
+        composeRule.onNodeWithTag("care_task_complete_confirm").performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(
+                listOf(CareTaskDetailUiAction.Complete(scheduledMs, postureNote = "左侧", notes = "")),
+                actions,
+            )
+        }
+    }
+
+    @Test
+    fun detailCompleteIsOneTap() {
+        val actions = mutableListOf<CareTaskDetailUiAction>()
+        composeRule.setContent {
+            MedLogTheme(dynamicColor = false) {
+                CareTaskDetailContent(
+                    uiState = CareTaskDetailUiState(
+                        task = task(),
+                        occurrences = listOf(CareTaskOccurrenceUi(scheduledMs, "08:00", null)),
+                        isLoading = false,
+                    ),
+                    snackbarHostState = remember { SnackbarHostState() },
+                    onBack = {},
+                    onEdit = {},
+                    onAction = actions::add,
+                )
+            }
+        }
+
+        // 决策 2：打卡型就是「一键」——不弹窗、不要求体位/备注。
+        composeRule.onNodeWithText(text(R.string.care_task_action_complete)).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(listOf(CareTaskDetailUiAction.Complete(scheduledMs)), actions)
+        }
+    }
+
+    @Test
+    fun detailRecordMeasurementDispatchesAction() {
+        val actions = mutableListOf<CareTaskDetailUiAction>()
+        composeRule.setContent {
+            MedLogTheme(dynamicColor = false) {
+                CareTaskDetailContent(
+                    uiState = CareTaskDetailUiState(
+                        task = task(),
+                        occurrences = listOf(CareTaskOccurrenceUi(scheduledMs, "08:00", null)),
+                        isLoading = false,
+                    ),
+                    snackbarHostState = remember { SnackbarHostState() },
+                    onBack = {},
+                    onEdit = {},
+                    onAction = actions::add,
+                )
+            }
+        }
+
+        composeRule.onNodeWithText(text(R.string.care_task_record_measurement)).performClick()
+        composeRule.onNodeWithTag("care_task_measurement_value").performTextInput("97")
+        composeRule.onNodeWithTag("care_task_measurement_save").performClick()
 
         composeRule.runOnIdle {
             assertEquals(
                 listOf(
-                    CareTaskDetailUiAction.Complete(scheduledMs),
-                    CareTaskDetailUiAction.Skip(scheduledMs),
+                    CareTaskDetailUiAction.RecordMeasurement(
+                        scheduledTimeMs = scheduledMs,
+                        type = HealthType.SPO2,
+                        value = 97.0,
+                    ),
                 ),
                 actions,
             )

@@ -62,10 +62,22 @@
     <string name="care_task_detail_history_empty">暂无记录</string>
     <string name="care_task_detail_no_occurrences">今日无排期</string>
     <string name="care_task_action_complete">完成</string>
+    <string name="care_task_action_posture_notes">体位/备注</string>
     <string name="care_task_action_start">开始</string>
     <string name="care_task_action_skip">跳过</string>
     <string name="care_task_action_undo">撤销</string>
     <string name="care_task_edit_action">编辑</string>
     <string name="care_task_in_progress_elapsed">进行中 · %1$d 分钟</string>
     <string name="care_task_duration_value">时长 %1$d 分钟</string>
+    <string name="care_task_record_measurement">记录一次</string>
+    <string name="care_task_record_metric_label">指标</string>
+    <string name="care_task_record_value_label">数值</string>
+    <string name="care_task_record_secondary_label">次值（可选）</string>
+    <string name="care_task_record_notes_label">备注（可选）</string>
+    <string name="care_task_record_save">保存到健康记录</string>
+    <string name="care_task_record_saved">已保存到健康记录</string>
+    <string name="care_task_record_duplicate">本次已记录过该指标，未重复保存</string>
+    <string name="care_task_complete_dialog_title">完成本次</string>
+    <string name="care_task_posture_label">体位（可选）</string>
+    <string name="care_task_completion_notes_label">本次备注（可选）</string>
 </resources>

@@ -20,6 +20,19 @@ enum class HealthType(
     HEART_RATE("bpm", 60.0, 100.0, trendThreshold = 3.0),
     TEMPERATURE("°C", 36.1, 37.3, trendThreshold = 0.2),
     SPO2("%", 95.0, 100.0, trendThreshold = 1.0),
+
+    /**
+     * 氧流量（L/min）：家用氧疗没有统一的"临床正常值"，处方量因人而异，常见 1–5 L/min。
+     * 因此刻意取一个远宽于真实处方量的区间（0–15 L/min），只用于挡住明显离谱的输入；
+     * 趋势阈值取 1.0 L/min（家用流量计的最小调节档位）。
+     */
+    OXYGEN_FLOW("L/min", 0.0, 15.0, trendThreshold = 1.0),
+
+    /**
+     * 读数次数（次）：言语/认知训练里的"读了多少遍"，是计数量而非体征，同样没有正常范围。
+     * 区间刻意放宽到 0–1000 次；趋势阈值取 1 次（再多读一遍即视为变化）。
+     */
+    READING_COUNT("次", 0.0, 1000.0, trendThreshold = 1.0),
     ;
 
     fun isNormal(value: Double): Boolean = value in normalMin..normalMax
@@ -30,7 +43,8 @@ enum class HealthType(
         } else {
             "${value.toInt()} $unit"
         }
-        TEMPERATURE, BLOOD_GLUCOSE, WEIGHT, BODY_FAT -> "%.1f %s".format(value, unit)
+        TEMPERATURE, BLOOD_GLUCOSE, WEIGHT, BODY_FAT, OXYGEN_FLOW -> "%.1f %s".format(value, unit)
+        READING_COUNT -> "${value.toInt()} $unit"
         else -> "${value.toInt()} $unit"
     }
 

@@ -647,6 +647,8 @@
     <string name="health_type_label_heart_rate">Heart rate</string>
     <string name="health_type_label_temperature">Temperature</string>
     <string name="health_type_label_spo2">SpO2</string>
+    <string name="health_type_label_oxygen_flow">Oxygen flow</string>
+    <string name="health_type_label_reading_count">Reading count</string>
     <string name="health_insights_section_title">Smart insights</string>
     <string name="health_insights_section_subtitle">Automatically summarized from recent records; not medical advice</string>
     <string name="health_insights_pending_body">Summarizing recent records into short suggestions…</string>

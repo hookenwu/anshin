@@ -62,10 +62,22 @@
     <string name="care_task_detail_history_empty">기록이 없습니다</string>
     <string name="care_task_detail_no_occurrences">오늘 일정이 없습니다</string>
     <string name="care_task_action_complete">완료</string>
+    <string name="care_task_action_posture_notes">체위/메모</string>
     <string name="care_task_action_start">시작</string>
     <string name="care_task_action_skip">건너뛰기</string>
     <string name="care_task_action_undo">되돌리기</string>
     <string name="care_task_edit_action">편집</string>
     <string name="care_task_in_progress_elapsed">진행 중 · %1$d분</string>
     <string name="care_task_duration_value">%1$d분</string>
+    <string name="care_task_record_measurement">1회 기록</string>
+    <string name="care_task_record_metric_label">지표</string>
+    <string name="care_task_record_value_label">값</string>
+    <string name="care_task_record_secondary_label">보조값 (선택)</string>
+    <string name="care_task_record_notes_label">메모 (선택)</string>
+    <string name="care_task_record_save">건강 기록에 저장</string>
+    <string name="care_task_record_saved">건강 기록에 저장했습니다</string>
+    <string name="care_task_record_duplicate">이번 회차에 이미 기록되어 다시 저장하지 않았습니다</string>
+    <string name="care_task_complete_dialog_title">이번 회차 완료</string>
+    <string name="care_task_posture_label">체위 (선택)</string>
+    <string name="care_task_completion_notes_label">이번 메모 (선택)</string>
 </resources>

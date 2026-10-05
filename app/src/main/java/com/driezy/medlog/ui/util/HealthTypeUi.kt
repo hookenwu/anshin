@@ -16,6 +16,8 @@ val HealthType.labelRes: Int
         HealthType.HEART_RATE -> R.string.health_type_label_heart_rate
         HealthType.TEMPERATURE -> R.string.health_type_label_temperature
         HealthType.SPO2 -> R.string.health_type_label_spo2
+        HealthType.OXYGEN_FLOW -> R.string.health_type_label_oxygen_flow
+        HealthType.READING_COUNT -> R.string.health_type_label_reading_count
     }
 
 @get:StringRes

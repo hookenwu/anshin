@@ -9,6 +9,8 @@ import com.driezy.medlog.data.repository.CareTaskRepository
 import com.driezy.medlog.data.repository.UserPreferencesRepository
 import com.driezy.medlog.data.repository.reminderZone
 import com.driezy.medlog.feature.caretasks.application.CareTaskCompletionUseCase
+import com.driezy.medlog.feature.caretasks.application.CareTaskMeasurementResult
+import com.driezy.medlog.feature.caretasks.application.RecordCareTaskMeasurementUseCase
 import com.driezy.medlog.ui.BaseViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -36,6 +38,7 @@ import javax.inject.Inject
 class CareTaskDetailViewModel @Inject constructor(
     private val repository: CareTaskRepository,
     private val completion: CareTaskCompletionUseCase,
+    private val recordMeasurement: RecordCareTaskMeasurementUseCase,
     private val preferences: UserPreferencesRepository,
     private val clock: Clock,
 ) : BaseViewModel() {
@@ -53,7 +56,10 @@ class CareTaskDetailViewModel @Inject constructor(
     fun onAction(action: CareTaskDetailUiAction) {
         when (action) {
             is CareTaskDetailUiAction.Load -> load(action.taskId)
-            is CareTaskDetailUiAction.Complete -> command { complete(action.scheduledTimeMs) }
+            is CareTaskDetailUiAction.Complete -> {
+                command { complete(action.scheduledTimeMs, action.postureNote, action.notes) }
+            }
+            is CareTaskDetailUiAction.RecordMeasurement -> command { record(action) }
             is CareTaskDetailUiAction.Start -> command { start(action.scheduledTimeMs) }
             is CareTaskDetailUiAction.Skip -> command { skip(action.scheduledTimeMs) }
             is CareTaskDetailUiAction.Undo -> command { undo(action.scheduledTimeMs) }
@@ -85,10 +91,35 @@ class CareTaskDetailViewModel @Inject constructor(
         }
     }
 
-    private suspend fun complete(scheduledTimeMs: Long) {
+    private suspend fun complete(scheduledTimeMs: Long, postureNote: String?, notes: String) {
         val id = task?.id ?: return
-        completion.complete(id, scheduledTimeMs)
+        completion.complete(id, scheduledTimeMs, notes = notes, postureNote = postureNote)
         time.value = clock.instant()
+    }
+
+    /**
+     * T8：只经 [RecordCareTaskMeasurementUseCase] 写入；把结果转成 UI 可区分的事件
+     * （已写入 / 本次已记录过）。
+     */
+    private suspend fun record(action: CareTaskDetailUiAction.RecordMeasurement) {
+        val id = task?.id ?: return
+        when (
+            recordMeasurement.record(
+                taskId = id,
+                scheduledTimeMs = action.scheduledTimeMs,
+                type = action.type,
+                value = action.value,
+                secondaryValue = action.secondaryValue,
+                notes = action.notes,
+            )
+        ) {
+            is CareTaskMeasurementResult.Recorded -> {
+                effectChannel.send(CareTaskDetailUiEffect.MeasurementRecorded)
+            }
+            is CareTaskMeasurementResult.Duplicate -> {
+                effectChannel.send(CareTaskDetailUiEffect.MeasurementDuplicate)
+            }
+        }
     }
 
     private suspend fun start(scheduledTimeMs: Long) {

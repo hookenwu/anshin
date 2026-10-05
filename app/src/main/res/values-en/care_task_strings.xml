@@ -62,10 +62,22 @@
     <string name="care_task_detail_history_empty">No records yet</string>
     <string name="care_task_detail_no_occurrences">No occurrence today</string>
     <string name="care_task_action_complete">Complete</string>
+    <string name="care_task_action_posture_notes">Posture/notes</string>
     <string name="care_task_action_start">Start</string>
     <string name="care_task_action_skip">Skip</string>
     <string name="care_task_action_undo">Undo</string>
     <string name="care_task_edit_action">Edit</string>
     <string name="care_task_in_progress_elapsed">In progress · %1$d min</string>
     <string name="care_task_duration_value">%1$d min</string>
+    <string name="care_task_record_measurement">Record once</string>
+    <string name="care_task_record_metric_label">Metric</string>
+    <string name="care_task_record_value_label">Value</string>
+    <string name="care_task_record_secondary_label">Secondary (optional)</string>
+    <string name="care_task_record_notes_label">Notes (optional)</string>
+    <string name="care_task_record_save">Save to health records</string>
+    <string name="care_task_record_saved">Saved to health records</string>
+    <string name="care_task_record_duplicate">Already recorded for this time — not saved again</string>
+    <string name="care_task_complete_dialog_title">Complete this time</string>
+    <string name="care_task_posture_label">Position (optional)</string>
+    <string name="care_task_completion_notes_label">Notes for this time (optional)</string>
 </resources>

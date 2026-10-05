@@ -62,10 +62,22 @@
     <string name="care_task_detail_history_empty">記録はまだありません</string>
     <string name="care_task_detail_no_occurrences">今日の予定はありません</string>
     <string name="care_task_action_complete">完了</string>
+    <string name="care_task_action_posture_notes">体位・メモ</string>
     <string name="care_task_action_start">開始</string>
     <string name="care_task_action_skip">スキップ</string>
     <string name="care_task_action_undo">取り消し</string>
     <string name="care_task_edit_action">編集</string>
     <string name="care_task_in_progress_elapsed">進行中 · %1$d 分</string>
     <string name="care_task_duration_value">%1$d 分</string>
+    <string name="care_task_record_measurement">1回記録</string>
+    <string name="care_task_record_metric_label">指標</string>
+    <string name="care_task_record_value_label">値</string>
+    <string name="care_task_record_secondary_label">副値（任意）</string>
+    <string name="care_task_record_notes_label">メモ（任意）</string>
+    <string name="care_task_record_save">健康記録に保存</string>
+    <string name="care_task_record_saved">健康記録に保存しました</string>
+    <string name="care_task_record_duplicate">この回は記録済みのため保存しませんでした</string>
+    <string name="care_task_complete_dialog_title">今回を完了</string>
+    <string name="care_task_posture_label">体位（任意）</string>
+    <string name="care_task_completion_notes_label">今回のメモ（任意）</string>
 </resources>

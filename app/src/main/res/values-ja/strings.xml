@@ -585,6 +585,8 @@
     <string name="health_type_label_heart_rate">心拍数</string>
     <string name="health_type_label_temperature">体温</string>
     <string name="health_type_label_spo2">SpO2</string>
+    <string name="health_type_label_oxygen_flow">酸素流量</string>
+    <string name="health_type_label_reading_count">読み上げ回数</string>
     <string name="health_insights_section_title">スマート提案</string>
     <string name="health_insights_section_subtitle">最近の記録から自動整理します。医師の助言に代わるものではありません</string>
     <string name="health_insights_pending_body">最近の記録をまとめ、短い提案を生成しています…</string>
