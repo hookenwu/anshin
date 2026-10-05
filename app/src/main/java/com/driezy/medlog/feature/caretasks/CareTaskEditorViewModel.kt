@@ -7,12 +7,15 @@ import com.driezy.medlog.data.model.CareTaskScheduleKind
 import com.driezy.medlog.data.model.TimePeriod
 import com.driezy.medlog.data.model.TimePeriods
 import com.driezy.medlog.data.repository.CareTaskRepository
+import com.driezy.medlog.data.repository.UserPreferencesRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.ui.BaseViewModel
+import com.driezy.medlog.util.ReminderTimeUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import java.time.Clock
@@ -44,6 +47,7 @@ class CareTaskEditorViewModel @Inject constructor(
     private val repository: CareTaskRepository,
     private val clock: Clock,
     private val reconcileReminders: ReconcileRemindersUseCase,
+    private val preferences: UserPreferencesRepository,
 ) : BaseViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -114,7 +118,8 @@ class CareTaskEditorViewModel @Inject constructor(
         }) {
             _uiState.update { it.copy(isSaving = true, validationError = null) }
             try {
-                val entity = draft.toEntity(existing, clock.millis())
+                val entity = draft.withResolvedPeriodTimes(resolvePeriodTimes(draft.timePeriods))
+                    .toEntity(existing, clock.millis())
                 val taskId = if (existing == null) {
                     repository.addTask(entity)
                 } else {
@@ -128,6 +133,21 @@ class CareTaskEditorViewModel @Inject constructor(
                 _uiState.update { it.copy(isSaving = false) }
             }
         }
+    }
+
+    /**
+     * 选中时段 → 具体提醒钟点（按当前成员的作息解析，规则与用药编辑器一致）。
+     *
+     * 不换算就会踩坑：只选时段的事项在排期时会落到映射器的兜底钟点（默认 08:00），
+     * 静默排到错误的时刻——比报错更糟。真机 T9 就是这样发现该缺陷的。
+     */
+    private suspend fun resolvePeriodTimes(periods: Set<TimePeriod>): List<String> {
+        if (periods.isEmpty()) return emptyList()
+        val prefs = preferences.settingsFlow.first()
+        return periods
+            .map { period -> ReminderTimeUtils.timePeriodToReminderTime(period, prefs) }
+            .distinct()
+            .sorted()
     }
 
     private fun toggleArchive() {
@@ -196,6 +216,10 @@ internal fun CareTask.toDraft(): CareTaskDraft = CareTaskDraft(
     startDate = startDate,
     notes = notes,
 )
+
+/** 把时段换算出的钟点并入具体时间（显式时间与时段派生时间并存，均升序去重）。 */
+internal fun CareTaskDraft.withResolvedPeriodTimes(resolved: List<String>): CareTaskDraft =
+    if (resolved.isEmpty()) this else copy(reminderTimes = (reminderTimes + resolved).distinct().sorted())
 
 /**
  * 草稿 → 实体。身份字段（id / careRecipientId / createdAt / isArchived / endDate）来自已有记录；

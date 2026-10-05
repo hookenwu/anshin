@@ -8,6 +8,8 @@ import com.driezy.medlog.data.model.CareTaskScheduleKind
 import com.driezy.medlog.data.model.TimePeriod
 import com.driezy.medlog.data.model.TimePeriods
 import com.driezy.medlog.data.repository.FakeCareTaskRepository
+import com.driezy.medlog.data.repository.SettingsPreferences
+import com.driezy.medlog.data.repository.UserPreferencesRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.domain.ReminderReconciler
 import com.driezy.medlog.domain.ReminderReconciliationQueue
@@ -15,6 +17,7 @@ import com.driezy.medlog.testing.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -23,6 +26,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import java.time.Clock
@@ -45,7 +49,21 @@ class CareTaskEditorViewModelTest {
         mock<ReminderReconciliationQueue>(),
     )
 
-    private fun viewModel() = CareTaskEditorViewModel(repository, clock, reconcileReminders)
+    private val preferences = mock<UserPreferencesRepository> {
+        on { settingsFlow } doReturn flowOf(SettingsPreferences())
+    }
+
+    private fun viewModel() = CareTaskEditorViewModel(repository, clock, reconcileReminders, preferences)
+
+    @Test
+    fun `period-derived clock times are merged into the draft`() {
+        // 真机 T9 发现的缺陷：只选作息时段时 reminderTimes 为空，排期会落到映射器兜底 08:00
+        val draft = CareTask(careRecipientId = 1L, title = "吸氧", reminderTimes = "08:00").toDraft()
+
+        val merged = draft.withResolvedPeriodTimes(listOf("18:30"))
+
+        assertEquals(listOf("08:00", "18:30"), merged.reminderTimes)
+    }
 
     @Test
     fun `saving with a blank title is blocked with a title error`() = runTest {
