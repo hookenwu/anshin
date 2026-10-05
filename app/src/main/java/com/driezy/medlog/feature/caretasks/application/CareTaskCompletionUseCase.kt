@@ -1,10 +1,12 @@
 package com.driezy.medlog.feature.caretasks.application
 
+import com.driezy.medlog.capability.reminders.application.ReconcileRemindersUseCase
 import com.driezy.medlog.data.local.TransactionRunner
 import com.driezy.medlog.data.model.CareTaskLog
 import com.driezy.medlog.data.model.CareTaskLogStatus
 import com.driezy.medlog.data.model.LogRevisionType
 import com.driezy.medlog.data.repository.CareTaskRepository
+import com.driezy.medlog.domain.ReminderReconcileReason
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -25,12 +27,13 @@ import javax.inject.Inject
  * 每次记录按 `(careTaskId, scheduledTimeMs)` 唯一：同一时间槽反复操作只会就地更新同一行，
  * 不会产生第二行。读改写包在事务里。
  *
- * 尚未包含「完成后按间隔顺延下一次提醒」——那属于排期接入（照护事项的闹钟尚未开始排期），
- * 届时在此命令成功后追加一次重排即可，领域侧能力已在 T4 备好（[com.driezy.medlog.data.model.completionInterval]）。
+ * 命令成功后触发一次该事项的重排（[reproject]）：`INTERVAL` 型的下一次提醒由「上次完成 + 间隔」
+ * 推出（领域侧能力见 [com.driezy.medlog.data.model.completionInterval]），因此必须在此续排。
  */
 class CareTaskCompletionUseCase @Inject constructor(
     private val transactionRunner: TransactionRunner,
     private val careTasks: CareTaskRepository,
+    private val reconcileReminders: ReconcileRemindersUseCase,
     private val clock: Clock,
 ) {
 
@@ -44,17 +47,21 @@ class CareTaskCompletionUseCase @Inject constructor(
         scheduledTimeMs: Long,
         notes: String = "",
         postureNote: String? = null,
-    ): CareTaskLog = mutate(taskId, scheduledTimeMs) { existing, nowMs ->
-        val startMs = existing?.actualStartMs
-        log(taskId, scheduledTimeMs, existing).copy(
-            status = CareTaskLogStatus.DONE,
-            actualStartMs = startMs,
-            actualEndMs = nowMs,
-            actualDurationMinutes = durationMinutes(startMs, nowMs),
-            notes = notes.ifEmpty { existing?.notes.orEmpty() },
-            postureNote = postureNote ?: existing?.postureNote,
-            updatedAtMs = nowMs,
-        )
+    ): CareTaskLog {
+        val saved = mutate(taskId, scheduledTimeMs) { existing, nowMs ->
+            val startMs = existing?.actualStartMs
+            log(taskId, scheduledTimeMs, existing).copy(
+                status = CareTaskLogStatus.DONE,
+                actualStartMs = startMs,
+                actualEndMs = nowMs,
+                actualDurationMinutes = durationMinutes(startMs, nowMs),
+                notes = notes.ifEmpty { existing?.notes.orEmpty() },
+                postureNote = postureNote ?: existing?.postureNote,
+                updatedAtMs = nowMs,
+            )
+        }
+        reproject(taskId)
+        return saved
     }
 
     /** 时长型：开始。重复开始不覆盖最初的开始时刻（避免把已用时长算短）。 */
@@ -76,8 +83,8 @@ class CareTaskCompletionUseCase @Inject constructor(
      * 已开始过的（时长型）保留开始时刻——"开始过但没做完"是事实；
      * 结束时刻与时长一律清空，不编造完成。
      */
-    suspend fun skip(taskId: Long, scheduledTimeMs: Long, notes: String = ""): CareTaskLog =
-        mutate(taskId, scheduledTimeMs) { existing, nowMs ->
+    suspend fun skip(taskId: Long, scheduledTimeMs: Long, notes: String = ""): CareTaskLog {
+        val saved = mutate(taskId, scheduledTimeMs) { existing, nowMs ->
             log(taskId, scheduledTimeMs, existing).copy(
                 status = CareTaskLogStatus.SKIPPED,
                 actualStartMs = existing?.actualStartMs,
@@ -87,17 +94,31 @@ class CareTaskCompletionUseCase @Inject constructor(
                 updatedAtMs = nowMs,
             )
         }
+        reproject(taskId)
+        return saved
+    }
 
     /** 撤销：物理删除该次记录（与用药的撤销语义一致）。 */
     suspend fun undo(taskId: Long, scheduledTimeMs: Long) {
         transactionRunner.withTransaction {
             careTasks.deleteLogForScheduledTime(taskId, scheduledTimeMs)
         }
+        reproject(taskId)
     }
 
     /** 该时间槽当前的记录；`IN_PROGRESS` 即"进行中"。 */
     suspend fun logFor(taskId: Long, scheduledTimeMs: Long): CareTaskLog? =
         careTasks.getLogForScheduledTime(taskId, scheduledTimeMs)
+
+    /**
+     * 命令成功后重排该事项一次（T6b 补齐 T5 刻意留下的缺口）。
+     *
+     * 完成/跳过/撤销都会改变该事项的日志锚点，`INTERVAL` 型的下一次提醒必须据此顺延；
+     * 失败不吞掉命令（[ReconcileRemindersUseCase] 内部已 runCatching 并留了持久重试）。
+     */
+    private suspend fun reproject(taskId: Long) {
+        reconcileReminders.careTask(taskId, ReminderReconcileReason.DOSE_RECORDED)
+    }
 
     private suspend fun mutate(
         taskId: Long,

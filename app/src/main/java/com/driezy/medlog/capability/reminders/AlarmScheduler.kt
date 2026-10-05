@@ -6,12 +6,14 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.content.edit
+import com.driezy.medlog.data.model.CareTask
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.toDomainSchedule
 import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import com.driezy.medlog.data.repository.UserPreferencesRepository
 import com.driezy.medlog.data.repository.reminderZone
 import com.driezy.medlog.di.ApplicationScope
+import com.driezy.medlog.domain.ReminderOccurrence
 import com.driezy.medlog.domain.ReminderPlanner
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -128,6 +130,47 @@ class AlarmScheduler @Inject constructor(
     }
 
     /**
+     * 根据照护事项配置为每个时间槽调度下一次提醒闹钟（与用药 [scheduleAllReminders] 同构）。
+     *
+     * 同一套 [ReminderPlanner]：`AS_NEEDED` 不产生时刻；`INTERVAL`（完成后计时）以
+     * [lastDoneMs]（该事项最后一条 `DONE` 的实际完成时刻）为锚点算下一次；
+     * 固定时刻沿用 [handledSlots] 跳过已处理的时间槽。
+     *
+     * requestCode 走 [ReminderTarget] 的照护事项编号空间（`CARE_TASK_CODE_BASE + id*100 + slot`），
+     * 与用药不撞码。**提前预告与漏服再提醒本期只服务用药**，照护事项只排正点提醒。
+     */
+    fun scheduleCareTaskReminders(task: CareTask, lastDoneMs: Long? = null, handledSlots: Set<Instant> = emptySet()) {
+        careTaskReminderOccurrences(
+            planner = reminderPlanner,
+            task = task,
+            lastDoneMs = lastDoneMs,
+            handledSlots = handledSlots,
+            zoneId = zoneFor(task.careRecipientId),
+        ).forEach { occurrence ->
+            scheduleCareTaskAlarmSlot(task, occurrence.slotIndex, occurrence.scheduledAt.toEpochMilli())
+        }
+    }
+
+    /** 调度指定照护事项时间槽的单个闹钟。intent extras 与接收器的照护事项通路对齐。 */
+    private fun scheduleCareTaskAlarmSlot(task: CareTask, timeIndex: Int, triggerAtMs: Long) {
+        val target = careTaskTarget(task)
+        registerProjection(target)
+        val intent = PendingIntent.getBroadcast(
+            context,
+            target.slotRequestCode(timeIndex),
+            Intent(context, MedLogAlarmReceiver::class.java).apply {
+                putExtra(EXTRA_TARGET_TYPE, ReminderTargetType.CARE_TASK.key)
+                putExtra(EXTRA_TARGET_ID, task.id)
+                putExtra(EXTRA_RECIPIENT_NAME, nameFor(task.careRecipientId))
+                putExtra(EXTRA_TIME_INDEX, timeIndex)
+                putExtra(EXTRA_SCHEDULED_MS, triggerAtMs)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        scheduleExact(intent, triggerAtMs)
+    }
+
+    /**
      * 调度指定时间槽的单个闹钟。
      * 供 [scheduleAllReminders] 内部调用，以及 [com.driezy.medlog.capability.reminders.MedLogAlarmReceiver]
      * 在每次触发后调度下一次时使用。
@@ -211,6 +254,19 @@ class AlarmScheduler @Inject constructor(
     }
 
     /**
+     * 取消某照护事项的所有时间槽闹钟（不影响通知 UI）。
+     * 与用药版不同：提前预告与漏服再提醒本期不服务照护事项，因此只清正点槽位。
+     * 通知的取消由 [NotificationHelper.cancelCareTaskNotifications] 负责。
+     */
+    fun cancelCareTaskAlarms(taskId: Long, recipientId: Long) {
+        val target = ReminderTarget(recipientId, ReminderTargetType.CARE_TASK, taskId)
+        for (i in 0 until MAX_REMINDER_SLOTS) {
+            cancelPendingAlarm(target.slotRequestCode(i))
+        }
+        unregisterProjection(target)
+    }
+
+    /**
      * 只取消该成员已登记的闹钟，返回被取消的目标（调用方据此按类型清理通知）。
      *
      * 阶段 1 的关键改动：重排一位成员不再清掉其他成员的闹钟。
@@ -259,14 +315,17 @@ class AlarmScheduler @Inject constructor(
     private fun cancelTargetAlarms(target: ReminderTarget) {
         when (target.type) {
             ReminderTargetType.MEDICATION -> cancelAllAlarms(target.id, target.recipientId)
-            // 照护事项的排期/取消在 T3 接入提醒通道时补齐
-            ReminderTargetType.CARE_TASK -> Unit
+            ReminderTargetType.CARE_TASK -> cancelCareTaskAlarms(target.id, target.recipientId)
         }
     }
 
     /** 药品的提醒目标。 */
     private fun medicationTarget(medication: Medication) =
         ReminderTarget(medication.careRecipientId, ReminderTargetType.MEDICATION, medication.id)
+
+    /** 照护事项的提醒目标。 */
+    private fun careTaskTarget(task: CareTask) =
+        ReminderTarget(task.careRecipientId, ReminderTargetType.CARE_TASK, task.id)
 
     /**
      * 取消某药品的所有提前预告闹钟。
@@ -325,10 +384,17 @@ class AlarmScheduler @Inject constructor(
     @Synchronized
     private fun unregisterProjection(target: ReminderTarget) {
         val ids = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty().toMutableSet()
-        // 三种写法都清掉：本版三段式、阶段 1 两段式、阶段 0 裸 id
-        val removed = ids.remove(target.serialize()) or
-            ids.remove("${target.recipientId}:${target.id}") or
-            ids.remove(target.id.toString())
+        // 本版三段式登记项（含照护事项的 `<recipientId>:task:<id>`）对所有目标都清掉；
+        // 阶段 1 两段式与阶段 0 裸 id 只可能是用药，只对 MEDICATION 目标清理——
+        // 否则取消同号的照护事项会误删该成员名下的药物旧登记项。
+        // MEDICATION 分支与改造前逐字一致（含短路顺序）。
+        val removed = if (target.type == ReminderTargetType.MEDICATION) {
+            ids.remove(target.serialize()) or
+                ids.remove("${target.recipientId}:${target.id}") or
+                ids.remove(target.id.toString())
+        } else {
+            ids.remove(target.serialize())
+        }
         if (removed) {
             projectionRegistry.edit { putStringSet(REGISTERED_MEDICATION_IDS, ids) }
         }
@@ -418,3 +484,25 @@ class AlarmScheduler @Inject constructor(
         }
     }
 }
+
+/**
+ * 照护事项下一批提醒时刻（纯计算，便于 JVM 单测）。
+ *
+ * 与用药 [AlarmScheduler.scheduleAllReminders] 调用同一个 [ReminderPlanner]，参数一一对应：
+ * `lastTakenAt` = 该事项最后一条 `DONE` 的 `actualEndMs`（照护事项的完成锚点），
+ * `startAt` = 事项起始时刻，`handled` = 已有记录的时间槽。
+ */
+internal fun careTaskReminderOccurrences(
+    planner: ReminderPlanner,
+    task: CareTask,
+    lastDoneMs: Long?,
+    handledSlots: Set<Instant>,
+    zoneId: ZoneId,
+): List<ReminderOccurrence> = planner.nextOccurrences(
+    schedule = task.toDomainSchedule(),
+    endAt = task.endDate?.let(Instant::ofEpochMilli),
+    zoneId = zoneId,
+    lastTakenAt = lastDoneMs?.let(Instant::ofEpochMilli),
+    startAt = Instant.ofEpochMilli(task.startDate),
+    handled = handledSlots,
+)

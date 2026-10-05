@@ -2,23 +2,35 @@ package com.driezy.medlog.capability.reminders
 
 import com.driezy.medlog.capability.widgets.FakeWidgetRefresher
 import com.driezy.medlog.data.model.CareRecipient
+import com.driezy.medlog.data.model.CareTask
+import com.driezy.medlog.data.model.CareTaskCategory
+import com.driezy.medlog.data.model.CareTaskLog
+import com.driezy.medlog.data.model.CareTaskLogStatus
+import com.driezy.medlog.data.model.CareTaskScheduleKind
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.repository.CareRecipientRepository
+import com.driezy.medlog.data.repository.CareTaskRepository
 import com.driezy.medlog.data.repository.FakeLogRepository
 import com.driezy.medlog.data.repository.FakeMedicationRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.domain.model.MedicationId
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import java.time.Instant
 
 class AndroidReminderReconcilerTest {
     private lateinit var medications: FakeMedicationRepository
+    private lateinit var careTasks: CareTaskRepository
     private lateinit var careRecipients: CareRecipientRepository
     private lateinit var alarms: AlarmScheduler
     private lateinit var notifications: NotificationHelper
@@ -28,12 +40,18 @@ class AndroidReminderReconcilerTest {
     @Before
     fun setUp() {
         medications = FakeMedicationRepository()
+        careTasks = mock()
         careRecipients = mock()
         alarms = mock()
         notifications = mock()
         widgets = FakeWidgetRefresher()
+        // 默认没有照护事项：既有用药用例的语义与改造前逐字一致
+        runBlocking {
+            whenever(careTasks.getAllTasksFor(any())).thenReturn(emptyList())
+        }
         reconciler = AndroidReminderReconciler(
             medications,
+            careTasks,
             careRecipients,
             FakeLogRepository(),
             alarms,
@@ -104,6 +122,21 @@ class AndroidReminderReconcilerTest {
     }
 
     @Test
+    fun `a medication-only reconcile never touches the care-task pipeline`() = runTest {
+        val active = medication(id = 1L)
+        medications.addMedication(active)
+        whenever(careRecipients.getRecipients()).thenReturn(
+            listOf(CareRecipient(id = RECIPIENT_ID, uuid = "uuid-7", displayName = "妈妈")),
+        )
+
+        reconciler.reconcileAll(ReminderReconcileReason.MEDICATION_CHANGED)
+
+        verify(alarms).scheduleAllReminders(active, null)
+        verify(alarms, never()).scheduleCareTaskReminders(any(), any(), any())
+        verify(notifications, never()).cancelCareTaskNotifications(any())
+    }
+
+    @Test
     fun `full reconciliation removes projections for ids no longer in database`() = runTest {
         whenever(alarms.cancelUnattributedAlarms()).thenReturn(
             listOf(ReminderTarget(0L, ReminderTargetType.MEDICATION, 91L)),
@@ -116,6 +149,117 @@ class AndroidReminderReconcilerTest {
         assertEquals(1, widgets.refreshCallCount)
     }
 
+    @Test
+    fun `full reconciliation schedules care tasks for every member`() = runTest {
+        val momTask = careTask(id = 21L, recipientId = RECIPIENT_ID, title = "吸氧")
+        val dadTask = careTask(
+            id = 22L,
+            recipientId = OTHER_RECIPIENT_ID,
+            title = "翻身",
+            scheduleKind = CareTaskScheduleKind.INTERVAL,
+            intervalHours = 2,
+        )
+        whenever(careRecipients.getRecipients()).thenReturn(
+            listOf(
+                CareRecipient(id = RECIPIENT_ID, uuid = "uuid-7", displayName = "妈妈"),
+                CareRecipient(id = OTHER_RECIPIENT_ID, uuid = "uuid-8", displayName = "爸爸"),
+            ),
+        )
+        whenever(careTasks.getAllTasksFor(RECIPIENT_ID)).thenReturn(listOf(momTask))
+        whenever(careTasks.getAllTasksFor(OTHER_RECIPIENT_ID)).thenReturn(listOf(dadTask))
+        whenever(careTasks.getLogsForTask(any())).thenReturn(flowOf(emptyList()))
+
+        reconciler.reconcileAll(ReminderReconcileReason.SYSTEM_EVENT)
+
+        verify(careTasks).getAllTasksFor(RECIPIENT_ID)
+        verify(careTasks).getAllTasksFor(OTHER_RECIPIENT_ID)
+        verify(alarms).scheduleCareTaskReminders(momTask, null, emptySet())
+        verify(alarms).scheduleCareTaskReminders(dadTask, null, emptySet())
+    }
+
+    @Test
+    fun `archived and as-needed care tasks are cleaned up without scheduling`() = runTest {
+        val archived = careTask(id = 31L, recipientId = RECIPIENT_ID, title = "旧事项", archived = true)
+        val asNeeded = careTask(
+            id = 32L,
+            recipientId = RECIPIENT_ID,
+            title = "按需",
+            scheduleKind = CareTaskScheduleKind.AS_NEEDED,
+        )
+        whenever(careRecipients.getRecipients()).thenReturn(
+            listOf(CareRecipient(id = RECIPIENT_ID, uuid = "uuid-7", displayName = "妈妈")),
+        )
+        whenever(careTasks.getAllTasksFor(RECIPIENT_ID)).thenReturn(listOf(archived, asNeeded))
+
+        reconciler.reconcileAll(ReminderReconcileReason.SYSTEM_EVENT)
+
+        verify(notifications).cancelCareTaskNotifications(31L)
+        verify(notifications).cancelCareTaskNotifications(32L)
+        verify(alarms, never()).scheduleCareTaskReminders(eq(archived), any(), any())
+        verify(alarms, never()).scheduleCareTaskReminders(eq(asNeeded), any(), any())
+    }
+
+    @Test
+    fun `interval care task is anchored on the last DONE log actual end`() = runTest {
+        val task = careTask(
+            id = 41L,
+            recipientId = RECIPIENT_ID,
+            title = "翻身",
+            scheduleKind = CareTaskScheduleKind.INTERVAL,
+            intervalHours = 2,
+        )
+        val done = CareTaskLog(
+            id = 1L,
+            careTaskId = 41L,
+            scheduledTimeMs = 1_000L,
+            status = CareTaskLogStatus.DONE,
+            actualEndMs = 5_000L,
+        )
+        val skipped = CareTaskLog(
+            id = 2L,
+            careTaskId = 41L,
+            scheduledTimeMs = 2_000L,
+            status = CareTaskLogStatus.SKIPPED,
+        )
+        whenever(careRecipients.getRecipients()).thenReturn(
+            listOf(CareRecipient(id = RECIPIENT_ID, uuid = "uuid-7", displayName = "妈妈")),
+        )
+        whenever(careTasks.getAllTasksFor(RECIPIENT_ID)).thenReturn(listOf(task))
+        whenever(careTasks.getLogsForTask(41L)).thenReturn(flowOf(listOf(done, skipped)))
+
+        reconciler.reconcileAll(ReminderReconcileReason.SYSTEM_EVENT)
+
+        verify(alarms).scheduleCareTaskReminders(
+            task,
+            5_000L,
+            setOf(Instant.ofEpochMilli(1_000L), Instant.ofEpochMilli(2_000L)),
+        )
+    }
+
+    @Test
+    fun `single care task reconciliation cancels then rebuilds the projection`() = runTest {
+        val task = careTask(id = 51L, recipientId = RECIPIENT_ID, title = "读数")
+        whenever(careTasks.getTaskById(51L)).thenReturn(task)
+        whenever(careTasks.getLogsForTask(51L)).thenReturn(flowOf(emptyList()))
+
+        reconciler.reconcileCareTask(51L, ReminderReconcileReason.MEDICATION_CHANGED)
+
+        verify(alarms).cancelCareTaskAlarms(51L, RECIPIENT_ID)
+        verify(notifications).cancelCareTaskNotifications(51L)
+        verify(alarms).scheduleCareTaskReminders(task, null, emptySet())
+    }
+
+    @Test
+    fun `reconciling a deleted care task only cleans up`() = runTest {
+        whenever(careTasks.getTaskById(61L)).thenReturn(null)
+
+        reconciler.reconcileCareTask(61L, ReminderReconcileReason.MEDICATION_CHANGED)
+
+        verify(alarms).cancelCareTaskAlarms(61L, 0L)
+        verify(notifications).cancelCareTaskNotifications(61L)
+        verify(alarms, never()).scheduleCareTaskReminders(any(), any(), any())
+    }
+
     private fun medication(id: Long, archived: Boolean = false, asNeeded: Boolean = false) = Medication(
         id = id,
         careRecipientId = RECIPIENT_ID,
@@ -126,7 +270,27 @@ class AndroidReminderReconcilerTest {
         isPRN = asNeeded,
     )
 
+    private fun careTask(
+        id: Long,
+        recipientId: Long,
+        title: String,
+        archived: Boolean = false,
+        scheduleKind: CareTaskScheduleKind = CareTaskScheduleKind.FIXED_TIMES,
+        intervalHours: Int = 0,
+    ) = CareTask(
+        id = id,
+        careRecipientId = recipientId,
+        title = title,
+        category = CareTaskCategory.OTHER,
+        scheduleKind = scheduleKind,
+        reminderTimes = if (scheduleKind == CareTaskScheduleKind.FIXED_TIMES) "08:00" else "",
+        intervalHours = intervalHours,
+        isArchived = archived,
+        startDate = 0L,
+    )
+
     private companion object {
         const val RECIPIENT_ID = 7L
+        const val OTHER_RECIPIENT_ID = 8L
     }
 }

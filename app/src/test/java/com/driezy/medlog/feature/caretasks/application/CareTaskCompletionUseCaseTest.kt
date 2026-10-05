@@ -1,10 +1,14 @@
 package com.driezy.medlog.feature.caretasks.application
 
+import com.driezy.medlog.capability.reminders.application.ReconcileRemindersUseCase
 import com.driezy.medlog.data.local.TransactionRunner
 import com.driezy.medlog.data.model.CareTaskLog
 import com.driezy.medlog.data.model.CareTaskLogStatus
 import com.driezy.medlog.data.model.LogRevisionType
 import com.driezy.medlog.data.repository.CareTaskRepository
+import com.driezy.medlog.domain.ReminderReconcileReason
+import com.driezy.medlog.domain.ReminderReconciler
+import com.driezy.medlog.domain.ReminderReconciliationQueue
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -31,7 +35,14 @@ class CareTaskCompletionUseCaseTest {
     private val zone = ZoneId.of("Asia/Shanghai")
     private val clock: Clock = Clock.fixed(Instant.ofEpochMilli(nowMs), zone)
     private val repository: CareTaskRepository = mock()
-    private val useCase = CareTaskCompletionUseCase(ImmediateTransactionRunner, repository, clock)
+    private val reminderReconciler: ReminderReconciler = mock()
+    private val reminderQueue: ReminderReconciliationQueue = mock()
+    private val useCase = CareTaskCompletionUseCase(
+        ImmediateTransactionRunner,
+        repository,
+        ReconcileRemindersUseCase(reminderReconciler, reminderQueue),
+        clock,
+    )
 
     private val taskId = 7L
     private val scheduled = 1_763_942_400_000L // 2025-11-24 08:00 CST，与 now 同一当地日
@@ -242,6 +253,35 @@ class CareTaskCompletionUseCaseTest {
         val saved = captureSavedLog()
         assertNull("起止顺序不对就不算时长", saved.actualDurationMinutes)
         assertEquals(futureStart, saved.actualStartMs)
+    }
+
+    @Test
+    fun `complete re-projects the task once so the interval is anchored on the completion`() = test {
+        whenever(repository.getLogForScheduledTime(taskId, scheduled)).thenReturn(null)
+        whenever(repository.upsertLog(any())).thenReturn(11L)
+
+        useCase.complete(taskId, scheduled)
+
+        verify(reminderReconciler).reconcileCareTask(taskId, ReminderReconcileReason.DOSE_RECORDED)
+        verify(reminderQueue).enqueue(ReminderReconcileReason.DOSE_RECORDED)
+    }
+
+    @Test
+    fun `skip re-projects the task once`() = test {
+        whenever(repository.getLogForScheduledTime(taskId, scheduled)).thenReturn(null)
+        whenever(repository.upsertLog(any())).thenReturn(9L)
+
+        useCase.skip(taskId, scheduled)
+
+        verify(reminderReconciler).reconcileCareTask(taskId, ReminderReconcileReason.DOSE_RECORDED)
+    }
+
+    @Test
+    fun `undo re-projects the task once`() = test {
+        useCase.undo(taskId, scheduled)
+
+        verify(repository).deleteLogForScheduledTime(taskId, scheduled)
+        verify(reminderReconciler).reconcileCareTask(taskId, ReminderReconcileReason.DOSE_RECORDED)
     }
 
     private fun test(block: suspend () -> Unit) = runBlocking { block() }

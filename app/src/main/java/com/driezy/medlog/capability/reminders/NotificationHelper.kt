@@ -380,6 +380,21 @@ class NotificationHelper @Inject constructor(
         }
     }
 
+    /**
+     * 取消某照护事项的所有时间槽通知（不影响闹钟）。
+     * 编号空间与 [showCareTaskNotification] 一致：`CARE_TASK_CODE_BASE + taskId*100 + slot`。
+     */
+    fun cancelCareTaskNotifications(careTaskId: Long) {
+        val target = ReminderTarget(
+            recipientId = 0,
+            type = ReminderTargetType.CARE_TASK,
+            id = careTaskId,
+        )
+        for (i in 0 until MAX_REMINDER_SLOTS) {
+            notificationManager.cancel(target.slotRequestCode(i))
+        }
+    }
+
     // ─── 低库存通知 ──────────────────────────────────────────
 
     fun showLowStockNotification(medicationId: Long, medicationName: String, stock: Double, unit: String) {

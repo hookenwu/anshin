@@ -12,6 +12,7 @@ enum class ReminderReconcileReason {
 
 interface ReminderReconciler {
     suspend fun reconcileMedication(id: MedicationId, reason: ReminderReconcileReason)
+    suspend fun reconcileCareTask(id: Long, reason: ReminderReconcileReason)
     suspend fun reconcileAll(reason: ReminderReconcileReason)
 }
 

@@ -1,5 +1,6 @@
 package com.driezy.medlog.feature.caretasks
 
+import com.driezy.medlog.capability.reminders.application.ReconcileRemindersUseCase
 import com.driezy.medlog.data.model.CareTask
 import com.driezy.medlog.data.model.CareTaskCategory
 import com.driezy.medlog.data.model.CareTaskCompletionMode
@@ -7,6 +8,9 @@ import com.driezy.medlog.data.model.CareTaskScheduleKind
 import com.driezy.medlog.data.model.TimePeriod
 import com.driezy.medlog.data.model.TimePeriods
 import com.driezy.medlog.data.repository.FakeCareTaskRepository
+import com.driezy.medlog.domain.ReminderReconcileReason
+import com.driezy.medlog.domain.ReminderReconciler
+import com.driezy.medlog.domain.ReminderReconciliationQueue
 import com.driezy.medlog.testing.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -19,6 +23,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -33,8 +39,13 @@ class CareTaskEditorViewModelTest {
     private val nowMs = Instant.parse("2026-01-10T04:00:00Z").toEpochMilli() // 2026-01-10 12:00 CST
     private val clock: Clock = Clock.fixed(Instant.ofEpochMilli(nowMs), zone)
     private val repository = FakeCareTaskRepository()
+    private val reminderReconciler: ReminderReconciler = mock()
+    private val reconcileReminders = ReconcileRemindersUseCase(
+        reminderReconciler,
+        mock<ReminderReconciliationQueue>(),
+    )
 
-    private fun viewModel() = CareTaskEditorViewModel(repository, clock)
+    private fun viewModel() = CareTaskEditorViewModel(repository, clock, reconcileReminders)
 
     @Test
     fun `saving with a blank title is blocked with a title error`() = runTest {
@@ -237,5 +248,48 @@ class CareTaskEditorViewModelTest {
 
         assertEquals(CareTaskEditorUiEffect.Saved, effect.await())
         assertFalse(viewModel.uiState.value.isSaving)
+    }
+
+    @Test
+    fun `saving a task re-projects its reminders`() = runTest {
+        val id = repository.seedTask(
+            CareTask(
+                careRecipientId = 1L,
+                title = "吸氧",
+                scheduleKind = CareTaskScheduleKind.FIXED_TIMES,
+                reminderTimes = "08:00",
+                startDate = nowMs,
+            ),
+        )
+        val viewModel = viewModel()
+        viewModel.onAction(CareTaskEditorUiAction.LoadExisting(id))
+        advanceUntilIdle()
+
+        viewModel.onAction(CareTaskEditorUiAction.TitleChanged("吸氧疗法"))
+        viewModel.onAction(CareTaskEditorUiAction.Save)
+        advanceUntilIdle()
+
+        verify(reminderReconciler).reconcileCareTask(id, ReminderReconcileReason.MEDICATION_CHANGED)
+    }
+
+    @Test
+    fun `archiving a task re-projects it so its alarms are cancelled`() = runTest {
+        val id = repository.seedTask(
+            CareTask(
+                careRecipientId = 1L,
+                title = "翻身",
+                scheduleKind = CareTaskScheduleKind.INTERVAL,
+                intervalHours = 2,
+                startDate = nowMs,
+            ),
+        )
+        val viewModel = viewModel()
+        viewModel.onAction(CareTaskEditorUiAction.LoadExisting(id))
+        advanceUntilIdle()
+
+        viewModel.onAction(CareTaskEditorUiAction.Archive)
+        advanceUntilIdle()
+
+        verify(reminderReconciler).reconcileCareTask(id, ReminderReconcileReason.MEDICATION_CHANGED)
     }
 }

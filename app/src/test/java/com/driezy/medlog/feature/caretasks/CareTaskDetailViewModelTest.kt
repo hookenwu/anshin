@@ -1,5 +1,6 @@
 package com.driezy.medlog.feature.caretasks
 
+import com.driezy.medlog.capability.reminders.application.ReconcileRemindersUseCase
 import com.driezy.medlog.data.local.TransactionRunner
 import com.driezy.medlog.data.model.CareTask
 import com.driezy.medlog.data.model.CareTaskCompletionMode
@@ -8,6 +9,8 @@ import com.driezy.medlog.data.model.CareTaskScheduleKind
 import com.driezy.medlog.data.repository.FakeCareTaskRepository
 import com.driezy.medlog.data.repository.SettingsPreferences
 import com.driezy.medlog.data.repository.UserPreferencesRepository
+import com.driezy.medlog.domain.ReminderReconciler
+import com.driezy.medlog.domain.ReminderReconciliationQueue
 import com.driezy.medlog.feature.caretasks.application.CareTaskCompletionUseCase
 import com.driezy.medlog.testing.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -42,7 +45,16 @@ class CareTaskDetailViewModelTest {
     private val preferences: UserPreferencesRepository = mock {
         on { settingsFlow } doReturn flowOf(SettingsPreferences())
     }
-    private val completion = CareTaskCompletionUseCase(ImmediateTransactionRunner, repository, clock)
+    private val reconcileReminders = ReconcileRemindersUseCase(
+        mock<ReminderReconciler>(),
+        mock<ReminderReconciliationQueue>(),
+    )
+    private val completion = CareTaskCompletionUseCase(
+        ImmediateTransactionRunner,
+        repository,
+        reconcileReminders,
+        clock,
+    )
 
     private fun viewModel() = CareTaskDetailViewModel(repository, completion, preferences, clock)
 

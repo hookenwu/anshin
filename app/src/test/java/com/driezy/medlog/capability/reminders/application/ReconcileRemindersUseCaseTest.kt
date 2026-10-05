@@ -58,6 +58,10 @@ private class FakeReminderReconciler(private val fail: Boolean = false) : Remind
         if (fail) error("projection unavailable")
     }
 
+    override suspend fun reconcileCareTask(id: Long, reason: ReminderReconcileReason) {
+        if (fail) error("projection unavailable")
+    }
+
     override suspend fun reconcileAll(reason: ReminderReconcileReason) {
         if (fail) error("projection unavailable")
     }

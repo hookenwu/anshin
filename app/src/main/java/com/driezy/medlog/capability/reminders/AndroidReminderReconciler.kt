@@ -1,9 +1,13 @@
 package com.driezy.medlog.capability.reminders
 
 import com.driezy.medlog.capability.widgets.WidgetRefresher
+import com.driezy.medlog.data.model.CareTask
+import com.driezy.medlog.data.model.CareTaskLogStatus
+import com.driezy.medlog.data.model.CareTaskScheduleKind
 import com.driezy.medlog.data.model.LogStatus
 import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import com.driezy.medlog.data.repository.CareRecipientRepository
+import com.driezy.medlog.data.repository.CareTaskRepository
 import com.driezy.medlog.data.repository.LogRepository
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
@@ -17,6 +21,7 @@ import javax.inject.Singleton
 @Singleton
 class AndroidReminderReconciler @Inject constructor(
     private val medications: MedicationRepository,
+    private val careTasks: CareTaskRepository,
     private val careRecipients: CareRecipientRepository,
     private val logs: LogRepository,
     private val alarmScheduler: AlarmScheduler,
@@ -32,6 +37,25 @@ class AndroidReminderReconciler @Inject constructor(
         notificationHelper.cancelAllReminderNotifications(id.value)
         if (medication != null && !medication.isArchived && !medication.isPRN) {
             schedule(medication)
+        }
+        widgetRefresher.refreshAll()
+    }
+
+    /**
+     * 单条照护事项的重排：先取消该事项的全部闹钟与通知，再按数据库事实重建。
+     *
+     * 归档 / 删除 / `AS_NEEDED` 只做清理不排期（删除后 [careTasks.getTaskById] 返回 null）。
+     * 与用药 [reconcileMedication] 同构。
+     */
+    override suspend fun reconcileCareTask(id: Long, reason: ReminderReconcileReason) {
+        val task = careTasks.getTaskById(id)
+        alarmScheduler.cancelCareTaskAlarms(
+            id,
+            task?.careRecipientId ?: ActiveRecipientStore.NO_RECIPIENT,
+        )
+        notificationHelper.cancelCareTaskNotifications(id)
+        if (task != null && !task.isArchived && task.scheduleKind != CareTaskScheduleKind.AS_NEEDED) {
+            scheduleCareTask(task)
         }
         widgetRefresher.refreshAll()
     }
@@ -58,14 +82,27 @@ class AndroidReminderReconciler @Inject constructor(
                     schedule(medication)
                 }
             }
+            // 照护事项与用药分段处理：同样用含归档清单清理残留通知，归档 / AS_NEEDED 只清理不排期
+            careTasks.getAllTasksFor(recipientId).forEach { task ->
+                notificationHelper.cancelCareTaskNotifications(task.id)
+                if (!task.isArchived && task.scheduleKind != CareTaskScheduleKind.AS_NEEDED) {
+                    scheduleCareTask(task)
+                }
+            }
         }
         widgetRefresher.refreshAll()
     }
 
-    /** 被取消的目标里只有用药有通知要收；照护事项的通知在 T3 接入提醒通道时补齐。 */
+    /** 被取消的目标按类型收起残留通知；用药与照护事项的编号空间各自独立。 */
     private fun List<ReminderTarget>.cancelNotifications() {
-        filter { it.type == ReminderTargetType.MEDICATION }
-            .forEach { notificationHelper.cancelAllReminderNotifications(it.id) }
+        forEach { target ->
+            when (target.type) {
+                ReminderTargetType.MEDICATION ->
+                    notificationHelper.cancelAllReminderNotifications(target.id)
+                ReminderTargetType.CARE_TASK ->
+                    notificationHelper.cancelCareTaskNotifications(target.id)
+            }
+        }
     }
 
     private suspend fun schedule(medication: com.driezy.medlog.data.model.Medication) {
@@ -78,6 +115,29 @@ class AndroidReminderReconciler @Inject constructor(
         alarmScheduler.scheduleAllReminders(
             medication,
             lastTaken,
+            handled.map { Instant.ofEpochMilli(it.scheduledTimeMs) }.toSet(),
+        )
+    }
+
+    /**
+     * 按数据库事实为一条照护事项排期。
+     *
+     * - `INTERVAL`（完成后计时）以最后一条 `DONE` 的 `actualEndMs` 为锚点（照护事项版的 `lastTaken`）；
+     * - `handled` 取 `DONE` / `SKIPPED` 的时间槽，避免为已处理的槽重复排提醒；
+     * - `AS_NEEDED` 不产生任何时刻（由调用方过滤，这里同样自然为空）。
+     */
+    private suspend fun scheduleCareTask(task: CareTask) {
+        val recorded = careTasks.getLogsForTask(task.id).first()
+        val handled = recorded.filter {
+            it.status == CareTaskLogStatus.DONE || it.status == CareTaskLogStatus.SKIPPED
+        }
+        val lastDoneMs = recorded
+            .filter { it.status == CareTaskLogStatus.DONE && it.actualEndMs != null }
+            .maxByOrNull { it.scheduledTimeMs }
+            ?.actualEndMs
+        alarmScheduler.scheduleCareTaskReminders(
+            task,
+            lastDoneMs,
             handled.map { Instant.ofEpochMilli(it.scheduledTimeMs) }.toSet(),
         )
     }

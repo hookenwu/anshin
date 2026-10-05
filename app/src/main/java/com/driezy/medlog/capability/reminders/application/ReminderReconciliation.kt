@@ -20,6 +20,15 @@ class ReconcileRemindersUseCase @Inject constructor(
         }
     }
 
+    suspend fun careTask(id: Long, reason: ReminderReconcileReason) {
+        runCatching {
+            reconciler.reconcileCareTask(id, reason)
+        }
+        runCatching {
+            retryQueue.enqueue(reason)
+        }
+    }
+
     suspend fun all(reason: ReminderReconcileReason) {
         runCatching {
             reconciler.reconcileAll(reason)

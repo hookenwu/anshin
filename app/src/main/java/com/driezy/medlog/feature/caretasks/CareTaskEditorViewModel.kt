@@ -1,11 +1,13 @@
 package com.driezy.medlog.feature.caretasks
 
+import com.driezy.medlog.capability.reminders.application.ReconcileRemindersUseCase
 import com.driezy.medlog.data.model.CareTask
 import com.driezy.medlog.data.model.CareTaskCompletionMode
 import com.driezy.medlog.data.model.CareTaskScheduleKind
 import com.driezy.medlog.data.model.TimePeriod
 import com.driezy.medlog.data.model.TimePeriods
 import com.driezy.medlog.data.repository.CareTaskRepository
+import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.ui.BaseViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
@@ -41,6 +43,7 @@ internal fun validateCareTaskDraft(draft: CareTaskDraft): CareTaskValidationErro
 class CareTaskEditorViewModel @Inject constructor(
     private val repository: CareTaskRepository,
     private val clock: Clock,
+    private val reconcileReminders: ReconcileRemindersUseCase,
 ) : BaseViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -112,7 +115,14 @@ class CareTaskEditorViewModel @Inject constructor(
             _uiState.update { it.copy(isSaving = true, validationError = null) }
             try {
                 val entity = draft.toEntity(existing, clock.millis())
-                if (existing == null) repository.addTask(entity) else repository.updateTask(entity)
+                val taskId = if (existing == null) {
+                    repository.addTask(entity)
+                } else {
+                    repository.updateTask(entity)
+                    entity.id
+                }
+                // 保存后立即重排该事项：新/改的时间槽会注册闹钟（对齐用药编辑器的重排）
+                reconcileReminders.careTask(taskId, ReminderReconcileReason.MEDICATION_CHANGED)
                 effectChannel.send(CareTaskEditorUiEffect.Saved)
             } finally {
                 _uiState.update { it.copy(isSaving = false) }
@@ -126,6 +136,8 @@ class CareTaskEditorViewModel @Inject constructor(
             effectChannel.trySend(CareTaskEditorUiEffect.Failed(error.localizedMessage))
         }) {
             repository.setArchived(current.id, !current.isArchived)
+            // 归档后重排：取消该事项的所有闹钟（归档项不排期）
+            reconcileReminders.careTask(current.id, ReminderReconcileReason.MEDICATION_CHANGED)
             effectChannel.send(CareTaskEditorUiEffect.NavigateBack)
         }
     }
@@ -136,6 +148,8 @@ class CareTaskEditorViewModel @Inject constructor(
             effectChannel.trySend(CareTaskEditorUiEffect.Failed(error.localizedMessage))
         }) {
             repository.deleteTask(current.id)
+            // 删除后重排：事项已不存在，仓库按 id 取不到 → 只做清理不排期
+            reconcileReminders.careTask(current.id, ReminderReconcileReason.MEDICATION_CHANGED)
             effectChannel.send(CareTaskEditorUiEffect.NavigateBack)
         }
     }
