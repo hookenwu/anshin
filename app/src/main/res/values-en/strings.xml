@@ -132,6 +132,8 @@
     </plurals>
     <string name="home_prn_title">As Needed</string>
     <string name="home_prn_body">No fixed schedule — tap to log a dose when needed</string>
+    <string name="home_as_needed_care_title">As-Needed Care</string>
+    <string name="home_as_needed_care_body">No fixed schedule — tap to log when needed</string>
     <string name="home_prn_taken_with_max">Taken today · Max daily: %1$s %2$s</string>
     <string name="home_prn_max_dose">Max daily dose: %1$s %2$s</string>
     <string name="home_prn_taken_once">Dose recorded today</string>

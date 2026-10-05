@@ -464,6 +464,18 @@ internal fun HomeContent(
                 }
             }
 
+            // ── 按需照护事项区域（无固定时刻，独立专区；不计入上方时间轴与总进度）──
+            if (uiState.asNeededCareItems.isNotEmpty()) {
+                item(key = "asNeededCareSection", contentType = "asNeededCareSection") {
+                    AsNeededCareTaskSectionCard(
+                        items = uiState.asNeededCareItems,
+                        savingKeys = uiState.savingCareKeys,
+                        onAction = onAction,
+                        modifier = Modifier.animateItem(),
+                    )
+                }
+            }
+
             // ── PRN 按需用药区域 ───────────────────────────────
             if (uiState.prnItems.isNotEmpty()) {
                 item(key = "prnSection", contentType = "prnSection") {

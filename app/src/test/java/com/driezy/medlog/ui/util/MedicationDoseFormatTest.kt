@@ -2,7 +2,9 @@ package com.driezy.medlog.ui.util
 
 import com.driezy.medlog.data.model.Medication
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MedicationDoseFormatTest {
@@ -57,6 +59,29 @@ class MedicationDoseFormatTest {
         val m = med(doseUnit = "ml", doseStrength = 0.25, doseStrengthUnit = "mg")
         assertEquals("0.25mg × 2ml", m.doseDisplayText())
         assertNull(m.perDoseTotalText())
+    }
+
+    @Test
+    fun `microgram is a mass unit and totals keep the microgram unit`() {
+        val m = med(doseUnit = "粒", doseQuantity = 2.0, doseStrength = 0.5, doseStrengthUnit = "μg")
+
+        assertEquals("0.5μg × 2粒", m.doseDisplayText())
+        assertEquals("1μg", m.perDoseTotalText())
+
+        assertEquals(DoseUnitFamily.MASS, doseUnitFamily("μg"))
+        assertEquals(DoseUnitFamily.MASS, doseUnitFamily("µg"))
+        assertEquals(DoseUnitFamily.MASS, doseUnitFamily("ug"))
+        assertTrue(canScaleDoseStrength("μg", "粒"))
+        assertTrue(canScaleDoseStrength("μg", "μg"))
+        assertFalse(canScaleDoseStrength("μg", "ml"))
+    }
+
+    @Test
+    fun `small microgram values are not rounded away to zero`() {
+        assertEquals("0.004", 0.004.formatDosePrecise())
+        val m = med(doseUnit = "粒", doseQuantity = 1.0, doseStrength = 0.0035, doseStrengthUnit = "μg")
+        assertEquals("0.0035μg × 1粒", m.doseDisplayText())
+        assertEquals("0.0035μg", m.perDoseTotalText())
     }
 
     @Test

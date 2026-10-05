@@ -69,10 +69,12 @@ private val TODAY_TCM_CATEGORY_KEYWORDS = listOf(
  *
  * **严格保持入参顺序**（既有的用药时间轴顺序 = 计划器按药归组后的顺序），
  * 以保证「零照护事项时时间轴与改造前逐字节一致」这一硬不变式。
- * PRN 按需药物不进入时间轴（仍由独立的 PRN 区域渲染）。
+ * PRN 按需药物不进入时间轴（仍由独立的 PRN 区域渲染）；
+ * 已归档（停用）药物一律不进入今日计划——这里是今日计划/进度的最后一道契约，
+ * 即便上游误传入含归档的列表也不会泄漏。
  */
 fun medicationsToTodayItems(items: List<MedicationWithStatus>): List<TodayItem> =
-    items.filterNot { it.medication.isPRN }.map { item ->
+    items.filterNot { it.medication.isPRN || it.medication.isArchived }.map { item ->
         TodayItem(
             targetType = TodayTargetType.MEDICATION,
             targetId = item.medication.id,
@@ -124,6 +126,43 @@ fun careTasksToTodayItems(tasks: List<CareTask>, logs: List<CareTaskLog>, zone: 
             }
         }
         .toList()
+
+/**
+ * 按需（`AS_NEEDED`）照护事项映射器：产出「按需照护」专区的 [TodayItem]。
+ *
+ * 与时间轴**分离**：AS_NEEDED 无固定时刻，不进入 [mergeTodayItems] 的时间序列，
+ * 也不计入 [HomeUiState.overallTotal]（对齐 PRN 药物不计入依从率的处理）。专区独立渲染。
+ *
+ * 记录按 `careTaskId` 取当日最新一条命中，因此专区行在刷新之间保持稳定；
+ * 首次记录前的 [TodayItem.scheduledAtMs] 取 [nowMs]，用作「此刻完成」的日志锚点。
+ */
+fun careTasksToAsNeededItems(
+    tasks: List<CareTask>,
+    logs: List<CareTaskLog>,
+    zone: ZoneId,
+    nowMs: Long,
+): List<TodayItem> = tasks.asSequence()
+    .filterNot { it.isArchived }
+    .filter { it.scheduleKind == CareTaskScheduleKind.AS_NEEDED }
+    .map { task ->
+        val log = logs.filter { it.careTaskId == task.id }.maxByOrNull { it.scheduledTimeMs }
+        val anchorMs = log?.scheduledTimeMs ?: nowMs
+        TodayItem(
+            targetType = TodayTargetType.CARE_TASK,
+            targetId = task.id,
+            slotIndex = 0,
+            scheduledAtMs = anchorMs,
+            status = log.todayStatus(),
+            label = task.title,
+            category = task.category,
+            scheduledMinuteOfDay = Instant.ofEpochMilli(anchorMs)
+                .atZone(zone)
+                .toLocalTime()
+                .toSecondOfDay() / 60,
+            careTask = CareTaskTimelineData(task, log),
+        )
+    }
+    .toList()
 
 private fun CareTaskLog?.todayStatus(): TodayItemStatus = when (this?.status) {
     CareTaskLogStatus.DONE -> TodayItemStatus.TAKEN

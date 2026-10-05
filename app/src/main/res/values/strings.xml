@@ -129,6 +129,8 @@
     </plurals>
     <string name="home_prn_title">按需用药</string>
     <string name="home_prn_body">以下药品无固定时间，需要时点击记录服用</string>
+    <string name="home_as_needed_care_title">按需照护</string>
+    <string name="home_as_needed_care_body">以下照护事项无固定时间，需要时点击记录</string>
     <string name="home_prn_taken_with_max">今日已服 · 日最大剂量 %1$s %2$s</string>
     <string name="home_prn_max_dose">日最大剂量 %1$s %2$s</string>
     <string name="home_prn_taken_once">今日已记录服用</string>

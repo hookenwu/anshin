@@ -12,9 +12,9 @@ import com.driezy.medlog.data.model.Medication
  */
 enum class DoseUnitFamily { MASS, VOLUME, COUNT }
 
-/** mg/g 归质量，ml 归体积，其余（片/粒/滴/袋/支/贴 及自定义单位）按计数处理。 */
+/** mg/g/μg 归质量（μg 与微符号 µg、ASCII ug 视为同一质量单位），ml 归体积，其余（片/粒/滴/袋/支/贴 及自定义单位）按计数处理。 */
 fun doseUnitFamily(unit: String): DoseUnitFamily = when (unit.trim().lowercase()) {
-    "mg", "g" -> DoseUnitFamily.MASS
+    "mg", "g", "μg", "µg", "ug" -> DoseUnitFamily.MASS
     "ml" -> DoseUnitFamily.VOLUME
     else -> DoseUnitFamily.COUNT
 }

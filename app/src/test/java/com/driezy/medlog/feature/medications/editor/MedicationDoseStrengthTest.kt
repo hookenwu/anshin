@@ -42,8 +42,8 @@ class MedicationDoseStrengthTest {
     }
 
     @Test
-    fun `strength unit options are the measurement units`() {
-        assertEquals(listOf("mg", "g", "ml"), doseStrengthUnitOptions())
+    fun `strength unit options are the measurement units and include microgram`() {
+        assertEquals(listOf("mg", "g", "μg", "ml"), doseStrengthUnitOptions())
     }
 
     @Test

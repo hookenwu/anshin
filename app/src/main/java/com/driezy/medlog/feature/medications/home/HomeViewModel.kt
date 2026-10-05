@@ -90,6 +90,8 @@ data class HomeUiState(
     val savingDoses: Set<MedicationDoseKey> = emptySet(),
     /** 今日时间轴：药物与照护事项混排后的唯一输入（docs/care-tasks.md §4）。 */
     val todayItems: List<TodayItem> = emptyList(),
+    /** 按需（AS_NEEDED）照护事项：独立专区渲染，不进入时间轴、不计入总进度。 */
+    val asNeededCareItems: List<TodayItem> = emptyList(),
     /** 时间轴筛选（全部 / 用药 / 照护 / 照护子类）。 */
     val todayFilter: TodayFilter = TodayFilter.All,
     /** 正在写入的照护事项槽位 key（`"<taskId>:<scheduled>"`），防重复点击。 */
@@ -360,8 +362,11 @@ class HomeViewModel @Inject constructor(
                         dated.today
                 }
                 val prefs = dated.preferences
+                // 首页今日计划的**唯一**归档过滤点：已归档（停用）药品不得进入
+                // 今日计划、英雄卡、进度、备货/低库存与导出（见 docs/medication-daily-flow.md）。
+                val activeMedications = meds.filterNot { it.isArchived }
                 val planned = planCalculator.calculate(
-                    meds,
+                    activeMedications,
                     days = 1,
                     from = dated.today.atStartOfDay(dated.zone).toInstant(),
                     zoneId = dated.zone,
@@ -384,12 +389,19 @@ class HomeViewModel @Inject constructor(
                             scheduledAtMs = slot.scheduledAt.toEpochMilli(),
                         )
                     }
-                } + meds.filter { it.isPRN && !it.isArchived }.map { med ->
+                } + activeMedications.filter { it.isPRN }.map { med ->
                     MedicationWithStatus(medication = med, log = logsByMedication[med.id]?.lastOrNull())
                 }
                 // ── 统一时间轴：两个映射器产出 TodayItem，合并器保证零照护事项时用药序列不变 ──
                 val medicationItems = medicationsToTodayItems(items)
                 val careTaskItems = careTasksToTodayItems(
+                    tasks = careInput.tasks,
+                    logs = careInput.logs,
+                    zone = dated.zone,
+                    nowMs = now.toEpochMilli(),
+                )
+                // ── 按需（AS_NEEDED）照护事项：独立专区，不并入时间轴、不计入总进度 ──
+                val asNeededCareItems = careTasksToAsNeededItems(
                     tasks = careInput.tasks,
                     logs = careInput.logs,
                     zone = dated.zone,
@@ -404,8 +416,9 @@ class HomeViewModel @Inject constructor(
                         autoCollapseCompletedGroups = prefs.autoCollapseCompletedGroups,
                         homeHeroStyle = prefs.homeHeroStyle,
                         currentMinuteOfDay = now.atZone(dated.zone).toLocalTime().toSecondOfDay() / 60,
-                        exportUri = PlanExportCodec.encode(meds.filterNot { it.isArchived }, dated.zone),
+                        exportUri = PlanExportCodec.encode(activeMedications, dated.zone),
                         todayItems = mergeTodayItems(medicationItems, careTaskItems),
+                        asNeededCareItems = asNeededCareItems,
                     ),
                     showProgressNotification = prefs.persistentReminder,
                 )

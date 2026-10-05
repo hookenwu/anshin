@@ -72,11 +72,79 @@ class TodayItemMapperTest {
     }
 
     @Test
-    fun `care task mapper skips archived and as-needed tasks`() {
+    fun `timeline care task mapper skips archived and as-needed tasks`() {
         val archived = careTask(id = 1L, times = "08:00", archived = true)
         val asNeeded = careTask(id = 2L, times = "08:00", scheduleKind = CareTaskScheduleKind.AS_NEEDED)
 
         val items = careTasksToTodayItems(listOf(archived, asNeeded), emptyList(), zone, nowMs)
+
+        assertTrue(items.isEmpty())
+    }
+
+    @Test
+    fun `medication mapper excludes archived medications from the today plan`() {
+        val active = medication(id = 1L, time = "08:00", slot = 0)
+        val stopped = medication(id = 2L, time = "09:00", slot = 0, archived = true)
+        val stoppedPrn = medication(id = 3L, time = "10:00", slot = 0, archived = true, isPrn = true)
+
+        val items = medicationsToTodayItems(listOf(active, stopped, stoppedPrn))
+
+        assertEquals(listOf(active.doseKey), items.map { it.medication!!.doseKey })
+    }
+
+    @Test
+    fun `archived medications do not contribute to the today progress counts`() {
+        val active = medication(id = 1L, time = "08:00", slot = 0, taken = true)
+        val stopped = medication(id = 2L, time = "09:00", slot = 0, taken = true, archived = true)
+
+        val state = HomeUiState(todayItems = medicationsToTodayItems(listOf(active, stopped)))
+
+        assertEquals(1, state.overallTotal)
+        assertEquals(1, state.overallHandled)
+    }
+
+    @Test
+    fun `as-needed care tasks surface in the as-needed section not the timeline`() {
+        val timed = careTask(id = 5L, times = "08:00")
+        val asNeeded = careTask(id = 6L, times = "", scheduleKind = CareTaskScheduleKind.AS_NEEDED)
+
+        val timeline = careTasksToTodayItems(listOf(timed, asNeeded), emptyList(), zone, nowMs)
+        val asNeededItems = careTasksToAsNeededItems(listOf(timed, asNeeded), emptyList(), zone, nowMs)
+
+        assertEquals(listOf(5L), timeline.map { it.targetId })
+        assertEquals(listOf(6L), asNeededItems.map { it.targetId })
+        assertEquals("Task 6", asNeededItems.single().label)
+        assertEquals(TodayItemStatus.PENDING, asNeededItems.single().status)
+        assertTrue(asNeededItems.single().isCareTask)
+    }
+
+    @Test
+    fun `as-needed task reflects its log while a timed task keeps timeline ordering`() {
+        val timed = careTask(id = 5L, times = "08:00")
+        val asNeeded = careTask(id = 6L, times = "", scheduleKind = CareTaskScheduleKind.AS_NEEDED)
+        val doneMs = Instant.parse("2026-03-10T07:30:00Z").toEpochMilli()
+        val done = CareTaskLog(id = 9L, careTaskId = 6L, scheduledTimeMs = doneMs, status = CareTaskLogStatus.DONE)
+
+        val merged = mergeTodayItems(
+            medicationsToTodayItems(listOf(medication(id = 1L, time = "20:00", slot = 0))),
+            careTasksToTodayItems(listOf(timed, asNeeded), listOf(done), zone, nowMs),
+        )
+        val asNeededItems = careTasksToAsNeededItems(listOf(timed, asNeeded), listOf(done), zone, nowMs)
+
+        // AS_NEEDED 不进入时间轴：08:00 的定时照护排在 20:00 用药之前，顺序不变。
+        assertFalse("AS_NEEDED 不得进入时间轴", merged.any { it.targetId == 6L })
+        assertEquals(listOf(5L, 1L), merged.map { it.targetId })
+
+        assertEquals(TodayItemStatus.TAKEN, asNeededItems.single().status)
+        assertEquals(doneMs, asNeededItems.single().scheduledAtMs)
+        assertEquals(done, asNeededItems.single().careTask!!.log)
+    }
+
+    @Test
+    fun `as-needed care task mapper skips archived tasks`() {
+        val archived = careTask(id = 7L, times = "", scheduleKind = CareTaskScheduleKind.AS_NEEDED, archived = true)
+
+        val items = careTasksToAsNeededItems(listOf(archived), emptyList(), zone, nowMs)
 
         assertTrue(items.isEmpty())
     }
@@ -199,6 +267,7 @@ class TodayItemMapperTest {
         category: String = "",
         taken: Boolean = false,
         isPrn: Boolean = false,
+        archived: Boolean = false,
     ): MedicationWithStatus {
         val med = Medication(
             id = id,
@@ -207,6 +276,7 @@ class TodayItemMapperTest {
             reminderTimes = time,
             category = category,
             isPRN = isPrn,
+            isArchived = archived,
         )
         val log = if (taken) {
             MedicationLog(id = id * 10 + slot, medicationId = id, scheduledTimeMs = 0L, status = LogStatus.TAKEN)

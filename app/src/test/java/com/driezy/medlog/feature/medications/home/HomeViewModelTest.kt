@@ -3,6 +3,7 @@ package com.driezy.medlog.feature.medications.home
 import app.cash.turbine.test
 import com.driezy.medlog.data.local.TransactionRunner
 import com.driezy.medlog.data.model.Medication
+import com.driezy.medlog.data.model.MedicationPlanRevision
 import com.driezy.medlog.data.repository.*
 import com.driezy.medlog.feature.medications.application.*
 import kotlinx.coroutines.*
@@ -114,6 +115,45 @@ class HomeViewModelTest {
         model.onAction(HomeUiAction.RefreshTime)
         advanceUntilIdle()
         assertNotEquals(first, model.uiState.value.items.single().doseKey)
+    }
+
+    @Test fun `archived medication never reaches the today plan, hero or progress`() = runTest {
+        meds.addMedication(Medication(name = "在服", doseUnit = "片", startDate = clock.millis()))
+        val archivedId = meds.addMedication(Medication(name = "停用", doseUnit = "片", startDate = clock.millis()))
+        meds.archiveMedication(archivedId)
+        // 归档前留下的旧计划修订仍覆盖今日，且快照 isArchived=false——
+        // 若不在此处过滤归档药品，该修订会重新投影出今日安排（用户报告的「停用药品仍出现在今日计划」）。
+        meds.planRevisions.value = listOf(
+            MedicationPlanRevision(
+                medicationId = archivedId,
+                effectiveFromMs = 0L,
+                effectiveUntilMs = clock.millis() + Duration.ofDays(1).toMillis(),
+                startDate = 0L,
+                endDate = null,
+                frequencyType = "daily",
+                frequencyInterval = 1,
+                frequencyDays = "1,2,3,4,5,6,7",
+                timePeriod = "exact",
+                reminderTimes = "08:00",
+                reminderHour = 8,
+                reminderMinute = 0,
+                intervalHours = 0,
+                isPRN = false,
+                isArchived = false,
+                doseQuantity = 1.0,
+                doseUnit = "片",
+            ),
+        )
+
+        val model = viewModel()
+        advanceUntilIdle()
+        val state = model.uiState.value
+
+        assertTrue("items 含已归档药品", state.items.none { it.medication.isArchived })
+        assertEquals(listOf("在服"), state.items.map { it.medication.name })
+        assertEquals(1, state.overallTotal)
+        assertEquals(1, state.heroPresentation.totalCount)
+        assertTrue(state.todayItems.none { it.targetId == archivedId })
     }
 
     private class MovingClock(var now: Instant, private val timeZone: ZoneId) : Clock() {

@@ -21,17 +21,18 @@ class DoseUnitOptionsTest {
     }
 
     @Test
-    fun `milligram millilitre and gram are all offered together`() {
+    fun `milligram millilitre gram and microgram are all offered together`() {
         assertTrue(options.contains("mg"))
         assertTrue(options.contains("ml"))
         assertTrue(options.contains("g"))
+        assertTrue(options.contains("μg"))
     }
 
     @Test
     fun `options keep declaration order and have no duplicates`() {
         assertEquals(options.distinct(), options)
         assertEquals(
-            listOf("片", "粒", "ml", "mg", "g", "滴", "袋", "支", "贴"),
+            listOf("片", "粒", "ml", "mg", "g", "μg", "滴", "袋", "支", "贴"),
             options,
         )
     }

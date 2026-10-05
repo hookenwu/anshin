@@ -122,6 +122,8 @@
     </plurals>
     <string name="home_prn_title">필요시 복약</string>
     <string name="home_prn_body">고정 시간 없음 — 필요할 때 눌러서 복용 기록</string>
+    <string name="home_as_needed_care_title">필요시 돌봄</string>
+    <string name="home_as_needed_care_body">고정 시간 없음 — 필요할 때 눌러서 기록</string>
     <string name="home_prn_taken_with_max">오늘 복용 · 일 최대 용량 %1$s %2$s</string>
     <string name="home_prn_max_dose">일 최대 용량 %1$s %2$s</string>
     <string name="home_prn_taken_once">오늘 복용 기록됨</string>

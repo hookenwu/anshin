@@ -166,7 +166,7 @@ private fun CareActionButton(label: Int, tag: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun careTaskStatusText(status: TodayItemStatus): String = when (status) {
+internal fun careTaskStatusText(status: TodayItemStatus): String = when (status) {
     TodayItemStatus.TAKEN -> stringResource(R.string.care_task_status_done)
     TodayItemStatus.SKIPPED -> stringResource(R.string.care_task_status_skipped)
     TodayItemStatus.IN_PROGRESS -> stringResource(R.string.care_task_status_in_progress)

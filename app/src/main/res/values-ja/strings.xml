@@ -122,6 +122,8 @@
     </plurals>
     <string name="home_prn_title">頓服</string>
     <string name="home_prn_body">固定時間なし — 必要なときにタップして服用を記録</string>
+    <string name="home_as_needed_care_title">頓用ケア</string>
+    <string name="home_as_needed_care_body">固定時間なし — 必要なときに記録</string>
     <string name="home_prn_taken_with_max">本日服用 · 日最大量 %1$s %2$s</string>
     <string name="home_prn_max_dose">日最大量 %1$s %2$s</string>
     <string name="home_prn_taken_once">本日服用済み</string>
