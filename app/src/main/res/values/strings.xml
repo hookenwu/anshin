@@ -563,6 +563,7 @@
     <string name="notif_title_with_member">%1$s · %2$s</string>
     <string name="notif_reminder_dose_label">剂量：%s</string>
     <string name="notif_reminder_subtext">用药提醒</string>
+    <string name="notif_care_task_body">照护事项提醒</string>
     <string name="notif_reminder_big_text">该服用 %1$s 的 %2$s</string>
     <string name="notif_reminder_ticker">该服药了：%s</string>
     <string name="notif_action_skip">跳过</string>

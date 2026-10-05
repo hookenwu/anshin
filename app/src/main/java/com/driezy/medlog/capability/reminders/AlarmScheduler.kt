@@ -140,6 +140,8 @@ class AlarmScheduler @Inject constructor(
             requestCode,
             Intent(context, MedLogAlarmReceiver::class.java).apply {
                 putExtra(EXTRA_MED_ID, medication.id)
+                putExtra(EXTRA_TARGET_TYPE, ReminderTargetType.MEDICATION.key)
+                putExtra(EXTRA_TARGET_ID, medication.id)
                 putExtra(EXTRA_MED_NAME, medication.name)
                 putExtra(EXTRA_RECIPIENT_NAME, nameFor(medication.careRecipientId))
                 putExtra(EXTRA_TIME_INDEX, timeIndex)
@@ -359,6 +361,8 @@ class AlarmScheduler @Inject constructor(
             requestCode,
             Intent(context, MedLogAlarmReceiver::class.java).apply {
                 putExtra(EXTRA_MED_ID, medication.id)
+                putExtra(EXTRA_TARGET_TYPE, ReminderTargetType.MEDICATION.key)
+                putExtra(EXTRA_TARGET_ID, medication.id)
                 putExtra(EXTRA_MED_NAME, medication.name)
                 putExtra(EXTRA_RECIPIENT_NAME, nameFor(medication.careRecipientId))
                 putExtra(EXTRA_TIME_INDEX, timeIndex)
@@ -390,6 +394,8 @@ class AlarmScheduler @Inject constructor(
             requestCode,
             Intent(context, MedLogAlarmReceiver::class.java).apply {
                 putExtra(EXTRA_MED_ID, medication.id)
+                putExtra(EXTRA_TARGET_TYPE, ReminderTargetType.MEDICATION.key)
+                putExtra(EXTRA_TARGET_ID, medication.id)
                 putExtra(EXTRA_MED_NAME, medication.name)
                 putExtra(EXTRA_RECIPIENT_NAME, nameFor(medication.careRecipientId))
                 putExtra(EXTRA_TIME_INDEX, timeIndex)

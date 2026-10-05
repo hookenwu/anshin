@@ -585,6 +585,7 @@
     <string name="notif_title_with_member">%1$s · %2$s</string>
     <string name="notif_reminder_dose_label">Dose: %s</string>
     <string name="notif_reminder_subtext">Medication reminder</string>
+    <string name="notif_care_task_body">Care task reminder</string>
     <string name="notif_reminder_big_text">Take %1$s of %2$s</string>
     <string name="notif_reminder_ticker">Time to take: %s</string>
     <string name="notif_action_skip">Skip</string>

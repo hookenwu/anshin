@@ -528,6 +528,7 @@
     <string name="notif_title_with_member">%1$s · %2$s</string>
     <string name="notif_reminder_dose_label">용량: %s</string>
     <string name="notif_reminder_subtext">복약 알림</string>
+    <string name="notif_care_task_body">돌봄 항목 알림</string>
     <string name="notif_reminder_big_text">%2$s %1$s를 복용하세요</string>
     <string name="notif_reminder_ticker">복약 시간: %s</string>
     <string name="notif_action_skip">건너뜀</string>

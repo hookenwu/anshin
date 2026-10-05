@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.driezy.medlog.data.model.LogStatus
+import com.driezy.medlog.data.repository.CareTaskRepository
 import com.driezy.medlog.data.repository.LogRepository
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.data.repository.UserPreferencesRepository
@@ -52,6 +53,9 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
     lateinit var medicationRepo: MedicationRepository
 
     @Inject
+    lateinit var careTaskRepo: CareTaskRepository
+
+    @Inject
     lateinit var logRepo: LogRepository
 
     @Inject
@@ -64,13 +68,31 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
     lateinit var clock: Clock
 
     override fun onReceive(context: Context, intent: Intent) {
-        val medId = intent.getLongExtra(EXTRA_MED_ID, -1L)
+        // 类型/种类判定全部集中在纯函数里（单测覆盖）；缺失 EXTRA_TARGET_TYPE 的旧闹钟按用药处理
+        val dispatch = ReminderDispatch.decide(
+            targetTypeKey = intent.getStringExtra(EXTRA_TARGET_TYPE),
+            targetId = intent.getLongExtra(EXTRA_TARGET_ID, ReminderDispatch.NO_TARGET_ID),
+            medicationId = intent.getLongExtra(EXTRA_MED_ID, ReminderDispatch.NO_TARGET_ID),
+            isEarly = intent.getBooleanExtra(EXTRA_IS_EARLY, false),
+            isFollowUp = intent.getBooleanExtra(EXTRA_IS_FOLLOW_UP, false),
+        ) ?: return
+
+        when (dispatch.kind) {
+            ReminderKind.CARE_TASK -> handleCareTask(intent, dispatch.targetId)
+            ReminderKind.MEDICATION_NORMAL,
+            ReminderKind.MEDICATION_EARLY,
+            ReminderKind.MEDICATION_FOLLOW_UP,
+            -> handleMedication(intent, dispatch.targetId)
+        }
+    }
+
+    /** 用药提醒通路：与改造前逐字一致（提前预告 / 漏服再提醒 / 正式提醒）。 */
+    private fun handleMedication(intent: Intent, medId: Long) {
         val medName = intent.getStringExtra(EXTRA_MED_NAME) ?: return
         val memberName = intent.getStringExtra(EXTRA_RECIPIENT_NAME)
         val timeIndex = intent.getIntExtra(EXTRA_TIME_INDEX, 0)
         val isEarly = intent.getBooleanExtra(EXTRA_IS_EARLY, false)
         val isFollowUp = intent.getBooleanExtra(EXTRA_IS_FOLLOW_UP, false)
-        if (medId == -1L) return
 
         val nowMs = clock.millis()
         val scheduledMs = intent.getLongExtra(EXTRA_SCHEDULED_MS, nowMs)
@@ -195,6 +217,26 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * 照护事项提醒通路（T3 最小实现）：标题带成员名与事项名，点击打开 App。
+     *
+     * 只展示提醒本身 —— 不写任何 CareTaskLog、不加任何动作按钮（完成语义归后续任务）。
+     * 事项名从数据库读取，闹钟 intent 无需携带文案。
+     */
+    private fun handleCareTask(intent: Intent, taskId: Long) {
+        val memberName = intent.getStringExtra(EXTRA_RECIPIENT_NAME)
+        val timeIndex = intent.getIntExtra(EXTRA_TIME_INDEX, 0)
+        goAsyncSafe {
+            val task = careTaskRepo.getTaskById(taskId) ?: return@goAsyncSafe
+            notificationHelper.showCareTaskNotification(
+                taskId = task.id,
+                taskTitle = task.title,
+                timeIndex = timeIndex,
+                memberName = memberName,
+            )
         }
     }
 }

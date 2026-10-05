@@ -143,7 +143,7 @@
 
 - T1 实体 + DAO + 仓储 + v19→v20 迁移（单测：迁移三路径、成员隔离、级联、唯一键）
 - T2 `ReminderTarget` 抽象 + 编号空间（单测：区间不重叠、key 解析往返）
-- T3 提醒链路泛化（真机：药物提醒行为不回归 —— 这是本阶段最重要的回归门）
+- T3 提醒通道身份泛化（新增 target-type/id extras + 接收器按类型分派 + CARE_TASK 通知分支；**用药路径逐字不变**，门禁 = 装机后与改造前基线做闹钟时刻 diff：`bash ~/t3-gate.sh`）——排期映射归 T4，完成语义归 T5，因此本步不写任何 CareTaskLog
 - T4 `CareTaskScheduleMapper`（单测：FIXED/INTERVAL/AS_NEEDED、完成锚定顺延、多时段）
 - T5 完成语义 UseCase（打卡/开始/完成/跳过/撤销 + 时长统计；单测 + 事务性）
 - T6 照护事项 UI（列表/详情/编辑；UI 契约测试）

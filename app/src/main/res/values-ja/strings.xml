@@ -528,6 +528,7 @@
     <string name="notif_title_with_member">%1$s・%2$s</string>
     <string name="notif_reminder_dose_label">用量：%s</string>
     <string name="notif_reminder_subtext">服薬リマインダー</string>
+    <string name="notif_care_task_body">ケア項目のリマインダー</string>
     <string name="notif_reminder_big_text">%2$s を %1$s 服用しましょう</string>
     <string name="notif_reminder_ticker">服薬時刻です：%s</string>
     <string name="notif_action_skip">スキップ</string>

@@ -31,6 +31,15 @@ private const val NOTIF_ID_PROGRESS = 9999
 const val EXTRA_MED_ID = "med_id"
 const val EXTRA_MED_NAME = "med_name"
 
+/**
+ * 类型化提醒目标（T3）：目标类型 key（[ReminderTargetType.key]，如 "med" / "task"）与目标 id。
+ *
+ * 旧版安装包排出的闹钟只带 [EXTRA_MED_ID]、不带这两个 extra，接收器按 [ReminderTargetType.MEDICATION]
+ * 兜底处理，保证升级后旧闹钟照常触发。
+ */
+const val EXTRA_TARGET_TYPE = "target_type"
+const val EXTRA_TARGET_ID = "target_id"
+
 /** 提醒所属家庭成员显示名（阶段 1）：用于通知标题区分成员。 */
 const val EXTRA_RECIPIENT_NAME = "recipient_name"
 const val EXTRA_TIME_INDEX = "time_index" // 提醒时间在列表中的索引
@@ -326,6 +335,36 @@ class NotificationHelper @Inject constructor(
             .asMedicationLiveUpdate(context.getString(R.string.notif_live_short_take))
             .build()
 
+        notificationManager.notify(notificationId, notification)
+    }
+
+    // ─── 照护事项提醒通知（T3）────────────────────────────────────────
+
+    /**
+     * 发送照护事项提醒通知。
+     *
+     * - 标题 = 家庭成员名 · 事项名（复用 [memberTitle]），点击打开 App；
+     * - 通知 id 取 [ReminderTarget] 的 CARE_TASK 编号空间（`codeBase + taskId*100 + slot`），与用药不撞码；
+     * - 本期只有「提醒」本身：不写任何 CareTaskLog、不加任何动作按钮（完成语义归后续任务）。
+     */
+    fun showCareTaskNotification(taskId: Long, taskTitle: String, timeIndex: Int = 0, memberName: String? = null) {
+        if (!notificationManager.areNotificationsEnabled()) return
+        val notificationId = ReminderTarget(
+            recipientId = 0,
+            type = ReminderTargetType.CARE_TASK,
+            id = taskId,
+        ).slotRequestCode(timeIndex)
+        val notification = NotificationCompat.Builder(context, CHANNEL_REMINDER)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(notificationColor)
+            .setContentTitle(memberTitle(memberName, taskTitle))
+            .setContentText(context.getString(R.string.notif_care_task_body))
+            .setContentIntent(openAppPendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setGroup(GROUP_REMINDERS)
+            .setAutoCancel(true)
+            .build()
         notificationManager.notify(notificationId, notification)
     }
 

@@ -15,6 +15,8 @@ import com.driezy.medlog.capability.widgets.WidgetRefresher
 import com.driezy.medlog.data.local.AiAnalysisCacheDao
 import com.driezy.medlog.data.local.AiUsageEventDao
 import com.driezy.medlog.data.local.CareRecipientDao
+import com.driezy.medlog.data.local.CareTaskDao
+import com.driezy.medlog.data.local.CareTaskLogDao
 import com.driezy.medlog.data.local.DrugAliasAssetParser
 import com.driezy.medlog.data.local.HealthRecordDao
 import com.driezy.medlog.data.local.MedLogDatabase
@@ -106,6 +108,12 @@ object DatabaseModule {
 
     @Provides
     fun provideMedicationLogDao(db: MedLogDatabase): MedicationLogDao = db.medicationLogDao()
+
+    @Provides
+    fun provideCareTaskDao(db: MedLogDatabase): CareTaskDao = db.careTaskDao()
+
+    @Provides
+    fun provideCareTaskLogDao(db: MedLogDatabase): CareTaskLogDao = db.careTaskLogDao()
 
     @Provides
     fun provideSymptomLogDao(db: MedLogDatabase): SymptomLogDao = db.symptomLogDao()
