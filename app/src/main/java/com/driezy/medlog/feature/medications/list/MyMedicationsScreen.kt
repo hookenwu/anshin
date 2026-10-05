@@ -21,6 +21,7 @@ import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
 import com.driezy.medlog.ui.util.doseDisplayText
 import com.driezy.medlog.ui.util.formatDose
+import com.driezy.medlog.ui.util.timePeriodsLabel
 import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
@@ -207,5 +208,16 @@ private fun scheduleLabel(medication: Medication): String {
             .joinToString { DayOfWeek.of(it).getDisplayName(TextStyle.SHORT, Locale.getDefault()) }
         else -> stringResource(R.string.detail_freq_daily)
     }
-    return "$frequency · ${medication.reminderTimes.replace(",", ", ")}"
+    return "$frequency · ${medication.scheduleTimeText()}"
+}
+
+/**
+ * 列表行里的「时间」部分：优先显示作息时段（如「午餐后、晚餐后」），
+ * 没有时段（精确时间 / 未识别）时才回落具体钟点。
+ */
+@Composable
+private fun Medication.scheduleTimeText(): String {
+    val periodLabel = timePeriodsLabel(timePeriod)
+    if (periodLabel != null) return periodLabel
+    return reminderTimes.replace(",", ", ")
 }
