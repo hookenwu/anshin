@@ -37,6 +37,11 @@ data class MedExportEntry(
     @SerialName("rh") val reminderHour: Int,
     @SerialName("rm") val reminderMinute: Int,
     @SerialName("dq") val doseQuantity: Double = 1.0,
+    /**
+     * 兼容别名：旧版本解码器把 `d` 当作必填，因此新版仍写出 `d = doseQuantity`（旧 App 扫新码不会解不开）。
+     * 新解码器把它当可选、读取时忽略，旧码里没有 `d` 也照常解。
+     */
+    @SerialName("d") val doseLegacy: Double? = null,
     /** 每 1 个 doseUnit 的规格（如 0.25 g/粒）。旧版本无此字段，缺省为 null。 */
     @SerialName("ds") val doseStrength: Double? = null,
     @SerialName("dsu") val doseStrengthUnit: String? = null,
@@ -133,6 +138,7 @@ object PlanExportCodec {
         reminderHour = reminderHour,
         reminderMinute = reminderMinute,
         doseQuantity = doseQuantity,
+        doseLegacy = doseQuantity,
         doseStrength = doseStrength,
         doseStrengthUnit = doseStrengthUnit,
         frequencyType = frequencyType,
