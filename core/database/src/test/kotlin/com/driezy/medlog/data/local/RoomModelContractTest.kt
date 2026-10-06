@@ -1,6 +1,8 @@
 package com.driezy.medlog.data.local
 
 import com.driezy.medlog.data.model.CareRecipient
+import com.driezy.medlog.data.model.CareTodo
+import com.driezy.medlog.data.model.CareTodoStatus
 import com.driezy.medlog.data.model.HealthRecord
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
@@ -23,7 +25,23 @@ class RoomModelContractTest {
         assertEquals(7L, log.medicationId)
         assertEquals("WEIGHT", record.type)
         assertEquals("", symptom.medicationName)
-        assertEquals(21, DatabaseSchema.VERSION)
+        assertEquals(22, DatabaseSchema.VERSION)
+    }
+
+    @Test
+    fun `care todo defaults to open with no closed timestamp and no scheduling fields`() {
+        val todo = CareTodo(careRecipientId = 3L, title = "让护士看一下压疮风险")
+
+        assertEquals(CareTodoStatus.OPEN, todo.status)
+        assertEquals(null, todo.closedAtMs)
+        assertEquals(null, todo.dueAtMs)
+        assertEquals(null, todo.sourceType)
+        assertEquals(null, todo.sourceId)
+        assertEquals(null, todo.sourceNote)
+        assertEquals(null, todo.resolutionNote)
+        // 三态语义互不重叠：DONE 计完成、CANCELLED 不计完成也不计逾期。
+        assertEquals(listOf("DONE", "CANCELLED"), CareTodoStatus.closed)
+        assertEquals(listOf("OPEN", "DONE", "CANCELLED"), CareTodoStatus.all)
     }
 
     @Test

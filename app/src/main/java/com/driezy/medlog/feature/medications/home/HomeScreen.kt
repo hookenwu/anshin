@@ -55,6 +55,8 @@ fun HomeScreen(
     onMedicationClick: (Long) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenCareTasks: () -> Unit = {},
+    onOpenTodos: () -> Unit = {},
+    onCreateTodo: () -> Unit = {},
     familyMembers: List<CareRecipient> = emptyList(),
     activeRecipientId: Long = 0L,
     onSelectFamilyMember: (Long) -> Unit = {},
@@ -102,6 +104,15 @@ fun HomeScreen(
                     )
                     snackbarHostState.showSnackbar(message)
                 }
+                is HomeUiEffect.TodoCompleted -> {
+                    val result = snackbarHostState.showSnackbar(
+                        importResources.getString(R.string.care_todo_completed),
+                        actionLabel = importResources.getString(R.string.home_snackbar_undo),
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        viewModel.onAction(HomeUiAction.TodoReopen(effect.todoId))
+                    }
+                }
             }
         }
     }
@@ -113,6 +124,8 @@ fun HomeScreen(
         onMedicationClick = onMedicationClick,
         onOpenSettings = onOpenSettings,
         onOpenCareTasks = onOpenCareTasks,
+        onOpenTodos = onOpenTodos,
+        onCreateTodo = onCreateTodo,
         familyMembers = familyMembers,
         activeRecipientId = activeRecipientId,
         onSelectFamilyMember = onSelectFamilyMember,
@@ -130,6 +143,8 @@ internal fun HomeContent(
     onMedicationClick: (Long) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenCareTasks: () -> Unit,
+    onOpenTodos: () -> Unit = {},
+    onCreateTodo: () -> Unit = {},
     familyMembers: List<CareRecipient> = emptyList(),
     activeRecipientId: Long = 0L,
     onSelectFamilyMember: (Long) -> Unit = {},
@@ -187,6 +202,12 @@ internal fun HomeContent(
             }
         },
         actions = memberActions + listOf(
+            TopBarAction(
+                id = "todos",
+                label = stringResource(R.string.care_todo_nav_action),
+                icon = MedLogIcons.DoneAll,
+                priority = TopBarActionPriority.Secondary,
+            ),
             TopBarAction(
                 id = "care_tasks",
                 label = stringResource(R.string.care_task_nav_action),
@@ -248,6 +269,7 @@ internal fun HomeContent(
                 }
                 "settings" -> onOpenSettings()
                 "care_tasks" -> onOpenCareTasks()
+                "todos" -> onOpenTodos()
             }
         },
     ) { innerPadding ->
@@ -282,6 +304,20 @@ internal fun HomeContent(
                     onAddMedication = onAddMedication,
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+
+            // ── 待办区块（未闭环）：hero 之后、时间轴之前；无待办时整块不渲染 ──
+            uiState.todoBlock?.let { block ->
+                item(key = "homeTodoSection", contentType = "homeTodoSection") {
+                    HomeTodoSectionCard(
+                        block = block,
+                        savingIds = uiState.savingTodoIds,
+                        onComplete = { onAction(HomeUiAction.TodoComplete(it)) },
+                        onOpenAll = onOpenTodos,
+                        onCreate = onCreateTodo,
+                        modifier = Modifier.animateItem(),
+                    )
+                }
             }
 
             // ── 低库存警告 banner ──────────────────────────────

@@ -11,6 +11,7 @@ import com.driezy.medlog.data.model.LogStatus
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
 import com.driezy.medlog.data.repository.CareTaskRepository
+import com.driezy.medlog.data.repository.CareTodoRepository
 import com.driezy.medlog.data.repository.HomeHeroStyle
 import com.driezy.medlog.data.repository.LogRepository
 import com.driezy.medlog.data.repository.MedicationRepository
@@ -96,6 +97,13 @@ data class HomeUiState(
     val todayFilter: TodayFilter = TodayFilter.All,
     /** 正在写入的照护事项槽位 key（`"<taskId>:<scheduled>"`），防重复点击。 */
     val savingCareKeys: Set<String> = emptySet(),
+    /**
+     * 首页「待办」区块（docs/todos.md §3）。null = 无未闭环待办，**整个区块不渲染**。
+     * 待办刻意不进入 [todayItems] / [overallTotal] / [overallHandled] / hero / 进度通知。
+     */
+    val todoBlock: HomeTodoBlock? = null,
+    /** 正在写入的待办 id，防重复点击。 */
+    val savingTodoIds: Set<Long> = emptySet(),
 ) {
     val heroPresentation: HomeHeroPresentation by lazy {
         HomeHeroPresentation.from(items)
@@ -161,12 +169,19 @@ sealed interface HomeUiAction {
     data class CareTaskStart(val taskId: Long, val scheduledAtMs: Long) : HomeUiAction
     data class CareTaskSkip(val taskId: Long, val scheduledAtMs: Long) : HomeUiAction
     data class CareTaskUndo(val taskId: Long, val scheduledAtMs: Long) : HomeUiAction
+
+    // ── 待办闭环：只经 CareTodoRepository（不新建记录通路，不触发任何提醒/通知） ──
+    data class TodoComplete(val todoId: Long) : HomeUiAction
+    data class TodoReopen(val todoId: Long) : HomeUiAction
 }
 
 sealed interface HomeUiEffect {
     data class ImportSucceeded(val count: Int) : HomeUiEffect
     data class DoseSaved(val change: DoseChange) : HomeUiEffect
     data class Failed(val message: String?) : HomeUiEffect
+
+    /** 完成后给出「撤销」机会，失败不产生成功回执。 */
+    data class TodoCompleted(val todoId: Long) : HomeUiEffect
 }
 
 private data class HomeObservation(val state: HomeUiState, val showProgressNotification: Boolean)
@@ -197,6 +212,7 @@ class HomeViewModel @Inject constructor(
     private val planCalculator: FuturePlanCalculator,
     private val careTaskRepo: CareTaskRepository,
     private val careTaskCompletion: CareTaskCompletionUseCase,
+    private val careTodoRepository: CareTodoRepository,
     @param:ComputationDispatcher private val computationDispatcher: CoroutineDispatcher,
 ) : BaseViewModel() {
 
@@ -206,6 +222,7 @@ class HomeViewModel @Inject constructor(
     private val currentTime = MutableStateFlow(clock.instant())
     private val busyDoses = mutableSetOf<MedicationDoseKey>()
     private val busyCareSlots = mutableSetOf<String>()
+    private val busyTodoIds = mutableSetOf<Long>()
 
     /** 照护事项时间轴输入；活跃事项流每次发射时刷新一次当日日志。 */
     private val careTimeline = MutableStateFlow(CareTimelineInput())
@@ -230,6 +247,7 @@ class HomeViewModel @Inject constructor(
     init {
         observeMedications()
         observeCareTasks()
+        observeTodos()
         computeStreak()
         scanLowStockOnLaunch()
     }
@@ -267,6 +285,8 @@ class HomeViewModel @Inject constructor(
                 runCareCommand(action.taskId, action.scheduledAtMs) {
                     careTaskCompletion.undo(it, action.scheduledAtMs)
                 }
+            is HomeUiAction.TodoComplete -> completeTodo(action.todoId)
+            is HomeUiAction.TodoReopen -> reopenTodo(action.todoId)
         }
     }
 
@@ -321,6 +341,67 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun careSlotKey(taskId: Long, scheduledAtMs: Long) = "$taskId:$scheduledAtMs"
+
+    /**
+     * 首页待办区块的观察：未闭环待办流 × 成员时区设置 × 当前时间 → 排序/封顶后的区块。
+     * 与用药/照护时间轴**完全分离**的独立流，仅写入 [HomeUiState.todoBlock]。
+     */
+    private fun observeTodos() {
+        safeLaunch {
+            combine(
+                careTodoRepository.getOpenTodos(),
+                prefsRepository.settingsFlow,
+                currentTime,
+            ) { todos, preferences, now ->
+                buildHomeTodoBlock(todos, now.toEpochMilli(), preferences.reminderZone(clock.zone))
+            }
+                .catch { error -> _uiState.update { it.copy(errorMessage = error.localizedMessage) } }
+                .collect { block -> _uiState.update { it.copy(todoBlock = block) } }
+        }
+    }
+
+    /** 完成待办：成功后发「撤销」回执；重复点击被 [busyTodoIds] 挡住。 */
+    fun completeTodo(todoId: Long) {
+        if (!busyTodoIds.add(todoId)) return
+        _uiState.update { it.copy(savingTodoIds = busyTodoIds.toSet(), errorMessage = null) }
+        safeLaunch(
+            onError = { error ->
+                busyTodoIds.remove(todoId)
+                _uiState.update {
+                    it.copy(savingTodoIds = busyTodoIds.toSet(), errorMessage = error.localizedMessage)
+                }
+            },
+        ) {
+            try {
+                careTodoRepository.complete(todoId)
+                effectChannel.send(HomeUiEffect.TodoCompleted(todoId))
+            } finally {
+                busyTodoIds.remove(todoId)
+                _uiState.update { it.copy(savingTodoIds = busyTodoIds.toSet()) }
+            }
+        }
+    }
+
+    /** 撤销待办：回 OPEN 并清空 closedAtMs（由仓库收口）。 */
+    fun reopenTodo(todoId: Long) {
+        if (!busyTodoIds.add(todoId)) return
+        _uiState.update { it.copy(savingTodoIds = busyTodoIds.toSet(), errorMessage = null) }
+        safeLaunch(
+            onError = { error ->
+                busyTodoIds.remove(todoId)
+                _uiState.update {
+                    it.copy(savingTodoIds = busyTodoIds.toSet(), errorMessage = error.localizedMessage)
+                }
+            },
+        ) {
+            try {
+                careTodoRepository.reopen(todoId)
+            } finally {
+                busyTodoIds.remove(todoId)
+                _uiState.update { it.copy(savingTodoIds = busyTodoIds.toSet()) }
+            }
+        }
+    }
 
     /** 设置时间轴筛选（全部 / 用药 / 照护 / 照护子类）。 */
     fun setTodayFilter(filter: TodayFilter) {
@@ -436,6 +517,8 @@ class HomeViewModel @Inject constructor(
                     importError = previous.importError,
                     savingDoses = previous.savingDoses,
                     savingCareKeys = previous.savingCareKeys,
+                    todoBlock = previous.todoBlock,
+                    savingTodoIds = previous.savingTodoIds,
                 )
                 // 实时更新今日进度通知（去重：仅在 taken/total 真正变化时更新）
                 val hero = state.heroPresentation

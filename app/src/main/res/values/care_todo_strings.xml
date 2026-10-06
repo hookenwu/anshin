@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="care_todo_nav_action">待办</string>
+    <string name="care_todos_title">待办</string>
+    <string name="care_todo_block_title">待办</string>
+    <string name="care_todo_block_body">未闭环的跟进项</string>
+    <string name="care_todo_block_view_all">查看全部 %1$d 条</string>
+    <string name="care_todo_block_create">新建待办</string>
+    <string name="care_todo_action_complete">完成</string>
+    <string name="care_todo_action_undo">撤销</string>
+    <string name="care_todo_action_cancel">取消待办</string>
+    <string name="care_todo_action_reopen">重新打开</string>
+    <string name="care_todo_completed">待办已完成</string>
+    <string name="care_todo_due_overdue">已逾期</string>
+    <string name="care_todo_due_today">今天截止</string>
+    <string name="care_todo_tab_active">进行中</string>
+    <string name="care_todo_tab_history">历史</string>
+    <string name="care_todo_fab_add">新建待办</string>
+    <string name="care_todo_active_empty_title">暂无待办</string>
+    <string name="care_todo_active_empty_body">把要跟进的观察记成待办，办完即闭环</string>
+    <string name="care_todo_history_empty_title">暂无历史待办</string>
+    <string name="care_todo_history_empty_body">完成或取消的待办会显示在这里</string>
+    <string name="care_todo_load_failed">加载失败，请重试</string>
+    <string name="care_todo_manage_hint">查看或修改待办</string>
+    <string name="care_todo_new_title">新建待办</string>
+    <string name="care_todo_edit_title">编辑待办</string>
+    <string name="care_todo_field_title">标题</string>
+    <string name="care_todo_field_due">截止日期</string>
+    <string name="care_todo_field_source_note">来源备注</string>
+    <string name="care_todo_field_source_meta">来源：%1$s</string>
+    <string name="care_todo_save">保存</string>
+    <string name="care_todo_status_done">已完成</string>
+    <string name="care_todo_status_cancelled">已取消</string>
+    <string name="care_todo_error_title">请填写标题</string>
+    <string name="care_todo_cancel_title">取消待办</string>
+    <string name="care_todo_cancel_body">取消后待办进入历史，可随时重新打开。</string>
+</resources>

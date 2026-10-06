@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="care_todo_nav_action">やること</string>
+    <string name="care_todos_title">やること</string>
+    <string name="care_todo_block_title">やること</string>
+    <string name="care_todo_block_body">未完了のフォローアップ</string>
+    <string name="care_todo_block_view_all">すべて表示 %1$d 件</string>
+    <string name="care_todo_block_create">新規追加</string>
+    <string name="care_todo_action_complete">完了</string>
+    <string name="care_todo_action_undo">元に戻す</string>
+    <string name="care_todo_action_cancel">やめる</string>
+    <string name="care_todo_action_reopen">再開</string>
+    <string name="care_todo_completed">完了しました</string>
+    <string name="care_todo_due_overdue">期限超過</string>
+    <string name="care_todo_due_today">今日締切</string>
+    <string name="care_todo_tab_active">進行中</string>
+    <string name="care_todo_tab_history">履歴</string>
+    <string name="care_todo_fab_add">新規追加</string>
+    <string name="care_todo_active_empty_title">やることはありません</string>
+    <string name="care_todo_active_empty_body">気になることを記録してフォローしましょう</string>
+    <string name="care_todo_history_empty_title">履歴はありません</string>
+    <string name="care_todo_history_empty_body">完了・やめた項目がここに表示されます</string>
+    <string name="care_todo_load_failed">読み込みに失敗しました</string>
+    <string name="care_todo_manage_hint">内容を確認・編集</string>
+    <string name="care_todo_new_title">新規作成</string>
+    <string name="care_todo_edit_title">編集</string>
+    <string name="care_todo_field_title">タイトル</string>
+    <string name="care_todo_field_due">締切日</string>
+    <string name="care_todo_field_source_note">出典メモ</string>
+    <string name="care_todo_field_source_meta">出典：%1$s</string>
+    <string name="care_todo_save">保存</string>
+    <string name="care_todo_status_done">完了</string>
+    <string name="care_todo_status_cancelled">中止</string>
+    <string name="care_todo_error_title">タイトルを入力してください</string>
+    <string name="care_todo_cancel_title">やめますか</string>
+    <string name="care_todo_cancel_body">履歴に移動し、いつでも再開できます。</string>
+</resources>

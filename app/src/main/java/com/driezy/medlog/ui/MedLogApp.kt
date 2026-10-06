@@ -48,6 +48,8 @@ import com.driezy.medlog.feature.settings.ModuleSettingsScreen
 import com.driezy.medlog.feature.settings.ReminderSettingsScreen
 import com.driezy.medlog.feature.settings.SettingsScreen
 import com.driezy.medlog.feature.settings.WidgetSettingsScreen
+import com.driezy.medlog.feature.todos.CareTodoEditorScreen
+import com.driezy.medlog.feature.todos.CareTodosScreen
 import com.driezy.medlog.ui.navigation.MedLogNavigationWrapper
 import com.driezy.medlog.ui.navigation.Route
 import com.driezy.medlog.ui.navigation.TOP_LEVEL_DESTINATIONS
@@ -227,6 +229,8 @@ private fun MedLogNavHost(
                 onMedicationClick = { id -> navController.navigate(Route.MedDetail(id)) },
                 onOpenSettings = { navController.navigate(Route.Settings) },
                 onOpenCareTasks = { navController.navigate(Route.CareTasks) },
+                onOpenTodos = { navController.navigate(Route.Todos) },
+                onCreateTodo = { navController.navigate(Route.TodoEditor()) },
                 familyMembers = familyMembers,
                 activeRecipientId = activeRecipientId,
                 onSelectFamilyMember = onSelectFamilyMember,
@@ -448,6 +452,31 @@ private fun MedLogNavHost(
             val route: Route.CareTaskEditor = backStackEntry.toRoute()
             CareTaskEditorScreen(
                 careTaskId = route.careTaskId.takeIf { it != -1L },
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
+            )
+        }
+        composable<Route.Todos>(
+            enterTransition = { materialSharedAxisX(forward = true) },
+            exitTransition = { navFadeOut },
+            popEnterTransition = { materialSharedAxisX(forward = false) },
+            popExitTransition = { materialSharedAxisXOut(forward = true) },
+        ) {
+            CareTodosScreen(
+                onAdd = { navController.navigate(Route.TodoEditor()) },
+                onOpen = { id -> navController.navigate(Route.TodoEditor(id)) },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable<Route.TodoEditor>(
+            enterTransition = { materialSharedAxisX(forward = true) },
+            exitTransition = { navFadeOut },
+            popEnterTransition = { materialSharedAxisX(forward = false) },
+            popExitTransition = { materialSharedAxisXOut(forward = true) },
+        ) { backStackEntry ->
+            val route: Route.TodoEditor = backStackEntry.toRoute()
+            CareTodoEditorScreen(
+                todoId = route.todoId.takeIf { it != -1L },
                 onBack = { navController.popBackStack() },
                 onSaved = { navController.popBackStack() },
             )

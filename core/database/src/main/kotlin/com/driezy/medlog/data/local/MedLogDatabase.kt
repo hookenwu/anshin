@@ -10,6 +10,7 @@ import com.driezy.medlog.data.model.AiUsageEvent
 import com.driezy.medlog.data.model.CareRecipient
 import com.driezy.medlog.data.model.CareTask
 import com.driezy.medlog.data.model.CareTaskLog
+import com.driezy.medlog.data.model.CareTodo
 import com.driezy.medlog.data.model.HealthRecord
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
@@ -21,6 +22,7 @@ import com.driezy.medlog.data.model.SymptomLog
         CareRecipient::class,
         CareTask::class,
         CareTaskLog::class,
+        CareTodo::class,
         Medication::class,
         MedicationLog::class,
         MedicationPlanRevision::class,
@@ -37,6 +39,7 @@ abstract class MedLogDatabase : RoomDatabase() {
     abstract fun careRecipientDao(): CareRecipientDao
     abstract fun careTaskDao(): CareTaskDao
     abstract fun careTaskLogDao(): CareTaskLogDao
+    abstract fun careTodoDao(): CareTodoDao
     abstract fun medicationDao(): MedicationDao
     abstract fun medicationLogDao(): MedicationLogDao
     abstract fun symptomLogDao(): SymptomLogDao
@@ -128,6 +131,44 @@ abstract class MedLogDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_medications_careRecipientId` " +
                         "ON `medications` (`careRecipientId`)",
+                )
+            }
+        }
+
+        /**
+         * v21 → v22：新增待办表 `care_todos`（docs/todos.md §4）。
+         *
+         * 照 `MIGRATION_19_20` 的先例，**纯新增**：只建表 + 两条索引，不触碰任何既有表与数据。
+         * 同样适用于「恢复的 v21 备份」——`BackupCompatibilityPolicy.canRestore` 上界跟随
+         * [DatabaseSchema.VERSION]，被恢复的 v21 库在 App 首次打开时执行的正是这段迁移。
+         */
+        val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `care_todos` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `careRecipientId` INTEGER NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `dueAtMs` INTEGER,
+                        `sourceType` TEXT,
+                        `sourceId` INTEGER,
+                        `sourceNote` TEXT,
+                        `createdAtMs` INTEGER NOT NULL,
+                        `closedAtMs` INTEGER,
+                        `resolutionNote` TEXT,
+                        FOREIGN KEY(`careRecipientId`) REFERENCES `care_recipients`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_todos_careRecipientId` " +
+                        "ON `care_todos` (`careRecipientId`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_todos_status` ON `care_todos` (`status`)",
                 )
             }
         }

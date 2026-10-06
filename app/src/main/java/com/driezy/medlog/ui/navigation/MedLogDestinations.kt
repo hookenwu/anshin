@@ -44,6 +44,12 @@ import kotlinx.serialization.Serializable
     /** 照护事项（非药物干预）列表。 */
     @Serializable data object CareTasks : Route
 
+    /** 待办列表（进行中 / 历史）。 */
+    @Serializable data object Todos : Route
+
+    /** @param todoId 编辑模式已有记录的 id（-1 代表新增） */
+    @Serializable data class TodoEditor(val todoId: Long = -1) : Route
+
     @Serializable data class MedDetail(val medicationId: Long) : Route
 
     /**

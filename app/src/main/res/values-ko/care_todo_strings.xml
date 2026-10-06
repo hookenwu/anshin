@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="care_todo_nav_action">할 일</string>
+    <string name="care_todos_title">할 일</string>
+    <string name="care_todo_block_title">할 일</string>
+    <string name="care_todo_block_body">미완료 후속 항목</string>
+    <string name="care_todo_block_view_all">전체 보기 %1$d개</string>
+    <string name="care_todo_block_create">새 할 일</string>
+    <string name="care_todo_action_complete">완료</string>
+    <string name="care_todo_action_undo">실행 취소</string>
+    <string name="care_todo_action_cancel">취소</string>
+    <string name="care_todo_action_reopen">다시 열기</string>
+    <string name="care_todo_completed">할 일을 완료했습니다</string>
+    <string name="care_todo_due_overdue">기한 지남</string>
+    <string name="care_todo_due_today">오늘 마감</string>
+    <string name="care_todo_tab_active">진행 중</string>
+    <string name="care_todo_tab_history">기록</string>
+    <string name="care_todo_fab_add">새 할 일</string>
+    <string name="care_todo_active_empty_title">할 일이 없습니다</string>
+    <string name="care_todo_active_empty_body">챙길 일을 기록해 두세요</string>
+    <string name="care_todo_history_empty_title">기록이 없습니다</string>
+    <string name="care_todo_history_empty_body">완료하거나 취소한 항목이 여기에 표시됩니다</string>
+    <string name="care_todo_load_failed">불러오지 못했습니다</string>
+    <string name="care_todo_manage_hint">내용 확인 또는 수정</string>
+    <string name="care_todo_new_title">새 할 일</string>
+    <string name="care_todo_edit_title">할 일 편집</string>
+    <string name="care_todo_field_title">제목</string>
+    <string name="care_todo_field_due">마감일</string>
+    <string name="care_todo_field_source_note">출처 메모</string>
+    <string name="care_todo_field_source_meta">출처: %1$s</string>
+    <string name="care_todo_save">저장</string>
+    <string name="care_todo_status_done">완료</string>
+    <string name="care_todo_status_cancelled">취소됨</string>
+    <string name="care_todo_error_title">제목을 입력하세요</string>
+    <string name="care_todo_cancel_title">할 일 취소</string>
+    <string name="care_todo_cancel_body">기록으로 이동하며 언제든 다시 열 수 있습니다.</string>
+</resources>

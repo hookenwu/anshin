@@ -2,6 +2,7 @@ package com.driezy.medlog.feature.medications.home
 
 import app.cash.turbine.test
 import com.driezy.medlog.data.local.TransactionRunner
+import com.driezy.medlog.data.model.CareTodo
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationPlanRevision
 import com.driezy.medlog.data.repository.*
@@ -19,6 +20,7 @@ class HomeViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val meds = FakeMedicationRepository()
     private val logs = FakeLogRepository()
+    private val todos = FakeCareTodoRepository()
     private val clock = MovingClock(Instant.parse("2026-09-19T01:00:00Z"), ZoneId.of("Asia/Shanghai"))
     private val gate = CompletableDeferred<Unit>()
     private var failWrite = false
@@ -54,6 +56,7 @@ class HomeViewModelTest {
             planCalculator = FuturePlanCalculator(clock),
             careTaskRepo = careTasks,
             careTaskCompletion = mock(),
+            careTodoRepository = todos,
             computationDispatcher = dispatcher,
         )
     }
@@ -154,6 +157,50 @@ class HomeViewModelTest {
         assertEquals(1, state.overallTotal)
         assertEquals(1, state.heroPresentation.totalCount)
         assertTrue(state.todayItems.none { it.targetId == archivedId })
+    }
+
+    @Test fun `zero todos renders no block and leaves the rest of the home state byte-identical`() = runTest {
+        meds.addMedication(Medication(name = "药", doseUnit = "片", startDate = clock.millis()))
+        val model = viewModel()
+        advanceUntilIdle()
+
+        val baseline = model.uiState.value
+        assertNull("无待办时不得渲染区块", baseline.todoBlock)
+        assertTrue(baseline.todayItems.isNotEmpty())
+
+        // 加入一条待办：区块出现，但今日计划/进度/按需/PRN 逐项不变
+        todos.seed(CareTodo(careRecipientId = 1L, title = "待办A", createdAtMs = 1_000L))
+        advanceUntilIdle()
+        val withTodo = model.uiState.value
+
+        assertNotNull(withTodo.todoBlock)
+        assertEquals(listOf("待办A"), withTodo.todoBlock!!.visible.map { it.todo.title })
+        assertEquals(baseline.todayItems.map { it.listKey }, withTodo.todayItems.map { it.listKey })
+        assertEquals(baseline.overallTotal, withTodo.overallTotal)
+        assertEquals(baseline.overallHandled, withTodo.overallHandled)
+        assertEquals(baseline.asNeededCareItems.map { it.listKey }, withTodo.asNeededCareItems.map { it.listKey })
+        assertEquals(baseline.prnItems.map { it.medication.id }, withTodo.prnItems.map { it.medication.id })
+        assertEquals(baseline.heroPresentation.totalCount, withTodo.heroPresentation.totalCount)
+    }
+
+    @Test fun `completing a todo removes the row from the block and undo restores it`() = runTest {
+        val id = todos.seed(CareTodo(careRecipientId = 1L, title = "待办A", createdAtMs = 1_000L))
+        val model = viewModel()
+        advanceUntilIdle()
+        assertEquals(listOf(id), model.uiState.value.todoBlock!!.visible.map { it.todo.id })
+
+        model.effects.test {
+            model.onAction(HomeUiAction.TodoComplete(id))
+            advanceUntilIdle()
+            assertTrue(awaitItem() is HomeUiEffect.TodoCompleted)
+            expectNoEvents()
+        }
+        // DONE 从首页消失
+        assertTrue(model.uiState.value.todoBlock == null)
+
+        model.onAction(HomeUiAction.TodoReopen(id))
+        advanceUntilIdle()
+        assertEquals(listOf(id), model.uiState.value.todoBlock!!.visible.map { it.todo.id })
     }
 
     private class MovingClock(var now: Instant, private val timeZone: ZoneId) : Clock() {
