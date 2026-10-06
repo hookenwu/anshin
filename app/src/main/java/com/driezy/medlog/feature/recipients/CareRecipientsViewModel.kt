@@ -66,7 +66,7 @@ class CareRecipientsViewModel @Inject constructor(
         when (action) {
             is CareRecipientsUiAction.Create -> create(action.displayName)
             is CareRecipientsUiAction.Rename -> rename(action.id, action.displayName)
-            is CareRecipientsUiAction.Delete -> safeLaunch { repository.delete(action.id) }
+            is CareRecipientsUiAction.Delete -> delete(action.id)
             is CareRecipientsUiAction.SetActive -> setActive(action.id)
         }
     }
@@ -94,6 +94,20 @@ class CareRecipientsViewModel @Inject constructor(
             } finally {
                 saving.value = false
             }
+        }
+    }
+
+    /**
+     * 删除成员：级联删除其数据后立即重排提醒。
+     *
+     * 成员删除后其名下的投影登记项（如 `1:task:1`）不会再被任何"按成员重排"覆盖到，
+     * 必须靠一次全量重排的自愈清理撤销，否则会留下 phantom 提醒。
+     */
+    private fun delete(id: Long) {
+        safeLaunch {
+            repository.delete(id)
+            widgetRefresher.refreshAll()
+            reconcileReminders.all(ReminderReconcileReason.MEDICATION_CHANGED)
         }
     }
 

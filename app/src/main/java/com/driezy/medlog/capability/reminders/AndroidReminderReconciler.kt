@@ -30,10 +30,12 @@ class AndroidReminderReconciler @Inject constructor(
 ) : ReminderReconciler {
     override suspend fun reconcileMedication(id: MedicationId, reason: ReminderReconcileReason) {
         val medication = medications.getMedicationById(id.value)
-        alarmScheduler.cancelAllAlarms(
-            id.value,
-            medication?.careRecipientId ?: ActiveRecipientStore.NO_RECIPIENT,
-        )
+        if (medication != null) {
+            alarmScheduler.cancelAllAlarms(id.value, medication.careRecipientId)
+        } else {
+            // 行已硬删除：拿不到 careRecipientId，按 (type, id) 跨成员撤销残留登记项
+            alarmScheduler.cancelAlarmsForMissingOwner(ReminderTargetType.MEDICATION, id.value).cancelNotifications()
+        }
         notificationHelper.cancelAllReminderNotifications(id.value)
         if (medication != null && !medication.isArchived && !medication.isPRN) {
             schedule(medication)
@@ -49,10 +51,12 @@ class AndroidReminderReconciler @Inject constructor(
      */
     override suspend fun reconcileCareTask(id: Long, reason: ReminderReconcileReason) {
         val task = careTasks.getTaskById(id)
-        alarmScheduler.cancelCareTaskAlarms(
-            id,
-            task?.careRecipientId ?: ActiveRecipientStore.NO_RECIPIENT,
-        )
+        if (task != null) {
+            alarmScheduler.cancelCareTaskAlarms(id, task.careRecipientId)
+        } else {
+            // 行已硬删除：拿不到 careRecipientId，按 (type, id) 跨成员撤销残留登记项
+            alarmScheduler.cancelAlarmsForMissingOwner(ReminderTargetType.CARE_TASK, id).cancelNotifications()
+        }
         notificationHelper.cancelCareTaskNotifications(id)
         if (task != null && !task.isArchived && task.scheduleKind != CareTaskScheduleKind.AS_NEEDED) {
             scheduleCareTask(task)
@@ -70,15 +74,19 @@ class AndroidReminderReconciler @Inject constructor(
         alarmScheduler.refreshRecipientCaches()
         // 阶段 0 遗留的、无法判定归属的登记项一次性作废（紧随其后的重排会重建）
         alarmScheduler.cancelUnattributedAlarms().cancelNotifications()
-        val recipientIds = careRecipients.getRecipients()
-            .map { it.id }
+        val recipients = careRecipients.getRecipients()
+        val recipientIds = recipients.map { it.id }
             .ifEmpty { listOf(ActiveRecipientStore.NO_RECIPIENT) }
+        // 本轮真正存活的目标：成员存在且实体未归档 / 未按需。清理后重排会重新登记它们。
+        val liveMedications = mutableSetOf<Long>()
+        val liveCareTasks = mutableSetOf<Long>()
         recipientIds.forEach { recipientId ->
             alarmScheduler.cancelAlarmsFor(recipientId).cancelNotifications()
             // 用"含归档"的整份清单做清理：归档药品的残留通知也要收掉（改造前就是这么做的）
             medications.getAllMedicationsFor(recipientId).forEach { medication ->
                 notificationHelper.cancelAllReminderNotifications(medication.id)
                 if (!medication.isArchived && !medication.isPRN) {
+                    liveMedications += medication.id
                     schedule(medication)
                 }
             }
@@ -86,10 +94,21 @@ class AndroidReminderReconciler @Inject constructor(
             careTasks.getAllTasksFor(recipientId).forEach { task ->
                 notificationHelper.cancelCareTaskNotifications(task.id)
                 if (!task.isArchived && task.scheduleKind != CareTaskScheduleKind.AS_NEEDED) {
+                    liveCareTasks += task.id
                     scheduleCareTask(task)
                 }
             }
         }
+        // 自愈清理：成员已删除、实体已硬删除或已归档时，登记项不会被上面的"按成员重排"覆盖到，
+        // 这里统一兑现并撤销，避免 phantom 提醒残留。存活目标原样保留，不误取消应保留的闹钟。
+        val liveRecipientIds = recipients.map { it.id }.toSet()
+        alarmScheduler.pruneOrphanedProjections { target ->
+            target.recipientId in liveRecipientIds &&
+                when (target.type) {
+                    ReminderTargetType.MEDICATION -> target.id in liveMedications
+                    ReminderTargetType.CARE_TASK -> target.id in liveCareTasks
+                }
+        }.cancelNotifications()
         widgetRefresher.refreshAll()
     }
 

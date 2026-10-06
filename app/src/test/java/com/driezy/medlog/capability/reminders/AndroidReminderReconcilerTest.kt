@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -250,14 +252,71 @@ class AndroidReminderReconcilerTest {
     }
 
     @Test
-    fun `reconciling a deleted care task only cleans up`() = runTest {
+    fun `reconciling a deleted care task cancels by identity so the phantom entry is reclaimed`() = runTest {
         whenever(careTasks.getTaskById(61L)).thenReturn(null)
 
         reconciler.reconcileCareTask(61L, ReminderReconcileReason.MEDICATION_CHANGED)
 
-        verify(alarms).cancelCareTaskAlarms(61L, 0L)
+        // 行已删除 → 拿不到成员 id，必须按 (type, id) 跨成员清理，不能退化成 (0, id)
+        verify(alarms).cancelAlarmsForMissingOwner(ReminderTargetType.CARE_TASK, 61L)
+        verify(alarms, never()).cancelCareTaskAlarms(any(), any())
         verify(notifications).cancelCareTaskNotifications(61L)
         verify(alarms, never()).scheduleCareTaskReminders(any(), any(), any())
+    }
+
+    @Test
+    fun `reconciling a deleted medication cancels by identity instead of an unknown recipient`() = runTest {
+        reconciler.reconcileMedication(MedicationId(91L), ReminderReconcileReason.MEDICATION_CHANGED)
+
+        verify(alarms).cancelAlarmsForMissingOwner(ReminderTargetType.MEDICATION, 91L)
+        verify(alarms, never()).cancelAllAlarms(eq(91L), any())
+        verify(notifications).cancelAllReminderNotifications(91L)
+        verify(alarms, never()).scheduleAllReminders(any(), any(), any())
+    }
+
+    @Test
+    fun `full reconciliation prunes orphaned projections and reclaims their notifications`() = runTest {
+        val orphanTask = ReminderTarget(1L, ReminderTargetType.CARE_TASK, 1L)
+        val orphanMedication = ReminderTarget(1L, ReminderTargetType.MEDICATION, 13L)
+        whenever(careRecipients.getRecipients()).thenReturn(
+            listOf(CareRecipient(id = RECIPIENT_ID, uuid = "uuid-7", displayName = "妈妈")),
+        )
+        whenever(alarms.pruneOrphanedProjections(any())).thenReturn(listOf(orphanTask, orphanMedication))
+
+        reconciler.reconcileAll(ReminderReconcileReason.SYSTEM_EVENT)
+
+        verify(alarms).pruneOrphanedProjections(any())
+        verify(notifications).cancelCareTaskNotifications(1L)
+        verify(notifications).cancelAllReminderNotifications(13L)
+    }
+
+    @Test
+    fun `active medication is never reported as an orphan by the self-healing prune`() = runTest {
+        val active = medication(id = 1L)
+        medications.addMedication(active)
+        whenever(careRecipients.getRecipients()).thenReturn(
+            listOf(CareRecipient(id = RECIPIENT_ID, uuid = "uuid-7", displayName = "妈妈")),
+        )
+        whenever(alarms.pruneOrphanedProjections(any())).thenReturn(emptyList())
+
+        reconciler.reconcileAll(ReminderReconcileReason.SYSTEM_EVENT)
+
+        // 存活用药照常重排登记；清理回调只对非存活目标返回 true
+        verify(alarms).scheduleAllReminders(active, null)
+        val predicate = org.mockito.kotlin.argumentCaptor<(ReminderTarget) -> Boolean>()
+        verify(alarms).pruneOrphanedProjections(predicate.capture())
+        assertTrue(
+            "本轮刚排期的存活用药不能被判为孤儿",
+            predicate.firstValue(ReminderTarget(RECIPIENT_ID, ReminderTargetType.MEDICATION, 1L)),
+        )
+        assertFalse(
+            "已归档用药是孤儿",
+            predicate.firstValue(ReminderTarget(RECIPIENT_ID, ReminderTargetType.MEDICATION, 2L)),
+        )
+        assertFalse(
+            "已删除成员名下的目标一律是孤儿",
+            predicate.firstValue(ReminderTarget(999L, ReminderTargetType.CARE_TASK, 1L)),
+        )
     }
 
     private fun medication(id: Long, archived: Boolean = false, asNeeded: Boolean = false) = Medication(

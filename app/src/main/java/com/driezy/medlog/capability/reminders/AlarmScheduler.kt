@@ -301,15 +301,43 @@ class AlarmScheduler @Inject constructor(
 
     /** 当前登记的全部目标；旧格式（阶段 1 的两段式、阶段 0 的裸 id）一并识别。 */
     @Synchronized
-    private fun registeredTargets(): List<ReminderTarget> =
-        projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty()
-            .mapNotNull { entry ->
-                ReminderTarget.parse(entry)
-                    ?: ReminderTarget.parseLegacyRecipientKey(entry)
-                    ?: entry.toLongOrNull()?.let { id ->
-                        ReminderTarget(ActiveRecipientStore.NO_RECIPIENT, ReminderTargetType.MEDICATION, id)
-                    }
-            }
+    private fun registeredTargets(): List<ReminderTarget> = AlarmProjectionRegistry.parseAll(
+        projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty(),
+    )
+
+    /**
+     * 目标所属行已不存在（例如刚被硬删除），成员 id 无从得知：
+     * 按 `(type, id)` 跨成员取消闹钟并撤销所有匹配的登记项。
+     *
+     * 这是修复 phantom 登记项的关键：删除后 `getXxxById` 返回 null，调用方拿不到 `careRecipientId`，
+     * 只按 `(0, id)` 撤销就永远清不掉真实的 `<recipientId>:<type>:<id>`。
+     */
+    @Synchronized
+    fun cancelAlarmsForMissingOwner(type: ReminderTargetType, id: Long): List<ReminderTarget> {
+        val matched = AlarmProjectionRegistry.matchingIdentity(
+            projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty(),
+            type,
+            id,
+        )
+        matched.forEach(::cancelTargetAlarms)
+        return matched
+    }
+
+    /**
+     * 自愈清理：撤销所有所属成员/实体已消失或已归档的登记项，并取消其闹钟。
+     *
+     * 用于重排收尾——不依赖每条变更路径都正确，兜住成员删除、实体删除等遗漏；[isLive] 为 true 的
+     * 目标原样保留，因此不会取消应当保留的闹钟。
+     */
+    @Synchronized
+    fun pruneOrphanedProjections(isLive: (ReminderTarget) -> Boolean): List<ReminderTarget> {
+        val orphans = AlarmProjectionRegistry.orphaned(
+            projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty(),
+            isLive,
+        )
+        orphans.forEach(::cancelTargetAlarms)
+        return orphans
+    }
 
     /** 取消某个目标的闹钟并撤销登记。 */
     private fun cancelTargetAlarms(target: ReminderTarget) {
@@ -375,28 +403,23 @@ class AlarmScheduler @Inject constructor(
 
     @Synchronized
     private fun registerProjection(target: ReminderTarget) {
-        val ids = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty().toMutableSet()
-        if (ids.add(target.serialize())) {
-            projectionRegistry.edit { putStringSet(REGISTERED_MEDICATION_IDS, ids) }
+        val current = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty()
+        val updated = AlarmProjectionRegistry.register(current, target)
+        if (updated != current) {
+            projectionRegistry.edit { putStringSet(REGISTERED_MEDICATION_IDS, updated) }
         }
     }
 
     @Synchronized
     private fun unregisterProjection(target: ReminderTarget) {
-        val ids = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty().toMutableSet()
+        val current = projectionRegistry.getStringSet(REGISTERED_MEDICATION_IDS, emptySet()).orEmpty()
         // 本版三段式登记项（含照护事项的 `<recipientId>:task:<id>`）对所有目标都清掉；
         // 阶段 1 两段式与阶段 0 裸 id 只可能是用药，只对 MEDICATION 目标清理——
         // 否则取消同号的照护事项会误删该成员名下的药物旧登记项。
         // MEDICATION 分支与改造前逐字一致（含短路顺序）。
-        val removed = if (target.type == ReminderTargetType.MEDICATION) {
-            ids.remove(target.serialize()) or
-                ids.remove("${target.recipientId}:${target.id}") or
-                ids.remove(target.id.toString())
-        } else {
-            ids.remove(target.serialize())
-        }
-        if (removed) {
-            projectionRegistry.edit { putStringSet(REGISTERED_MEDICATION_IDS, ids) }
+        val updated = AlarmProjectionRegistry.unregister(current, target)
+        if (updated != current) {
+            projectionRegistry.edit { putStringSet(REGISTERED_MEDICATION_IDS, updated) }
         }
     }
 
