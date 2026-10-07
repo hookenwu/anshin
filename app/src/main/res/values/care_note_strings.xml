@@ -10,6 +10,7 @@
     <string name="care_note_search_empty_title">没有匹配的笔记</string>
     <string name="care_note_search_empty_body">换个关键词试试</string>
     <string name="care_note_load_failed">加载失败，请重试</string>
+    <string name="care_note_editor_failed">未能完成，请重试</string>
     <string name="care_note_new_title">新建笔记</string>
     <string name="care_note_edit_title">编辑笔记</string>
     <string name="care_note_save">保存</string>
@@ -53,5 +54,4 @@
     <string name="care_note_delete">删除</string>
     <string name="care_note_delete_title">删除笔记</string>
     <string name="care_note_delete_body">删除后无法恢复。</string>
-    <string name="care_note_not_found">笔记不存在</string>
 </resources>

@@ -1,5 +1,7 @@
 package com.driezy.medlog.feature.carenotes
 
+import com.driezy.medlog.data.local.CareNoteDao
+import com.driezy.medlog.data.model.CareNote
 import com.driezy.medlog.data.model.CareNoteAttributionType
 import com.driezy.medlog.data.model.CareNoteStatus
 import com.driezy.medlog.data.model.CareNoteTargetType
@@ -47,8 +49,8 @@ class CareNoteEditorViewModelTest {
     private val careTasks = FakeCareTaskRepository()
     private val todos = FakeCareTodoRepository()
 
-    private fun repository() = CareNoteRepositoryImpl(
-        dao,
+    private fun repository(noteDao: CareNoteDao = dao) = CareNoteRepositoryImpl(
+        noteDao,
         mock<ActiveRecipientStore> {
             on { recipientId } doReturn MutableStateFlow(1L)
             onBlocking { current() } doReturn 1L
@@ -62,6 +64,11 @@ class CareNoteEditorViewModelTest {
     private fun failingOptionsViewModel(): CareNoteEditorViewModel {
         val failingMedications = FakeMedicationRepository().apply { failReads = true }
         return CareNoteEditorViewModel(repository(), failingMedications, careTasks, todos)
+    }
+
+    /** 写入必抛错的 DAO：读委托给内存假件，用于验证保存失败时的可见反馈。 */
+    private class ThrowingWriteDao : CareNoteDao by FakeCareNoteDao() {
+        override suspend fun insert(note: CareNote): Long = error("模拟写入失败")
     }
 
     @Test
@@ -176,6 +183,41 @@ class CareNoteEditorViewModelTest {
         advanceUntilIdle()
 
         assertTrue("新建态没有可删除的既有笔记", dao.stored().isEmpty())
+    }
+
+    @Test
+    fun `loading a note that does not exist emits a failure effect`() = runTest {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        val effect = async { viewModel.effects.first() }
+
+        viewModel.onAction(CareNoteEditorUiAction.LoadExisting(noteId = 999L))
+        advanceUntilIdle()
+
+        assertTrue(
+            "加载失败的笔记必须发出 Failed 效果，供 Route 呈现给用户（此前被静默吞掉）",
+            effect.await() is CareNoteEditorUiEffect.Failed,
+        )
+    }
+
+    @Test
+    fun `a save failure emits a failure effect and clears the saving flag`() = runTest {
+        val viewModel = CareNoteEditorViewModel(repository(ThrowingWriteDao()), medications, careTasks, todos)
+        advanceUntilIdle()
+
+        val effect = async { viewModel.effects.first() }
+
+        viewModel.onAction(CareNoteEditorUiAction.TitleChanged("标题"))
+        viewModel.onAction(CareNoteEditorUiAction.BodyChanged("正文"))
+        viewModel.onAction(CareNoteEditorUiAction.Save)
+        advanceUntilIdle()
+
+        assertTrue(
+            "保存失败必须发出 Failed 效果，供 Route 呈现给用户（此前被静默吞掉）",
+            effect.await() is CareNoteEditorUiEffect.Failed,
+        )
+        assertFalse("保存失败后必须复位 isSaving，否则保存按钮永久禁用", viewModel.uiState.value.isSaving)
     }
 
     private companion object {

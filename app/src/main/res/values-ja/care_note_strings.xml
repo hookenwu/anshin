@@ -10,6 +10,7 @@
     <string name="care_note_search_empty_title">一致するノートがありません</string>
     <string name="care_note_search_empty_body">別のキーワードをお試しください</string>
     <string name="care_note_load_failed">読み込みに失敗しました。再試行してください</string>
+    <string name="care_note_editor_failed">完了できませんでした。もう一度お試しください</string>
     <string name="care_note_new_title">新規ノート</string>
     <string name="care_note_edit_title">ノートを編集</string>
     <string name="care_note_save">保存</string>
@@ -53,5 +54,4 @@
     <string name="care_note_delete">削除</string>
     <string name="care_note_delete_title">ノートを削除</string>
     <string name="care_note_delete_body">削除すると元に戻せません。</string>
-    <string name="care_note_not_found">ノートが見つかりません</string>
 </resources>

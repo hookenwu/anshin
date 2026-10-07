@@ -10,6 +10,7 @@
     <string name="care_note_search_empty_title">No matching notes</string>
     <string name="care_note_search_empty_body">Try another keyword</string>
     <string name="care_note_load_failed">Failed to load, please retry</string>
+    <string name="care_note_editor_failed">Couldn\'t complete that. Please try again</string>
     <string name="care_note_new_title">New note</string>
     <string name="care_note_edit_title">Edit note</string>
     <string name="care_note_save">Save</string>
@@ -53,5 +54,4 @@
     <string name="care_note_delete">Delete</string>
     <string name="care_note_delete_title">Delete note</string>
     <string name="care_note_delete_body">This cannot be undone.</string>
-    <string name="care_note_not_found">Note not found</string>
 </resources>

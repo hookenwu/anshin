@@ -15,6 +15,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,6 +58,8 @@ fun CareNoteEditorScreen(
     viewModel: CareNoteEditorViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val failedMessage = stringResource(R.string.care_note_editor_failed)
 
     LaunchedEffect(noteId) {
         if (noteId != null) viewModel.onAction(CareNoteEditorUiAction.LoadExisting(noteId))
@@ -65,18 +68,24 @@ fun CareNoteEditorScreen(
         viewModel.effects.collect { effect ->
             when (effect) {
                 CareNoteEditorUiEffect.Saved, CareNoteEditorUiEffect.NavigateBack -> onSaved()
-                is CareNoteEditorUiEffect.Failed -> Unit
+                is CareNoteEditorUiEffect.Failed -> snackbarHostState.showSnackbar(failedMessage)
             }
         }
     }
 
-    CareNoteEditorContent(uiState = uiState, onBack = onBack, onAction = viewModel::onAction)
+    CareNoteEditorContent(
+        uiState = uiState,
+        snackbarHostState = snackbarHostState,
+        onBack = onBack,
+        onAction = viewModel::onAction,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun CareNoteEditorContent(
     uiState: CareNoteEditorUiState,
+    snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     onAction: (CareNoteEditorUiAction) -> Unit,
 ) {
@@ -111,6 +120,7 @@ internal fun CareNoteEditorContent(
             ),
         ),
         chromeState = ScreenChromeState(isLoading = uiState.isLoading),
+        snackbarHostState = snackbarHostState,
         onChromeAction = { if (it == "save") onAction(CareNoteEditorUiAction.Save) },
     ) { padding ->
         Column(

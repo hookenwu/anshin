@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -52,6 +53,24 @@ class CareNoteWiringGuardTest {
 
         assertTrue("编辑器必须派发 CareNoteEditorUiAction.Delete", editorScreen.contains("CareNoteEditorUiAction.Delete"))
         assertTrue("编辑器必须提供显式删除入口", editorScreen.contains("""testTag("careNoteEditorDelete")"""))
+    }
+
+    @Test
+    fun `the editor surfaces failure effects instead of swallowing them`() {
+        // `Failed` 效果曾被 `is CareNoteEditorUiEffect.Failed -> Unit` 静默吞掉：
+        // 加载或保存失败时用户看不到任何反馈。这里在源码层钉住「必须呈现」。
+        assertFalse(
+            "编辑器不得再静默吞掉 Failed 效果",
+            Regex("""is\s+CareNoteEditorUiEffect\.Failed\s*->\s*Unit""").containsMatchIn(editorScreen),
+        )
+        assertTrue(
+            "编辑器必须用 App 既有的 snackbar 惯用法呈现失败",
+            editorScreen.contains("is CareNoteEditorUiEffect.Failed -> snackbarHostState.showSnackbar("),
+        )
+        assertTrue(
+            "编辑器必须把 snackbarHostState 交给 MedLogScreenScaffold，否则提示无处呈现",
+            editorScreen.contains("snackbarHostState = snackbarHostState"),
+        )
     }
 
     @Test
