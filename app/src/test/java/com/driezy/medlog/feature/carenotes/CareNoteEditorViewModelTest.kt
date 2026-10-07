@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -54,6 +55,37 @@ class CareNoteEditorViewModelTest {
     )
 
     private fun viewModel() = CareNoteEditorViewModel(repository(), medications, careTasks, todos)
+
+    /** 可选项加载必定失败（药品读取抛错）的 VM，用于验证错误分支。 */
+    private fun failingOptionsViewModel(): CareNoteEditorViewModel {
+        val failingMedications = FakeMedicationRepository().apply { failReads = true }
+        return CareNoteEditorViewModel(repository(), failingMedications, careTasks, todos)
+    }
+
+    @Test
+    fun `option loading success clears the loading flag so the editor form is exposed`() = runTest {
+        medications.addMedication(Medication(name = "二甲双胍", doseUnit = "片"))
+        val viewModel = viewModel()
+
+        // 进入编辑器时确实先处于加载态（转圈），随后必须收敛到「已加载」。
+        assertTrue("编辑器初始应处于加载态", viewModel.uiState.value.isLoading)
+        advanceUntilIdle()
+
+        assertFalse(
+            "可选项加载成功后 isLoading 必须为 false，否则 MainScreenChrome 只渲染转圈、表单永不出现",
+            viewModel.uiState.value.isLoading,
+        )
+        assertEquals(1, viewModel.uiState.value.linkOptions.size)
+    }
+
+    @Test
+    fun `option loading failure also clears the loading flag so the form stays usable`() = runTest {
+        val viewModel = failingOptionsViewModel()
+        advanceUntilIdle()
+
+        assertFalse("加载失败也必须清除加载态，编辑器仍可用（只是没有可挂接目标）", viewModel.uiState.value.isLoading)
+        assertTrue(viewModel.uiState.value.linkOptions.isEmpty())
+    }
 
     @Test
     fun `draft validation requires title and body`() {

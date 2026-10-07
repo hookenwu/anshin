@@ -91,5 +91,11 @@ class FakeMedicationRepository : MedicationRepository {
         }
     }
 
-    override suspend fun getActiveOnce(): List<Medication> = medicationsState.value.filter { !it.isArchived }
+    /** 打开后，所有读操作抛错，用于验证 VM 的错误分支。 */
+    var failReads: Boolean = false
+
+    override suspend fun getActiveOnce(): List<Medication> {
+        if (failReads) error("read failed")
+        return medicationsState.value.filter { !it.isArchived }
+    }
 }

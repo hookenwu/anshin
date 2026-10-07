@@ -170,7 +170,8 @@ class CareNoteEditorViewModel @Inject constructor(
             val todos = careTodoRepository.getOpenTodosOnce().map {
                 CareNoteLinkOption(CareNoteTargetType.TODO, it.id, it.title)
             }
-            _uiState.update { it.copy(linkOptions = medications + tasks + todos) }
+            // 成功路径必须清除加载态：否则 MainScreenChrome 只渲染转圈，表单永不出现（无终点）。
+            _uiState.update { it.copy(linkOptions = medications + tasks + todos, isLoading = false) }
         }
     }
 

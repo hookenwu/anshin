@@ -86,6 +86,12 @@ android {
         compose = true
         buildConfig = true
     }
+    // 纯 JVM 单测里 android.* 桩默认抛异常，会让 ViewModel 的错误分支无法被测到
+    // （BaseViewModel.safeLaunch 的 catch 在回调 onError 前会先崩在 android.util.Log.e）。
+    // 让桩返回默认值，错误分支才能被断言（不影响任何既有断言）。
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
     lint {
         lintConfig = file("lint.xml")
         baseline = file("lint-baseline.xml")
