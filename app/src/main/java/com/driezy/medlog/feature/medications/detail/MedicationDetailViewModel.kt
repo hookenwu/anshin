@@ -3,8 +3,11 @@ package com.driezy.medlog.feature.medications.detail
 import androidx.lifecycle.viewModelScope
 import com.driezy.medlog.capability.reminders.application.ReconcileRemindersUseCase
 import com.driezy.medlog.data.local.TransactionRunner
+import com.driezy.medlog.data.model.CareNote
+import com.driezy.medlog.data.model.CareNoteTargetType
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
+import com.driezy.medlog.data.repository.CareNoteRepository
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.domain.model.MedicationId
@@ -37,6 +40,8 @@ data class DetailUiState(
     val error: Boolean = false,
     val isSaving: Boolean = false,
     val zone: ZoneId = ZoneId.systemDefault(),
+    /** 就地「相关笔记」：该药为 target 的 CareNote（空则不渲染，docs/care-notes.md §7）。 */
+    val relatedNotes: List<CareNote> = emptyList(),
 )
 
 sealed interface DetailUiAction {
@@ -58,6 +63,7 @@ class MedicationDetailViewModel @Inject constructor(
     private val clock: Clock,
     private val observeAdherence: ObserveMedicationAdherence,
     private val transactions: TransactionRunner,
+    private val careNoteRepository: CareNoteRepository,
 ) : BaseViewModel() {
 
     private val _uiState = MutableStateFlow(DetailUiState())
@@ -67,6 +73,7 @@ class MedicationDetailViewModel @Inject constructor(
 
     private val time = MutableStateFlow(clock.instant())
     private var observation: Job? = null
+    private var notesObservation: Job? = null
 
     fun onAction(action: DetailUiAction) {
         when (action) {
@@ -104,6 +111,13 @@ class MedicationDetailViewModel @Inject constructor(
                         )
                     }
                 }
+        }
+        // 就地「相关笔记」：与该药关联的笔记（只读呈现，空则不渲染）。
+        notesObservation?.cancel()
+        notesObservation = viewModelScope.launch {
+            careNoteRepository.observeRelatedNotes(CareNoteTargetType.MEDICATION, id)
+                .catch { /* 笔记读取失败不影响药品详情主流程 */ }
+                .collect { notes -> _uiState.update { it.copy(relatedNotes = notes) } }
         }
     }
 

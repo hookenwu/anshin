@@ -15,6 +15,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.TimePeriods
+import com.driezy.medlog.feature.carenotes.RelatedNotesSection
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
 import com.driezy.medlog.ui.components.MedicationAdherenceCard
 import com.driezy.medlog.ui.components.MedicationMessageCard
@@ -392,6 +393,13 @@ private fun MedicationDetailContent(
             } else {
                 items(uiState.logs, key = { it.id }) { log ->
                     DetailLogRow(log = log, zone = uiState.zone)
+                }
+            }
+
+            // ── 相关笔记（底部；空态不渲染任何东西，docs/care-notes.md §7）──
+            if (uiState.relatedNotes.isNotEmpty()) {
+                item(key = "relatedNotes", contentType = "relatedNotes") {
+                    RelatedNotesSection(notes = uiState.relatedNotes)
                 }
             }
         }

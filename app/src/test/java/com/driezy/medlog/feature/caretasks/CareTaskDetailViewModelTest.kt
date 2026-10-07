@@ -8,6 +8,8 @@ import com.driezy.medlog.data.model.CareTaskLogStatus
 import com.driezy.medlog.data.model.CareTaskScheduleKind
 import com.driezy.medlog.data.model.HealthRecord
 import com.driezy.medlog.data.model.HealthType
+import com.driezy.medlog.data.repository.CareNoteRepositoryImpl
+import com.driezy.medlog.data.repository.FakeCareNoteDao
 import com.driezy.medlog.data.repository.FakeCareTaskRepository
 import com.driezy.medlog.data.repository.HealthRepository
 import com.driezy.medlog.data.repository.SettingsPreferences
@@ -18,6 +20,7 @@ import com.driezy.medlog.feature.caretasks.application.CareTaskCompletionUseCase
 import com.driezy.medlog.feature.caretasks.application.RecordCareTaskMeasurementUseCase
 import com.driezy.medlog.testing.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -68,7 +71,18 @@ class CareTaskDetailViewModelTest {
     )
     private val recordMeasurement = RecordCareTaskMeasurementUseCase(health, clock)
 
-    private fun viewModel() = CareTaskDetailViewModel(repository, completion, recordMeasurement, preferences, clock)
+    /** 就地「相关笔记」读取源；本用例不涉及笔记，返回空流即可（不改变既有断言）。 */
+    private val careNotes = CareNoteRepositoryImpl(
+        FakeCareNoteDao(),
+        mock {
+            on { recipientId } doReturn MutableStateFlow(1L)
+            onBlocking { current() } doReturn 1L
+        },
+        clock,
+    )
+
+    private fun viewModel() =
+        CareTaskDetailViewModel(repository, completion, recordMeasurement, preferences, clock, careNotes)
 
     private fun seedToggleTask(): Long = repository.seedTask(
         CareTask(

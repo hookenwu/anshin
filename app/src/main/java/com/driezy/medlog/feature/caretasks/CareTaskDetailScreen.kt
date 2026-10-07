@@ -38,6 +38,7 @@ import com.driezy.medlog.data.model.CareTaskCompletionMode
 import com.driezy.medlog.data.model.CareTaskLog
 import com.driezy.medlog.data.model.CareTaskLogStatus
 import com.driezy.medlog.data.model.HealthType
+import com.driezy.medlog.feature.carenotes.RelatedNotesSection
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
 import com.driezy.medlog.ui.components.RefreshWhileVisible
 import com.driezy.medlog.ui.components.ScreenChromeState
@@ -185,6 +186,13 @@ internal fun CareTaskDetailContent(
                 }
             }
             items(uiState.recentLogs, key = { it.id }) { log -> HistoryRow(log) }
+
+            // ── 相关笔记（底部；空态不渲染任何东西，docs/care-notes.md §7）──
+            if (uiState.relatedNotes.isNotEmpty()) {
+                item(key = "relatedNotes", contentType = "relatedNotes") {
+                    RelatedNotesSection(notes = uiState.relatedNotes)
+                }
+            }
         }
     }
 

@@ -1,5 +1,9 @@
 package com.driezy.medlog.data.local
 
+import com.driezy.medlog.data.model.CareNote
+import com.driezy.medlog.data.model.CareNoteAttributionType
+import com.driezy.medlog.data.model.CareNoteStatus
+import com.driezy.medlog.data.model.CareNoteTargetType
 import com.driezy.medlog.data.model.CareRecipient
 import com.driezy.medlog.data.model.CareTodo
 import com.driezy.medlog.data.model.CareTodoStatus
@@ -25,7 +29,31 @@ class RoomModelContractTest {
         assertEquals(7L, log.medicationId)
         assertEquals("WEIGHT", record.type)
         assertEquals("", symptom.medicationName)
-        assertEquals(22, DatabaseSchema.VERSION)
+        assertEquals(23, DatabaseSchema.VERSION)
+    }
+
+    @Test
+    fun `care note defaults to personal observation active and never carries archival or supersede links`() {
+        val note = CareNote(careRecipientId = 3L, title = "护士交代", body = "饭后半小时服药")
+
+        assertEquals(CareNoteAttributionType.PERSONAL_OBSERVATION, note.attributionType)
+        assertEquals(CareNoteStatus.ACTIVE, note.status)
+        assertEquals(null, note.attributionName)
+        assertEquals(null, note.attributionAtMs)
+        assertEquals(null, note.attributionText)
+        assertEquals(null, note.supersededText)
+        assertEquals(null, note.supersededAtMs)
+        assertEquals(null, note.updatedAtMs)
+        // 三态互不重叠；普通列表默认 ACTIVE + QUESTIONABLE，SUPERSEDED 折叠。
+        assertEquals(listOf("ACTIVE", "QUESTIONABLE", "SUPERSEDED"), CareNoteStatus.all)
+        assertEquals(listOf("QUESTIONABLE", "ACTIVE"), CareNoteStatus.defaultVisible)
+        assertEquals(listOf("SUPERSEDED"), CareNoteStatus.folded)
+        // 归属四选一，默认最保守；不存在 MEMBER 目标类型。
+        assertEquals(
+            listOf("CLINICIAN", "CAREGIVER_EXPERIENCE", "PERSONAL_OBSERVATION", "EXTERNAL_MATERIAL"),
+            CareNoteAttributionType.all,
+        )
+        assertEquals(listOf("MEDICATION", "CARE_TASK", "TODO"), CareNoteTargetType.all)
     }
 
     @Test

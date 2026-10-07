@@ -47,6 +47,12 @@ import kotlinx.serialization.Serializable
     /** 待办列表（进行中 / 历史）。 */
     @Serializable data object Todos : Route
 
+    /** 照护笔记列表（搜索 + 状态过滤）。入口在「更多」溢出菜单（与待办/照护事项并列）。 */
+    @Serializable data object CareNotes : Route
+
+    /** @param noteId 编辑模式已有记录的 id（-1 代表新增） */
+    @Serializable data class CareNoteEditor(val noteId: Long = -1) : Route
+
     /** @param todoId 编辑模式已有记录的 id（-1 代表新增） */
     @Serializable data class TodoEditor(val todoId: Long = -1) : Route
 

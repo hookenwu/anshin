@@ -1,5 +1,6 @@
 package com.driezy.medlog.feature.caretasks
 
+import com.driezy.medlog.data.model.CareNote
 import com.driezy.medlog.data.model.CareTask
 import com.driezy.medlog.data.model.CareTaskLog
 import com.driezy.medlog.data.model.CareTaskLogStatus
@@ -24,6 +25,8 @@ data class CareTaskDetailUiState(
     val isLoading: Boolean = true,
     val failed: Boolean = false,
     val isSaving: Boolean = false,
+    /** 就地「相关笔记」：该照护事项为 target 的 CareNote（空则不渲染）。 */
+    val relatedNotes: List<CareNote> = emptyList(),
 )
 
 sealed interface CareTaskDetailUiAction {

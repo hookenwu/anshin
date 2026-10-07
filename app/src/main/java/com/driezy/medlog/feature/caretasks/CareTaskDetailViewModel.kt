@@ -1,10 +1,13 @@
 package com.driezy.medlog.feature.caretasks
 
 import androidx.lifecycle.viewModelScope
+import com.driezy.medlog.data.model.CareNote
+import com.driezy.medlog.data.model.CareNoteTargetType
 import com.driezy.medlog.data.model.CareTask
 import com.driezy.medlog.data.model.CareTaskLog
 import com.driezy.medlog.data.model.CareTaskLogStatus
 import com.driezy.medlog.data.model.CareTaskScheduleKind
+import com.driezy.medlog.data.repository.CareNoteRepository
 import com.driezy.medlog.data.repository.CareTaskRepository
 import com.driezy.medlog.data.repository.UserPreferencesRepository
 import com.driezy.medlog.data.repository.reminderZone
@@ -41,6 +44,7 @@ class CareTaskDetailViewModel @Inject constructor(
     private val recordMeasurement: RecordCareTaskMeasurementUseCase,
     private val preferences: UserPreferencesRepository,
     private val clock: Clock,
+    private val careNoteRepository: CareNoteRepository,
 ) : BaseViewModel() {
 
     private val _uiState = MutableStateFlow(CareTaskDetailUiState())
@@ -78,15 +82,20 @@ class CareTaskDetailViewModel @Inject constructor(
                 return@launch
             }
             task = loaded
-            combine(repository.getLogsForTask(taskId), time, preferences.settingsFlow) { logs, now, prefs ->
-                Triple(logs, now, prefs.reminderZone(clock.zone))
+            combine(
+                repository.getLogsForTask(taskId),
+                time,
+                preferences.settingsFlow,
+                careNoteRepository.observeRelatedNotes(CareNoteTargetType.CARE_TASK, taskId),
+            ) { logs, now, prefs, notes ->
+                DetailSources(logs, now, prefs.reminderZone(clock.zone), notes)
             }
                 .catch { error ->
                     _uiState.update { it.copy(isLoading = false, failed = true) }
                     effectChannel.send(CareTaskDetailUiEffect.Failed(error.localizedMessage))
                 }
-                .collect { (logs, now, zone) ->
-                    _uiState.value = present(loaded, logs, now.toEpochMilli(), zone)
+                .collect { (logs, now, zone, notes) ->
+                    _uiState.value = present(loaded, logs, now.toEpochMilli(), zone, notes)
                 }
         }
     }
@@ -171,7 +180,13 @@ class CareTaskDetailViewModel @Inject constructor(
         }
     }
 
-    private fun present(task: CareTask, logs: List<CareTaskLog>, nowMs: Long, zone: ZoneId): CareTaskDetailUiState {
+    private fun present(
+        task: CareTask,
+        logs: List<CareTaskLog>,
+        nowMs: Long,
+        zone: ZoneId,
+        relatedNotes: List<CareNote> = emptyList(),
+    ): CareTaskDetailUiState {
         val scheduledTimes = if (task.scheduleKind == CareTaskScheduleKind.AS_NEEDED) {
             listOf(nowMs)
         } else {
@@ -195,8 +210,17 @@ class CareTaskDetailViewModel @Inject constructor(
             occurrences = occurrences,
             recentLogs = logs.sortedByDescending { it.scheduledTimeMs }.take(RECENT_LOG_LIMIT),
             isLoading = false,
+            relatedNotes = relatedNotes,
         )
     }
+
+    /** 详情页各来源的一次快照；笔记为空即不渲染就地卡片。 */
+    private data class DetailSources(
+        val logs: List<CareTaskLog>,
+        val now: Instant,
+        val zone: ZoneId,
+        val notes: List<CareNote>,
+    )
 
     private fun elapsedMinutes(log: CareTaskLog?, nowMs: Long): Int? {
         if (log?.status != CareTaskLogStatus.IN_PROGRESS) return null

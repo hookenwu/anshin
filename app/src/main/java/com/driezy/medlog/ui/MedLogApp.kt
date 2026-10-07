@@ -24,6 +24,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.driezy.medlog.data.model.CareRecipient
+import com.driezy.medlog.feature.carenotes.CareNoteEditorScreen
+import com.driezy.medlog.feature.carenotes.CareNotesScreen
 import com.driezy.medlog.feature.caretasks.CareTaskDetailScreen
 import com.driezy.medlog.feature.caretasks.CareTaskEditorScreen
 import com.driezy.medlog.feature.caretasks.CareTasksScreen
@@ -230,6 +232,7 @@ private fun MedLogNavHost(
                 onOpenSettings = { navController.navigate(Route.Settings) },
                 onOpenCareTasks = { navController.navigate(Route.CareTasks) },
                 onOpenTodos = { navController.navigate(Route.Todos) },
+                onOpenCareNotes = { navController.navigate(Route.CareNotes) },
                 onCreateTodo = { navController.navigate(Route.TodoEditor()) },
                 familyMembers = familyMembers,
                 activeRecipientId = activeRecipientId,
@@ -477,6 +480,31 @@ private fun MedLogNavHost(
             val route: Route.TodoEditor = backStackEntry.toRoute()
             CareTodoEditorScreen(
                 todoId = route.todoId.takeIf { it != -1L },
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
+            )
+        }
+        composable<Route.CareNotes>(
+            enterTransition = { materialSharedAxisX(forward = true) },
+            exitTransition = { navFadeOut },
+            popEnterTransition = { materialSharedAxisX(forward = false) },
+            popExitTransition = { materialSharedAxisXOut(forward = true) },
+        ) {
+            CareNotesScreen(
+                onAdd = { navController.navigate(Route.CareNoteEditor()) },
+                onOpen = { id -> navController.navigate(Route.CareNoteEditor(id)) },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable<Route.CareNoteEditor>(
+            enterTransition = { materialSharedAxisX(forward = true) },
+            exitTransition = { navFadeOut },
+            popEnterTransition = { materialSharedAxisX(forward = false) },
+            popExitTransition = { materialSharedAxisXOut(forward = true) },
+        ) { backStackEntry ->
+            val route: Route.CareNoteEditor = backStackEntry.toRoute()
+            CareNoteEditorScreen(
+                noteId = route.noteId.takeIf { it != -1L },
                 onBack = { navController.popBackStack() },
                 onSaved = { navController.popBackStack() },
             )

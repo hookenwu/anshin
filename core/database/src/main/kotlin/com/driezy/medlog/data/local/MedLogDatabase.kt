@@ -7,6 +7,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.driezy.medlog.data.model.AiAnalysisCacheEntry
 import com.driezy.medlog.data.model.AiUsageEvent
+import com.driezy.medlog.data.model.CareNote
+import com.driezy.medlog.data.model.CareNoteLink
 import com.driezy.medlog.data.model.CareRecipient
 import com.driezy.medlog.data.model.CareTask
 import com.driezy.medlog.data.model.CareTaskLog
@@ -23,6 +25,8 @@ import com.driezy.medlog.data.model.SymptomLog
         CareTask::class,
         CareTaskLog::class,
         CareTodo::class,
+        CareNote::class,
+        CareNoteLink::class,
         Medication::class,
         MedicationLog::class,
         MedicationPlanRevision::class,
@@ -40,6 +44,7 @@ abstract class MedLogDatabase : RoomDatabase() {
     abstract fun careTaskDao(): CareTaskDao
     abstract fun careTaskLogDao(): CareTaskLogDao
     abstract fun careTodoDao(): CareTodoDao
+    abstract fun careNoteDao(): CareNoteDao
     abstract fun medicationDao(): MedicationDao
     abstract fun medicationLogDao(): MedicationLogDao
     abstract fun symptomLogDao(): SymptomLogDao
@@ -169,6 +174,68 @@ abstract class MedLogDatabase : RoomDatabase() {
                 )
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_care_todos_status` ON `care_todos` (`status`)",
+                )
+            }
+        }
+
+        /**
+         * v22 → v23：新增照护笔记两张表 `care_notes` / `care_note_links`（docs/care-notes.md §8）。
+         *
+         * 照 `MIGRATION_21_22` 的先例，**纯新增**：只建表 + 索引，无表重建、不触碰任何既有表与数据。
+         * `care_note_links.targetId` 刻意不建外键（悬挂容忍，读忽略、不清扫）；只有 `noteId`
+         * 与 `careRecipientId` 是强制 FK CASCADE。同样适用于「恢复的 v22 备份」——被恢复的
+         * v22 库在 App 首次打开时执行的正是这段迁移。
+         */
+        val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `care_notes` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `careRecipientId` INTEGER NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `body` TEXT NOT NULL,
+                        `attributionType` TEXT NOT NULL,
+                        `attributionName` TEXT,
+                        `attributionAtMs` INTEGER,
+                        `attributionText` TEXT,
+                        `status` TEXT NOT NULL,
+                        `supersededText` TEXT,
+                        `supersededAtMs` INTEGER,
+                        `createdAtMs` INTEGER NOT NULL,
+                        `updatedAtMs` INTEGER,
+                        FOREIGN KEY(`careRecipientId`) REFERENCES `care_recipients`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_notes_careRecipientId` " +
+                        "ON `care_notes` (`careRecipientId`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_notes_status` ON `care_notes` (`status`)",
+                )
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `care_note_links` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `noteId` INTEGER NOT NULL,
+                        `targetType` TEXT NOT NULL,
+                        `targetId` INTEGER NOT NULL,
+                        FOREIGN KEY(`noteId`) REFERENCES `care_notes`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_note_links_noteId` " +
+                        "ON `care_note_links` (`noteId`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_note_links_targetType_targetId` " +
+                        "ON `care_note_links` (`targetType`, `targetId`)",
                 )
             }
         }

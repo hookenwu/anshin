@@ -14,6 +14,7 @@ import com.driezy.medlog.capability.widgets.GlanceWidgetRefresher
 import com.driezy.medlog.capability.widgets.WidgetRefresher
 import com.driezy.medlog.data.local.AiAnalysisCacheDao
 import com.driezy.medlog.data.local.AiUsageEventDao
+import com.driezy.medlog.data.local.CareNoteDao
 import com.driezy.medlog.data.local.CareRecipientDao
 import com.driezy.medlog.data.local.CareTaskDao
 import com.driezy.medlog.data.local.CareTaskLogDao
@@ -30,6 +31,8 @@ import com.driezy.medlog.data.repository.AiCacheRepository
 import com.driezy.medlog.data.repository.AiCacheRepositoryImpl
 import com.driezy.medlog.data.repository.AiPreferences
 import com.driezy.medlog.data.repository.AppearancePreferences
+import com.driezy.medlog.data.repository.CareNoteRepository
+import com.driezy.medlog.data.repository.CareNoteRepositoryImpl
 import com.driezy.medlog.data.repository.CareRecipientRepository
 import com.driezy.medlog.data.repository.CareRecipientRepositoryImpl
 import com.driezy.medlog.data.repository.CareTaskRepository
@@ -102,6 +105,7 @@ object DatabaseModule {
             MedLogDatabase.MIGRATION_19_20,
             MedLogDatabase.MIGRATION_20_21,
             MedLogDatabase.MIGRATION_21_22,
+            MedLogDatabase.MIGRATION_22_23,
         )
         .build()
 
@@ -122,6 +126,9 @@ object DatabaseModule {
 
     @Provides
     fun provideCareTodoDao(db: MedLogDatabase): CareTodoDao = db.careTodoDao()
+
+    @Provides
+    fun provideCareNoteDao(db: MedLogDatabase): CareNoteDao = db.careNoteDao()
 
     @Provides
     fun provideSymptomLogDao(db: MedLogDatabase): SymptomLogDao = db.symptomLogDao()
@@ -187,6 +194,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindCareTodoRepository(impl: CareTodoRepositoryImpl): CareTodoRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCareNoteRepository(impl: CareNoteRepositoryImpl): CareNoteRepository
 
     @Binds
     @Singleton
