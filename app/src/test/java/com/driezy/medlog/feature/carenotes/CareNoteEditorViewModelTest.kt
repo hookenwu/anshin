@@ -15,7 +15,9 @@ import com.driezy.medlog.data.repository.FakeCareTodoRepository
 import com.driezy.medlog.data.repository.FakeMedicationRepository
 import com.driezy.medlog.testing.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -136,6 +138,44 @@ class CareNoteEditorViewModelTest {
         assertEquals(CareNoteAttributionType.CLINICIAN, stored.attributionType)
         assertEquals(listOf(medicationId), dao.storedLinks().map { it.targetId })
         assertTrue(dao.storedLinks().all { it.targetType == CareNoteTargetType.MEDICATION })
+    }
+
+    @Test
+    fun `delete removes the edited note cascades links and signals navigate back`() = runTest {
+        val repo = repository()
+        val noteId = repo.createNote(
+            title = "要删除的笔记",
+            body = "正文",
+            attributionType = CareNoteAttributionType.PERSONAL_OBSERVATION,
+            links = listOf(CareNoteTarget(CareNoteTargetType.MEDICATION, 5L)),
+        )
+        val viewModel = viewModel()
+        viewModel.onAction(CareNoteEditorUiAction.LoadExisting(noteId))
+        advanceUntilIdle()
+
+        val effect = async { viewModel.effects.first() }
+
+        viewModel.onAction(CareNoteEditorUiAction.Delete)
+        advanceUntilIdle()
+
+        assertNull("删除必须真正移除正在编辑的笔记", dao.storedById(noteId))
+        assertTrue("删除笔记必须级联删除其 care_note_links", dao.storedLinks().isEmpty())
+        assertEquals(
+            "删除成功后必须发出 NavigateBack，不得停留在已不存在的笔记上",
+            CareNoteEditorUiEffect.NavigateBack,
+            effect.await(),
+        )
+    }
+
+    @Test
+    fun `delete before a note is loaded is a no-op`() = runTest {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onAction(CareNoteEditorUiAction.Delete)
+        advanceUntilIdle()
+
+        assertTrue("新建态没有可删除的既有笔记", dao.stored().isEmpty())
     }
 
     private companion object {

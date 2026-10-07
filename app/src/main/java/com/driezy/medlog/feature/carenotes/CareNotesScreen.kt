@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -33,6 +34,8 @@ import com.driezy.medlog.ui.components.RefreshWhileVisible
 import com.driezy.medlog.ui.components.ScreenChromeState
 import com.driezy.medlog.ui.components.ScreenEmptyState
 import com.driezy.medlog.ui.components.ScreenFab
+import com.driezy.medlog.ui.components.ScreenOverlay
+import com.driezy.medlog.ui.components.ScreenOverlayHost
 import com.driezy.medlog.ui.icons.MedLogIcon
 import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
@@ -82,7 +85,12 @@ internal fun CareNotesContent(
     onAction: (CareNotesUiAction) -> Unit,
 ) {
     var supersedeFor by remember { mutableStateOf<Long?>(null) }
+    var deleteFor by remember { mutableStateOf<Long?>(null) }
     val addLabel = stringResource(R.string.care_note_fab_add)
+    val deleteTitle = stringResource(R.string.care_note_delete_title)
+    val deleteBody = stringResource(R.string.care_note_delete_body)
+    val deleteConfirm = stringResource(R.string.care_note_delete)
+    val cancelLabel = stringResource(R.string.cancel)
     val emptyState = when {
         state.isLoading || state.notes.isNotEmpty() -> null
         state.isSearching -> ScreenEmptyState(
@@ -143,6 +151,7 @@ internal fun CareNotesContent(
                                 onQuestionable = { onAction(CareNotesUiAction.MarkQuestionable(row.note.id)) },
                                 onSuperseded = { supersedeFor = row.note.id },
                                 onActive = { onAction(CareNotesUiAction.MarkActive(row.note.id)) },
+                                onDelete = { deleteFor = row.note.id },
                             )
                         },
                     )
@@ -160,6 +169,23 @@ internal fun CareNotesContent(
             },
         )
     }
+
+    // 删除是破坏性操作：走 App 既有的破坏性确认惯用法（与药品归档/删除同源）。
+    deleteFor?.let { noteId ->
+        ScreenOverlayHost(
+            overlay = ScreenOverlay.Confirm(
+                id = "careNote:delete:$noteId",
+                title = deleteTitle,
+                body = deleteBody,
+                confirmLabel = deleteConfirm,
+                dismissLabel = cancelLabel,
+                targetKey = noteId.toString(),
+                isDanger = true,
+            ),
+            onDismiss = { deleteFor = null },
+            onConfirm = { _, _ -> onAction(CareNotesUiAction.Delete(noteId)) },
+        )
+    }
 }
 
 /** 行内状态切换：只有用户点击才会改变状态（docs/care-notes.md §3）。 */
@@ -170,6 +196,7 @@ private fun CareNoteStatusActions(
     onQuestionable: () -> Unit,
     onSuperseded: () -> Unit,
     onActive: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small)) {
         TextButton(onClick = onEdit) { Text(stringResource(R.string.care_note_action_edit)) }
@@ -195,6 +222,12 @@ private fun CareNoteStatusActions(
             ) {
                 Text(stringResource(R.string.care_note_action_mark_active))
             }
+        }
+        TextButton(
+            onClick = onDelete,
+            modifier = Modifier.testTag("careNoteDelete"),
+        ) {
+            Text(stringResource(R.string.care_note_delete), color = MaterialTheme.colorScheme.error)
         }
     }
 }

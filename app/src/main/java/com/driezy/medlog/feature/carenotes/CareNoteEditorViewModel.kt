@@ -65,6 +65,7 @@ class CareNoteEditorViewModel @Inject constructor(
             is CareNoteEditorUiAction.SupersededTextChanged -> editDraft { it.copy(supersededText = action.text) }
             is CareNoteEditorUiAction.ToggleLink -> toggleLink(action.target)
             CareNoteEditorUiAction.Save -> save()
+            CareNoteEditorUiAction.Delete -> delete()
         }
     }
 
@@ -154,6 +155,17 @@ class CareNoteEditorViewModel @Inject constructor(
             } finally {
                 _uiState.update { it.copy(isSaving = false) }
             }
+        }
+    }
+
+    /** 删除当前编辑的笔记；成功后离开编辑器（不得停留在已不存在的笔记上）。 */
+    private fun delete() {
+        val current = existing ?: return
+        safeLaunch(onError = { error ->
+            effectChannel.trySend(CareNoteEditorUiEffect.Failed(error.localizedMessage))
+        }) {
+            careNoteRepository.deleteNote(current.id)
+            effectChannel.send(CareNoteEditorUiEffect.NavigateBack)
         }
     }
 

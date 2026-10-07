@@ -16,9 +16,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -32,6 +36,8 @@ import com.driezy.medlog.data.repository.CareNoteTarget
 import com.driezy.medlog.feature.medications.editor.DatePickerField
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
 import com.driezy.medlog.ui.components.ScreenChromeState
+import com.driezy.medlog.ui.components.ScreenOverlay
+import com.driezy.medlog.ui.components.ScreenOverlayHost
 import com.driezy.medlog.ui.components.TopBarAction
 import com.driezy.medlog.ui.components.TopBarActionPriority
 import com.driezy.medlog.ui.icons.MedLogIcon
@@ -58,7 +64,7 @@ fun CareNoteEditorScreen(
     LaunchedEffect(viewModel) {
         viewModel.effects.collect { effect ->
             when (effect) {
-                CareNoteEditorUiEffect.Saved -> onSaved()
+                CareNoteEditorUiEffect.Saved, CareNoteEditorUiEffect.NavigateBack -> onSaved()
                 is CareNoteEditorUiEffect.Failed -> Unit
             }
         }
@@ -76,6 +82,11 @@ internal fun CareNoteEditorContent(
 ) {
     val draft = uiState.draft
     val saveLabel = stringResource(R.string.care_note_save)
+    var overlay by remember { mutableStateOf<ScreenOverlay?>(null) }
+    val deleteTitle = stringResource(R.string.care_note_delete_title)
+    val deleteBody = stringResource(R.string.care_note_delete_body)
+    val deleteConfirm = stringResource(R.string.care_note_delete)
+    val cancelLabel = stringResource(R.string.cancel)
 
     MedLogScreenScaffold(
         title = {
@@ -224,8 +235,33 @@ internal fun CareNoteEditorContent(
                     modifier = Modifier.fillMaxWidth().testTag("careNoteSupersededTextField"),
                 )
             }
+
+            // 删除仅对已存在的笔记开放；破坏性操作走既有确认惯用法，确认后离开编辑器。
+            if (uiState.isEditing) {
+                TextButton(
+                    onClick = {
+                        overlay = ScreenOverlay.Confirm(
+                            id = "careNoteEditor:delete",
+                            title = deleteTitle,
+                            body = deleteBody,
+                            confirmLabel = deleteConfirm,
+                            dismissLabel = cancelLabel,
+                            isDanger = true,
+                        )
+                    },
+                    modifier = Modifier.testTag("careNoteEditorDelete"),
+                ) {
+                    Text(stringResource(R.string.care_note_delete), color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
     }
+
+    ScreenOverlayHost(
+        overlay = overlay,
+        onDismiss = { overlay = null },
+        onConfirm = { _, _ -> onAction(CareNoteEditorUiAction.Delete) },
+    )
 }
 
 @Composable

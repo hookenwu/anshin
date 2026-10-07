@@ -57,10 +57,16 @@ sealed interface CareNoteEditorUiAction {
     data class ToggleLink(val target: CareNoteTarget) : CareNoteEditorUiAction
 
     data object Save : CareNoteEditorUiAction
+
+    /** 删除正在编辑的笔记（破坏性；仅编辑模式可用）。 */
+    data object Delete : CareNoteEditorUiAction
 }
 
 sealed interface CareNoteEditorUiEffect {
     data object Saved : CareNoteEditorUiEffect
+
+    /** 删除成功后离开编辑器（不得停留在已不存在的笔记上）。 */
+    data object NavigateBack : CareNoteEditorUiEffect
 
     data class Failed(val message: String?) : CareNoteEditorUiEffect
 }

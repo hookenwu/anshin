@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -119,6 +120,42 @@ class CareNotesViewModelTest {
 
         assertTrue(dao.storedLinks().isEmpty())
         assertEquals("清除悬挂关联后笔记必须保留", 1, viewModel.uiState.value.notes.count { it.note.id == id })
+    }
+
+    @Test
+    fun `delete removes the note cascades its links and leaves other notes untouched`() = runTest {
+        val repository = repoFor()
+        val doomed = repository.createNote(
+            title = "要删除的笔记",
+            body = "正文",
+            attributionType = CareNoteAttributionType.PERSONAL_OBSERVATION,
+            links = listOf(
+                CareNoteTarget(CareNoteTargetType.MEDICATION, 1L),
+                CareNoteTarget(CareNoteTargetType.TODO, 2L),
+            ),
+        )
+        val survivor = repository.createNote(
+            title = "保留的笔记",
+            body = "正文",
+            attributionType = CareNoteAttributionType.PERSONAL_OBSERVATION,
+            links = listOf(CareNoteTarget(CareNoteTargetType.CARE_TASK, 3L)),
+        )
+
+        val viewModel = CareNotesViewModel(repository)
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+        assertEquals(3, dao.storedLinks().size)
+
+        viewModel.onAction(CareNotesUiAction.Delete(doomed))
+        advanceUntilIdle()
+
+        // (1) 目标笔记消失，(2) 其 links 级联删除
+        assertNull("删除动作必须真正移除笔记", dao.storedById(doomed))
+        assertTrue("删除笔记必须级联删除其 care_note_links", dao.storedLinks().none { it.noteId == doomed })
+        // (3) 只动目标笔记：另一条笔记及其关联逐行保留
+        assertEquals(listOf(survivor), dao.stored().map { it.id })
+        assertEquals(listOf(3L), dao.storedLinks().map { it.targetId })
+        assertEquals(listOf(survivor), viewModel.uiState.value.notes.map { it.note.id })
     }
 
     @Test

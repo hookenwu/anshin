@@ -278,6 +278,36 @@ class CareNoteRepositoryImplTest {
         )
     }
 
+    @Test
+    fun `deleteNote cascades its links without touching sibling notes or their links`(): Unit = runBlocking {
+        val repo = repoFor(1L)
+        val doomed = repo.createNote(
+            title = "要删除的",
+            body = "正文",
+            attributionType = CareNoteAttributionType.PERSONAL_OBSERVATION,
+            links = listOf(
+                CareNoteTarget(CareNoteTargetType.MEDICATION, 1L),
+                CareNoteTarget(CareNoteTargetType.CARE_TASK, 2L),
+            ),
+        )
+        val survivor = repo.createNote(
+            title = "保留的",
+            body = "正文",
+            attributionType = CareNoteAttributionType.PERSONAL_OBSERVATION,
+            links = listOf(CareNoteTarget(CareNoteTargetType.TODO, 9L)),
+        )
+        assertEquals(3, dao.storedLinks().size)
+
+        repo.deleteNote(doomed)
+
+        assertNull(dao.storedById(doomed))
+        assertTrue("删除笔记必须级联删除其 care_note_links", dao.storedLinks().none { it.noteId == doomed })
+        // 只动目标笔记：兄弟笔记与其 links 逐行保留（不波及其他记录）。
+        assertEquals(listOf(survivor), dao.stored().map { it.id })
+        assertEquals(listOf(9L), repo.linksForNote(survivor).map { it.targetId })
+        assertEquals(1, dao.storedLinks().size)
+    }
+
     private fun note(recipientId: Long, title: String) = CareNote(
         careRecipientId = recipientId,
         title = title,
