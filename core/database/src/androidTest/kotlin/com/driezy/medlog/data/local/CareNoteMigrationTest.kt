@@ -102,14 +102,14 @@ class CareNoteMigrationTest {
 
             // (5) 删除成员 → 其笔记（及其 links）级联删除，不影响其他成员
             db.execSQL(
-                "INSERT INTO care_notes (careRecipientId, title, body, createdAtMs) " +
-                    "VALUES (1, '爸爸的笔记', '观察记录', 1700000001000)",
+                "INSERT INTO care_notes (careRecipientId, title, body, attributionType, status, createdAtMs) " +
+                    "VALUES (1, '爸爸的笔记', '观察记录', 'PERSONAL_OBSERVATION', 'ACTIVE', 1700000001000)",
             )
             val dadNoteId = db.long("SELECT id FROM care_notes WHERE careRecipientId = 1")
             db.execSQL("INSERT INTO care_note_links (noteId, targetType, targetId) VALUES ($dadNoteId, 'CARE_TASK', 1)")
             db.execSQL(
-                "INSERT INTO care_notes (careRecipientId, title, body, createdAtMs) " +
-                    "VALUES (2, '妈妈的笔记', '家属记录', 1700000002000)",
+                "INSERT INTO care_notes (careRecipientId, title, body, attributionType, status, createdAtMs) " +
+                    "VALUES (2, '妈妈的笔记', '家属记录', 'PERSONAL_OBSERVATION', 'ACTIVE', 1700000002000)",
             )
             assertEquals(1, db.count("SELECT COUNT(*) FROM care_notes WHERE careRecipientId = 2"))
             db.execSQL("DELETE FROM care_recipients WHERE id = 1")

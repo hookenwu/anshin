@@ -49,6 +49,7 @@ class CareTodoMigrationTest {
             DatabaseSchema.VERSION,
             true,
             MedLogDatabase.MIGRATION_21_22,
+            MedLogDatabase.MIGRATION_22_23,
         ).use { db ->
             // (a) 既有行零丢失、内容逐项不变
             assertEquals(1, db.count("SELECT COUNT(*) FROM care_recipients WHERE id = 1"))
@@ -115,6 +116,7 @@ class CareTodoMigrationTest {
             DatabaseSchema.VERSION,
             true,
             MedLogDatabase.MIGRATION_21_22,
+            MedLogDatabase.MIGRATION_22_23,
         ).use { db ->
             assertEquals(0, db.count("SELECT COUNT(*) FROM care_todos"))
             val indices = db.indexNames("care_todos")
