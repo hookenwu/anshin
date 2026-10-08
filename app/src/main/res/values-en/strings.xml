@@ -25,7 +25,7 @@
     <string name="settings_routine">Daily Routine</string>
     <string name="settings_about">About</string>
     <string name="archived_medications">Archived Medications</string>
-    <string name="tab_diary">Diary</string>
+    <string name="tab_records">Records</string>
     <string name="tab_health">Health</string>
 
     <!-- App Shortcuts -->
@@ -105,6 +105,7 @@
     <string name="home_filter_all">All</string>
     <string name="home_filter_medication">Medication</string>
     <string name="home_filter_care">Care</string>
+    <string name="home_manage_care_tasks">Manage care tasks</string>
     <string name="home_now_group_title">Now</string>
     <string name="home_now_group_body">Due or nearly due medication tasks</string>
     <string name="home_later_group_title">Later today</string>

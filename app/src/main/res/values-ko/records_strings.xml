@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="records_title">기록</string>
+    <string name="records_search_hint">제목, 본문, 귀속, 증상 또는 메모 검색</string>
+    <string name="records_mode_all">전체</string>
+    <string name="records_mode_diary">심신 기록</string>
+    <string name="records_mode_care_notes">케어 노트</string>
+    <string name="records_fab_add">새 기록</string>
+    <string name="records_empty_hint">아직 기록이 없습니다. 오른쪽 아래 ＋ 를 눌러 시작하세요.</string>
+    <string name="records_add_choose_title">무엇을 기록할까요?</string>
+    <string name="records_add_diary">몸과 마음</string>
+    <string name="records_add_care_note">케어 노트</string>
+</resources>

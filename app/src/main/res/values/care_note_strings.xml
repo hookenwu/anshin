@@ -3,6 +3,8 @@
     <string name="care_note_nav_action">照护笔记</string>
     <string name="care_notes_title">照护笔记</string>
     <string name="care_note_related_title">相关笔记</string>
+    <string name="care_note_quick_add">新建相关笔记</string>
+    <string name="care_note_quick_add_refused">该对象属于其他成员，已取消预挂关联</string>
     <string name="care_note_fab_add">新建笔记</string>
     <string name="care_note_search_hint">搜索标题、正文或归属</string>
     <string name="care_note_list_empty_title">暂无照护笔记</string>

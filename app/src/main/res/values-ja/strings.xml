@@ -21,7 +21,7 @@
     <string name="settings_routine">生活リズム</string>
     <string name="settings_about">このアプリについて</string>
     <string name="archived_medications">アーカイブ済み薬品</string>
-    <string name="tab_diary">日記</string>
+    <string name="tab_records">記録</string>
     <string name="tab_health">健康</string>
 
     <!-- App Shortcuts -->
@@ -101,6 +101,7 @@
     <string name="home_filter_all">すべて</string>
     <string name="home_filter_medication">服薬</string>
     <string name="home_filter_care">ケア</string>
+    <string name="home_manage_care_tasks">ケア項目を管理</string>
     <string name="home_snackbar_undo_skip">%s のスキップを取り消し、未服用に戻しました</string>
     <string name="home_snackbar_reset">%s を未服用にリセットしました</string>
     <string name="home_snackbar_taken">%s を服用済みにしました</string>

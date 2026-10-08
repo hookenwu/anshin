@@ -24,7 +24,7 @@
     <string name="settings_routine">作息时间</string>
     <string name="settings_about">关于</string>
     <string name="archived_medications">已归档药品</string>
-    <string name="tab_diary">日记</string>
+    <string name="tab_records">记录</string>
     <string name="tab_health">健康</string>
 
     <!-- App Shortcuts -->
@@ -104,6 +104,7 @@
     <string name="home_filter_all">全部</string>
     <string name="home_filter_medication">用药</string>
     <string name="home_filter_care">照护</string>
+    <string name="home_manage_care_tasks">管理照护事项</string>
     <string name="home_now_group_title">现在要做</string>
     <string name="home_now_group_body">已到时间或即将到点的服药任务</string>
     <string name="home_later_group_title">今日稍后</string>

@@ -3,6 +3,7 @@ package com.driezy.medlog.feature.carenotes
 import com.driezy.medlog.data.model.CareNote
 import com.driezy.medlog.data.model.CareNoteStatus
 import com.driezy.medlog.data.model.CareNoteTargetType
+import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import com.driezy.medlog.data.repository.CareNoteRepository
 import com.driezy.medlog.data.repository.CareNoteTarget
 import com.driezy.medlog.data.repository.CareTaskRepository
@@ -36,6 +37,7 @@ class CareNoteEditorViewModel @Inject constructor(
     private val medicationRepository: MedicationRepository,
     private val careTaskRepository: CareTaskRepository,
     private val careTodoRepository: CareTodoRepository,
+    private val activeRecipient: ActiveRecipientStore,
 ) : BaseViewModel() {
 
     private val _uiState = MutableStateFlow(CareNoteEditorUiState(isLoading = true))
@@ -64,6 +66,7 @@ class CareNoteEditorViewModel @Inject constructor(
             is CareNoteEditorUiAction.StatusChanged -> editDraft { it.copy(status = action.status) }
             is CareNoteEditorUiAction.SupersededTextChanged -> editDraft { it.copy(supersededText = action.text) }
             is CareNoteEditorUiAction.ToggleLink -> toggleLink(action.target)
+            is CareNoteEditorUiAction.PreloadQuickAddLink -> preloadQuickAddLink(action.targetType, action.targetId)
             CareNoteEditorUiAction.Save -> save()
             CareNoteEditorUiAction.Delete -> delete()
         }
@@ -206,6 +209,35 @@ class CareNoteEditorViewModel @Inject constructor(
             draft.copy(
                 links = if (target in draft.links) draft.links - target else draft.links + target,
             )
+        }
+    }
+
+    /**
+     * 上下文快捷新增的成员校验（硬规则，docs/record-center-spec.md §3 D4）：
+     * 仅当目标 `careRecipientId` **等于**当前 [ActiveRecipientStore] 成员时才预挂关联；
+     * 不一致时**不预挂**并给出中性提示，**绝不写入跨成员关联**。
+     * 无当前成员（`NO_RECIPIENT`）时按既有约定不走写入路径（读空、写抛错），同样不预挂。
+     */
+    private fun preloadQuickAddLink(targetType: String, targetId: Long) {
+        safeLaunch(onError = { _uiState.update { it.copy(quickAddRefused = true) } }) {
+            val ownerId = when (targetType) {
+                CareNoteTargetType.MEDICATION -> medicationRepository.getMedicationById(targetId)?.careRecipientId
+                CareNoteTargetType.CARE_TASK -> careTaskRepository.getTaskById(targetId)?.careRecipientId
+                CareNoteTargetType.TODO -> careTodoRepository.getTodoById(targetId)?.careRecipientId
+                else -> null
+            }
+            val activeId = activeRecipient.current()
+            val belongsToActiveMember = ownerId != null &&
+                activeId != ActiveRecipientStore.NO_RECIPIENT &&
+                ownerId == activeId
+            if (!belongsToActiveMember) {
+                _uiState.update { it.copy(quickAddRefused = true, isLoading = false) }
+                return@safeLaunch
+            }
+            val target = CareNoteTarget(targetType, targetId)
+            addMissingOptions(setOf(target))
+            editDraft { it.copy(links = it.links + target) }
+            _uiState.update { it.copy(quickAddRefused = false) }
         }
     }
 

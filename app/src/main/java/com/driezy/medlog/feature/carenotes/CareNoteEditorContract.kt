@@ -33,6 +33,11 @@ data class CareNoteEditorUiState(
     val isSaving: Boolean = false,
     val validationError: CareNoteValidationError? = null,
     val linkOptions: List<CareNoteLinkOption> = emptyList(),
+    /**
+     * 上下文快捷新增的成员校验结果：目标不属于当前成员时置为 true，
+     * **不预挂**跨成员关联，仅给出中性提示（docs/record-center-spec.md §3 D4 硬规则）。
+     */
+    val quickAddRefused: Boolean = false,
 )
 
 sealed interface CareNoteEditorUiAction {
@@ -55,6 +60,12 @@ sealed interface CareNoteEditorUiAction {
     data class SupersededTextChanged(val text: String) : CareNoteEditorUiAction
 
     data class ToggleLink(val target: CareNoteTarget) : CareNoteEditorUiAction
+
+    /**
+     * 上下文快捷新增：请求把某目标（药/照护事项/待办）预挂到新笔记。
+     * 校验该目标 `careRecipientId == 当前成员`；不一致时不预挂并给出中性提示，绝不写跨成员关联。
+     */
+    data class PreloadQuickAddLink(val targetType: String, val targetId: Long) : CareNoteEditorUiAction
 
     data object Save : CareNoteEditorUiAction
 

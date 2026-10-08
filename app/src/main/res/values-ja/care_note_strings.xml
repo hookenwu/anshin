@@ -3,6 +3,8 @@
     <string name="care_note_nav_action">ケアノート</string>
     <string name="care_notes_title">ケアノート</string>
     <string name="care_note_related_title">関連ノート</string>
+    <string name="care_note_quick_add">関連ノートを追加</string>
+    <string name="care_note_quick_add_refused">この項目は別のメンバーに属するため、関連付けは行いませんでした</string>
     <string name="care_note_fab_add">新規ノート</string>
     <string name="care_note_search_hint">タイトル・本文・出典で検索</string>
     <string name="care_note_list_empty_title">ケアノートはありません</string>

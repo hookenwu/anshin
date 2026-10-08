@@ -19,9 +19,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
+import com.driezy.medlog.feature.carenotes.RelatedNotesSection
 import com.driezy.medlog.feature.medications.editor.DatePickerField
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
 import com.driezy.medlog.ui.components.ScreenChromeState
@@ -41,6 +43,7 @@ fun CareTodoEditorScreen(
     todoId: Long?,
     onBack: () -> Unit,
     onSaved: () -> Unit,
+    onQuickAddNote: () -> Unit,
     viewModel: CareTodoEditorViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -57,7 +60,12 @@ fun CareTodoEditorScreen(
         }
     }
 
-    CareTodoEditorContent(uiState = uiState, onBack = onBack, onAction = viewModel::onAction)
+    CareTodoEditorContent(
+        uiState = uiState,
+        onBack = onBack,
+        onAction = viewModel::onAction,
+        onQuickAddNote = onQuickAddNote,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,6 +74,7 @@ internal fun CareTodoEditorContent(
     uiState: CareTodoEditorUiState,
     onBack: () -> Unit,
     onAction: (CareTodoEditorUiAction) -> Unit,
+    onQuickAddNote: () -> Unit = {},
 ) {
     val draft = uiState.draft
     val saveLabel = stringResource(R.string.care_todo_save)
@@ -149,6 +158,15 @@ internal fun CareTodoEditorContent(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag("todoSourceMeta"),
+                )
+            }
+
+            // ── 相关笔记（编辑既有待办时；「＋」上下文快捷新增，含成员校验）──
+            if (uiState.isEditing) {
+                RelatedNotesSection(
+                    notes = uiState.relatedNotes,
+                    onQuickAdd = onQuickAddNote,
+                    contentPadding = 0.dp,
                 )
             }
         }

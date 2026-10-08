@@ -51,6 +51,7 @@ fun MedicationDetailScreen(
     medicationId: Long,
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
+    onQuickAddNote: () -> Unit,
     viewModel: MedicationDetailViewModel = hiltViewModel(),
 ) {
     RefreshWhileVisible { viewModel.onAction(DetailUiAction.RefreshTime) }
@@ -63,7 +64,7 @@ fun MedicationDetailScreen(
             }
         }
     }
-    MedicationDetailContent(uiState, onBack, onEdit, viewModel::onAction)
+    MedicationDetailContent(uiState, onBack, onEdit, onQuickAddNote, viewModel::onAction)
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -72,6 +73,7 @@ private fun MedicationDetailContent(
     uiState: DetailUiState,
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
+    onQuickAddNote: () -> Unit,
     onAction: (DetailUiAction) -> Unit,
 ) {
     var overlay by remember { mutableStateOf<ScreenOverlay?>(null) }
@@ -396,11 +398,9 @@ private fun MedicationDetailContent(
                 }
             }
 
-            // ── 相关笔记（底部；空态不渲染任何东西，docs/care-notes.md §7）──
-            if (uiState.relatedNotes.isNotEmpty()) {
-                item(key = "relatedNotes", contentType = "relatedNotes") {
-                    RelatedNotesSection(notes = uiState.relatedNotes)
-                }
+            // ── 相关笔记（底部；「＋」上下文快捷新增，含成员校验）──
+            item(key = "relatedNotes", contentType = "relatedNotes") {
+                RelatedNotesSection(notes = uiState.relatedNotes, onQuickAdd = onQuickAddNote)
             }
         }
     }

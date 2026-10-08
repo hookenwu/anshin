@@ -49,12 +49,16 @@ import com.driezy.medlog.ui.theme.MedLogSpacing
  * 照护笔记编辑器 Route：新建与编辑共用。
  *
  * @param noteId 非空为编辑模式（进入即加载），null 为新建。
+ * @param prelinkType 上下文快捷新增预挂关联的目标类型（null 代表无预挂）。
+ * @param prelinkId 预挂关联的目标 id（null 代表无预挂）。
  */
 @Composable
 fun CareNoteEditorScreen(
     noteId: Long?,
     onBack: () -> Unit,
     onSaved: () -> Unit,
+    prelinkType: String? = null,
+    prelinkId: Long? = null,
     viewModel: CareNoteEditorViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -63,6 +67,12 @@ fun CareNoteEditorScreen(
 
     LaunchedEffect(noteId) {
         if (noteId != null) viewModel.onAction(CareNoteEditorUiAction.LoadExisting(noteId))
+    }
+    // 上下文快捷新增：预挂关联（含成员校验；不一致时不预挂并给出中性提示）。
+    LaunchedEffect(prelinkType, prelinkId) {
+        if (prelinkType != null && prelinkId != null) {
+            viewModel.onAction(CareNoteEditorUiAction.PreloadQuickAddLink(prelinkType, prelinkId))
+        }
     }
     LaunchedEffect(viewModel) {
         viewModel.effects.collect { effect ->
@@ -169,6 +179,16 @@ internal fun CareNoteEditorContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.testTag("careNoteGuidance"),
             )
+
+            // 上下文快捷新增被拒时的中性提示（目标属于其他成员，绝不预挂跨成员关联）。
+            if (uiState.quickAddRefused) {
+                Text(
+                    text = stringResource(R.string.care_note_quick_add_refused),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("careNoteQuickAddRefused"),
+                )
+            }
 
             FieldLabel(stringResource(R.string.care_note_field_attribution_type))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small)) {

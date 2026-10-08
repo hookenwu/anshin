@@ -403,6 +403,7 @@ internal fun HomeContent(
                         Text(
                             text = stringResource(R.string.home_hero_plan_title),
                             style = MaterialTheme.emphasizedTypography.titleLarge,
+                            modifier = Modifier.weight(1f),
                         )
                         Text(
                             text = pluralStringResource(
@@ -414,6 +415,18 @@ internal fun HomeContent(
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        // 照护事项时间轴段标题旁的「管理照护事项」入口（复用既有区块，不新增区块）。
+                        if (uiState.todayItems.any { it.isCareTask }) {
+                            TextButton(
+                                onClick = onOpenCareTasks,
+                                modifier = Modifier.testTag("homeManageCareTasks"),
+                            ) {
+                                Text(
+                                    stringResource(R.string.home_manage_care_tasks),
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                            }
+                        }
                     }
                 }
             }

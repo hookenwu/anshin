@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="records_title">Records</string>
+    <string name="records_search_hint">Search titles, bodies, attribution, symptoms or notes</string>
+    <string name="records_mode_all">All</string>
+    <string name="records_mode_diary">Wellbeing journal</string>
+    <string name="records_mode_care_notes">Care notes</string>
+    <string name="records_fab_add">New record</string>
+    <string name="records_empty_hint">No records yet. Tap ＋ to start one.</string>
+    <string name="records_add_choose_title">What would you like to record?</string>
+    <string name="records_add_diary">Body or feelings</string>
+    <string name="records_add_care_note">Care note</string>
+</resources>

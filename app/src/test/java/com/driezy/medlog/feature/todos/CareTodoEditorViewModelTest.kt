@@ -2,9 +2,13 @@ package com.driezy.medlog.feature.todos
 
 import com.driezy.medlog.data.model.CareTodo
 import com.driezy.medlog.data.model.CareTodoStatus
+import com.driezy.medlog.data.recipient.ActiveRecipientStore
+import com.driezy.medlog.data.repository.CareNoteRepositoryImpl
+import com.driezy.medlog.data.repository.FakeCareNoteDao
 import com.driezy.medlog.data.repository.FakeCareTodoRepository
 import com.driezy.medlog.testing.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -12,6 +16,11 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.mock
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 
 /** 待办编辑器：标题必填校验、新建落库、编辑回填与更新。 */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -22,7 +31,17 @@ class CareTodoEditorViewModelTest {
 
     private val repository = FakeCareTodoRepository()
 
-    private fun viewModel() = CareTodoEditorViewModel(repository)
+    private fun viewModel() = CareTodoEditorViewModel(repository, careNoteRepository)
+
+    private val noteDao = FakeCareNoteDao()
+    private val careNoteRepository = CareNoteRepositoryImpl(
+        noteDao,
+        mock<ActiveRecipientStore> {
+            on { recipientId } doReturn MutableStateFlow(1L)
+            onBlocking { current() } doReturn 1L
+        },
+        Clock.fixed(Instant.ofEpochMilli(1_700_000_000_000L), ZoneOffset.UTC),
+    )
 
     @Test
     fun `blank title is rejected and writes nothing`() = runTest {

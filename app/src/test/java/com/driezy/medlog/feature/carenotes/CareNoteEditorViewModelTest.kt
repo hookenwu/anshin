@@ -49,21 +49,29 @@ class CareNoteEditorViewModelTest {
     private val careTasks = FakeCareTaskRepository()
     private val todos = FakeCareTodoRepository()
 
-    private fun repository(noteDao: CareNoteDao = dao) = CareNoteRepositoryImpl(
+    private fun store(activeId: Long = 1L): ActiveRecipientStore = mock {
+        on { recipientId } doReturn MutableStateFlow(activeId)
+        onBlocking { current() } doReturn activeId
+    }
+
+    private fun repository(noteDao: CareNoteDao = dao, activeId: Long = 1L) = CareNoteRepositoryImpl(
         noteDao,
-        mock<ActiveRecipientStore> {
-            on { recipientId } doReturn MutableStateFlow(1L)
-            onBlocking { current() } doReturn 1L
-        },
+        store(activeId),
         clock,
     )
 
-    private fun viewModel() = CareNoteEditorViewModel(repository(), medications, careTasks, todos)
+    private fun viewModel(activeId: Long = 1L) = CareNoteEditorViewModel(
+        repository(activeId = activeId),
+        medications,
+        careTasks,
+        todos,
+        store(activeId),
+    )
 
     /** 可选项加载必定失败（药品读取抛错）的 VM，用于验证错误分支。 */
     private fun failingOptionsViewModel(): CareNoteEditorViewModel {
         val failingMedications = FakeMedicationRepository().apply { failReads = true }
-        return CareNoteEditorViewModel(repository(), failingMedications, careTasks, todos)
+        return CareNoteEditorViewModel(repository(), failingMedications, careTasks, todos, store())
     }
 
     /** 写入必抛错的 DAO：读委托给内存假件，用于验证保存失败时的可见反馈。 */
@@ -203,7 +211,7 @@ class CareNoteEditorViewModelTest {
 
     @Test
     fun `a save failure emits a failure effect and clears the saving flag`() = runTest {
-        val viewModel = CareNoteEditorViewModel(repository(ThrowingWriteDao()), medications, careTasks, todos)
+        val viewModel = CareNoteEditorViewModel(repository(ThrowingWriteDao()), medications, careTasks, todos, store())
         advanceUntilIdle()
 
         val effect = async { viewModel.effects.first() }
@@ -218,6 +226,85 @@ class CareNoteEditorViewModelTest {
             effect.await() is CareNoteEditorUiEffect.Failed,
         )
         assertFalse("保存失败后必须复位 isSaving，否则保存按钮永久禁用", viewModel.uiState.value.isSaving)
+    }
+
+    // ── 上下文快捷新增的成员校验（硬规则）────────────────────────────────────
+
+    @Test
+    fun `quick add pre-attaches the link when the target belongs to the active member`() = runTest {
+        val medicationId = medications.addMedication(
+            Medication(name = "二甲双胍", doseUnit = "片", careRecipientId = 1L),
+        )
+        val viewModel = viewModel(activeId = 1L)
+        advanceUntilIdle()
+
+        viewModel.onAction(CareNoteEditorUiAction.PreloadQuickAddLink(CareNoteTargetType.MEDICATION, medicationId))
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.quickAddRefused)
+        assertEquals(
+            setOf(CareNoteTarget(CareNoteTargetType.MEDICATION, medicationId)),
+            viewModel.uiState.value.draft.links,
+        )
+    }
+
+    @Test
+    fun `quick add refuses a cross member link for every target type`() = runTest {
+        // 目标属于其他成员（2L），当前成员是 1L。
+        val medicationId = medications.addMedication(
+            Medication(name = "别人的药", doseUnit = "片", careRecipientId = 2L),
+        )
+        val taskId = careTasks.seedTask(CareTask(careRecipientId = 2L, title = "别人的照护事项"))
+        val todoId = todos.seed(CareTodo(careRecipientId = 2L, title = "别人的待办"))
+
+        listOf(
+            CareNoteTargetType.MEDICATION to medicationId,
+            CareNoteTargetType.CARE_TASK to taskId,
+            CareNoteTargetType.TODO to todoId,
+        ).forEach { (type, id) ->
+            val viewModel = viewModel(activeId = 1L)
+            advanceUntilIdle()
+
+            viewModel.onAction(CareNoteEditorUiAction.PreloadQuickAddLink(type, id))
+            advanceUntilIdle()
+
+            assertTrue("跨成员目标必须被拒绝并给出中性提示", viewModel.uiState.value.quickAddRefused)
+            assertTrue("绝不预挂跨成员关联", viewModel.uiState.value.draft.links.isEmpty())
+        }
+    }
+
+    @Test
+    fun `quick add with a cross member target saves without any link`() = runTest {
+        val medicationId = medications.addMedication(
+            Medication(name = "别人的药", doseUnit = "片", careRecipientId = 2L),
+        )
+        val viewModel = viewModel(activeId = 1L)
+        advanceUntilIdle()
+
+        viewModel.onAction(CareNoteEditorUiAction.PreloadQuickAddLink(CareNoteTargetType.MEDICATION, medicationId))
+        advanceUntilIdle()
+        viewModel.onAction(CareNoteEditorUiAction.TitleChanged("标题"))
+        viewModel.onAction(CareNoteEditorUiAction.BodyChanged("正文"))
+        viewModel.onAction(CareNoteEditorUiAction.Save)
+        advanceUntilIdle()
+
+        assertEquals("笔记仍可保存", 1, dao.stored().size)
+        assertTrue("保存后仍不得产生任何跨成员关联", dao.storedLinks().isEmpty())
+    }
+
+    @Test
+    fun `quick add does not pre-attach when there is no active member`() = runTest {
+        val medicationId = medications.addMedication(
+            Medication(name = "二甲双胍", doseUnit = "片", careRecipientId = 1L),
+        )
+        val viewModel = viewModel(activeId = ActiveRecipientStore.NO_RECIPIENT)
+        advanceUntilIdle()
+
+        viewModel.onAction(CareNoteEditorUiAction.PreloadQuickAddLink(CareNoteTargetType.MEDICATION, medicationId))
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.quickAddRefused)
+        assertTrue(viewModel.uiState.value.draft.links.isEmpty())
     }
 
     private companion object {

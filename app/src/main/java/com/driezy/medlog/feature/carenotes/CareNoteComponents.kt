@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -19,11 +20,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.CareNote
 import com.driezy.medlog.data.model.CareNoteAttributionType
 import com.driezy.medlog.data.model.CareNoteLink
+import com.driezy.medlog.ui.icons.MedLogIcon
+import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
 import java.time.Instant
 import java.time.ZoneId
@@ -188,23 +192,48 @@ private fun StatusChip(label: String) {
 }
 
 /**
- * 就地「相关笔记」区块（药品详情 / 照护事项详情）。空态**不渲染任何东西**：
- * 无 header、无占位（docs/care-notes.md §7）。
+ * 就地「相关笔记」区块（药品详情 / 照护事项详情 / 待办详情）。
+ *
+ * 无笔记且未提供快捷新增（[onQuickAdd] == null）时**不渲染任何东西**：无 header、无占位
+ * （docs/care-notes.md §7）。提供 [onQuickAdd] 时始终渲染标题行 + 「＋」，使「上下文快捷新增」
+ * 在无既有笔记时也可达（新增入口本身不产生笔记，空态语义不变）。
  */
 @Composable
-internal fun RelatedNotesSection(notes: List<CareNote>, modifier: Modifier = Modifier) {
-    if (!CareNotePresentation.shouldRenderRelated(notes)) return
+internal fun RelatedNotesSection(
+    notes: List<CareNote>,
+    modifier: Modifier = Modifier,
+    onQuickAdd: (() -> Unit)? = null,
+    contentPadding: Dp = MedLogSpacing.Large,
+) {
+    if (notes.isEmpty() && onQuickAdd == null) return
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
     ) {
-        Text(
-            text = stringResource(R.string.care_note_related_title),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(horizontal = MedLogSpacing.Large),
-        )
-        notes.forEach { note -> CareNoteCard(note, modifier = Modifier.padding(horizontal = MedLogSpacing.Large)) }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = contentPadding),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.care_note_related_title),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+            if (onQuickAdd != null) {
+                TextButton(
+                    onClick = onQuickAdd,
+                    modifier = Modifier.testTag("careNoteQuickAdd"),
+                ) {
+                    MedLogIcon(
+                        MedLogIcons.Add,
+                        contentDescription = stringResource(R.string.care_note_quick_add),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+        }
+        notes.forEach { note -> CareNoteCard(note, modifier = Modifier.padding(horizontal = contentPadding)) }
     }
 }
 

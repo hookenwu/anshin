@@ -23,6 +23,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.driezy.medlog.data.model.CareNoteTargetType
 import com.driezy.medlog.data.model.CareRecipient
 import com.driezy.medlog.feature.carenotes.CareNoteEditorScreen
 import com.driezy.medlog.feature.carenotes.CareNotesScreen
@@ -30,7 +31,6 @@ import com.driezy.medlog.feature.caretasks.CareTaskDetailScreen
 import com.driezy.medlog.feature.caretasks.CareTaskEditorScreen
 import com.driezy.medlog.feature.caretasks.CareTasksScreen
 import com.driezy.medlog.feature.health.HealthScreen
-import com.driezy.medlog.feature.health.symptom.SymptomDiaryScreen
 import com.driezy.medlog.feature.history.HistoryScreen
 import com.driezy.medlog.feature.medications.catalog.DrugsScreen
 import com.driezy.medlog.feature.medications.detail.MedicationDetailScreen
@@ -41,6 +41,7 @@ import com.driezy.medlog.feature.recipients.CareRecipientGateScreen
 import com.driezy.medlog.feature.recipients.CareRecipientsScreen
 import com.driezy.medlog.feature.recipients.CareRecipientsUiAction
 import com.driezy.medlog.feature.recipients.CareRecipientsViewModel
+import com.driezy.medlog.feature.records.RecordsScreen
 import com.driezy.medlog.feature.settings.AppearanceSettingsScreen
 import com.driezy.medlog.feature.settings.Bpx1DeviceSettingsScreen
 import com.driezy.medlog.feature.settings.CloudApiSettingsScreen
@@ -56,6 +57,7 @@ import com.driezy.medlog.ui.navigation.MedLogNavigationWrapper
 import com.driezy.medlog.ui.navigation.Route
 import com.driezy.medlog.ui.navigation.TOP_LEVEL_DESTINATIONS
 import com.driezy.medlog.ui.navigation.TopLevelDestination
+import com.driezy.medlog.ui.navigation.visibleTopLevelDestinations
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -117,17 +119,14 @@ fun MedLogApp(openAddMedication: Boolean = false) {
         }
     }
 
-    // ── 根据功能开关过滤可见目的地 ─────────────────────────────
+    // ── 根据功能开关过滤可见目的地（enableSymptomDiary 关闭时隐藏「记录」Tab）─────────
     val featureFlags by appViewModel.featureFlags.collectAsStateWithLifecycle()
     val enabledDestinations = remember(featureFlags) {
-        TOP_LEVEL_DESTINATIONS.filter { dest ->
-            when (dest.route) {
-                Route.Diary -> featureFlags.enableSymptomDiary
-                Route.Drugs -> featureFlags.enableDrugDatabase
-                Route.Health -> featureFlags.enableHealthModule
-                else -> true // Home / History / Settings 始终可见
-            }
-        }
+        visibleTopLevelDestinations(
+            enableSymptomDiary = featureFlags.enableSymptomDiary,
+            enableDrugDatabase = featureFlags.enableDrugDatabase,
+            enableHealthModule = featureFlags.enableHealthModule,
+        )
     }
     // Decide whether to show the main navigation wrapper
     // Welcome 屏不展示导航栏
@@ -152,6 +151,7 @@ fun MedLogApp(openAddMedication: Boolean = false) {
                 navController = navController,
                 startDest = startDest,
                 catalogEnabled = featureFlags.enableDrugDatabase,
+                diaryAvailable = featureFlags.enableSymptomDiary,
                 familyMembers = recipientState.recipients,
                 activeRecipientId = recipientState.activeRecipientId,
                 onSelectFamilyMember = { id -> recipientViewModel.onAction(CareRecipientsUiAction.SetActive(id)) },
@@ -177,6 +177,7 @@ private fun MedLogNavHost(
     navController: androidx.navigation.NavHostController,
     startDest: Route,
     catalogEnabled: Boolean,
+    diaryAvailable: Boolean = false,
     familyMembers: List<CareRecipient> = emptyList(),
     activeRecipientId: Long = 0L,
     onSelectFamilyMember: (Long) -> Unit = {},
@@ -232,7 +233,7 @@ private fun MedLogNavHost(
                 onOpenSettings = { navController.navigate(Route.Settings) },
                 onOpenCareTasks = { navController.navigate(Route.CareTasks) },
                 onOpenTodos = { navController.navigate(Route.Todos) },
-                onOpenCareNotes = { navController.navigate(Route.CareNotes) },
+                onOpenCareNotes = { navController.navigate(Route.Records) },
                 onCreateTodo = { navController.navigate(Route.TodoEditor()) },
                 familyMembers = familyMembers,
                 activeRecipientId = activeRecipientId,
@@ -272,11 +273,15 @@ private fun MedLogNavHost(
                 },
             )
         }
-        composable<Route.Diary>(
+        composable<Route.Records>(
             enterTransition = { navFadeIn },
             exitTransition = { navFadeOut },
         ) {
-            SymptomDiaryScreen(onOpenSettings = { navController.navigate(Route.Settings) })
+            RecordsScreen(
+                diaryAvailable = diaryAvailable,
+                onOpenCareNote = { id -> navController.navigate(Route.CareNoteEditor(id)) },
+                onAddCareNote = { navController.navigate(Route.CareNoteEditor()) },
+            )
         }
         composable<Route.Health>(
             enterTransition = { navFadeIn },
@@ -404,6 +409,14 @@ private fun MedLogNavHost(
                 medicationId = route.medicationId,
                 onBack = { navController.popBackStack() },
                 onEdit = { id -> navController.navigate(Route.AddMedication(id)) },
+                onQuickAddNote = {
+                    navController.navigate(
+                        Route.CareNoteEditor(
+                            prelinkType = CareNoteTargetType.MEDICATION,
+                            prelinkId = route.medicationId,
+                        ),
+                    )
+                },
             )
         }
         composable<Route.AddMedication>(
@@ -444,6 +457,14 @@ private fun MedLogNavHost(
                 careTaskId = route.careTaskId,
                 onBack = { navController.popBackStack() },
                 onEdit = { id -> navController.navigate(Route.CareTaskEditor(id)) },
+                onQuickAddNote = {
+                    navController.navigate(
+                        Route.CareNoteEditor(
+                            prelinkType = CareNoteTargetType.CARE_TASK,
+                            prelinkId = route.careTaskId,
+                        ),
+                    )
+                },
             )
         }
         composable<Route.CareTaskEditor>(
@@ -482,6 +503,17 @@ private fun MedLogNavHost(
                 todoId = route.todoId.takeIf { it != -1L },
                 onBack = { navController.popBackStack() },
                 onSaved = { navController.popBackStack() },
+                onQuickAddNote = {
+                    val todoId = route.todoId
+                    if (todoId != -1L) {
+                        navController.navigate(
+                            Route.CareNoteEditor(
+                                prelinkType = CareNoteTargetType.TODO,
+                                prelinkId = todoId,
+                            ),
+                        )
+                    }
+                },
             )
         }
         composable<Route.CareNotes>(
@@ -505,6 +537,8 @@ private fun MedLogNavHost(
             val route: Route.CareNoteEditor = backStackEntry.toRoute()
             CareNoteEditorScreen(
                 noteId = route.noteId.takeIf { it != -1L },
+                prelinkType = route.prelinkType.takeIf { it.isNotEmpty() },
+                prelinkId = route.prelinkId.takeIf { it != -1L },
                 onBack = { navController.popBackStack() },
                 onSaved = { navController.popBackStack() },
             )

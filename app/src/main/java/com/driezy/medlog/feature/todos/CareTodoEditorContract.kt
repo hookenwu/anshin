@@ -1,5 +1,7 @@
 package com.driezy.medlog.feature.todos
 
+import com.driezy.medlog.data.model.CareNote
+
 /** 编辑器草稿：与 [com.driezy.medlog.data.model.CareTodo] 对齐但不含身份/状态字段。 */
 data class CareTodoDraft(
     val title: String = "",
@@ -19,6 +21,8 @@ data class CareTodoEditorUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
     val validationError: CareTodoValidationError? = null,
+    /** 就地「相关笔记」：以该待办为 target 的 CareNote（空则不渲染，docs/care-notes.md §7）。 */
+    val relatedNotes: List<CareNote> = emptyList(),
 )
 
 sealed interface CareTodoEditorUiAction {

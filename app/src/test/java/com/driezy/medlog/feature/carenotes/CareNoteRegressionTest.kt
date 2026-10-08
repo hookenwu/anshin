@@ -3,6 +3,7 @@ package com.driezy.medlog.feature.carenotes
 import com.driezy.medlog.data.model.CareTodoStatus
 import com.driezy.medlog.ui.navigation.Route
 import com.driezy.medlog.ui.navigation.TOP_LEVEL_DESTINATIONS
+import com.driezy.medlog.ui.navigation.visibleTopLevelDestinations
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -24,6 +25,19 @@ class CareNoteRegressionTest {
         )
         assertFalse(TOP_LEVEL_DESTINATIONS.any { it.route == Route.Todos })
         assertFalse(TOP_LEVEL_DESTINATIONS.any { it.route == Route.CareTasks })
+    }
+
+    @Test
+    fun `care notes stay reachable from the record centre after the diary rename`() {
+        // 顶部导航仍恰好 5 个；第 4 位由「记录」承接（旧日记 Tab 改名），照护笔记仍不是 tab。
+        assertEquals(5, TOP_LEVEL_DESTINATIONS.size)
+        assertTrue(TOP_LEVEL_DESTINATIONS.any { it.route == Route.Records })
+        assertFalse(TOP_LEVEL_DESTINATIONS.any { it.route == Route.CareNotes })
+        // 开关关闭时隐藏的只是「记录」Tab；照护笔记经首页「更多」入口仍可达记录中心。
+        val flagOff = visibleTopLevelDestinations(false, true, true)
+        assertFalse(flagOff.any { it.route == Route.Records })
+        assertTrue(flagOff.any { it.route == Route.Home })
+        assertTrue(Route.CareNoteEditor(noteId = 5L) is Route)
     }
 
     @Test

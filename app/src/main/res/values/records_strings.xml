@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="records_title">记录</string>
+    <string name="records_search_hint">搜索标题、正文、归属、症状或备注</string>
+    <string name="records_mode_all">全部</string>
+    <string name="records_mode_diary">身心记录</string>
+    <string name="records_mode_care_notes">照护笔记</string>
+    <string name="records_fab_add">新建记录</string>
+    <string name="records_empty_hint">还没有记录。点右下角的 ＋ 开始记录。</string>
+    <string name="records_add_choose_title">要记录什么？</string>
+    <string name="records_add_diary">身体或感受</string>
+    <string name="records_add_care_note">照护笔记</string>
+</resources>

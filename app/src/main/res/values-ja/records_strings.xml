@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="records_title">記録</string>
+    <string name="records_search_hint">タイトル・本文・帰属・症状・メモを検索</string>
+    <string name="records_mode_all">すべて</string>
+    <string name="records_mode_diary">心身の記録</string>
+    <string name="records_mode_care_notes">ケアノート</string>
+    <string name="records_fab_add">新規記録</string>
+    <string name="records_empty_hint">まだ記録がありません。右下の ＋ から始めましょう。</string>
+    <string name="records_add_choose_title">何を記録しますか？</string>
+    <string name="records_add_diary">体調や気持ち</string>
+    <string name="records_add_care_note">ケアノート</string>
+</resources>

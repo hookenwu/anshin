@@ -3,6 +3,8 @@
     <string name="care_note_nav_action">Care notes</string>
     <string name="care_notes_title">Care notes</string>
     <string name="care_note_related_title">Related notes</string>
+    <string name="care_note_quick_add">New related note</string>
+    <string name="care_note_quick_add_refused">That item belongs to another member, so the link was not attached</string>
     <string name="care_note_fab_add">New note</string>
     <string name="care_note_search_hint">Search title, body or attribution</string>
     <string name="care_note_list_empty_title">No care notes</string>

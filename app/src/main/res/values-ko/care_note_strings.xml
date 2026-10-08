@@ -3,6 +3,8 @@
     <string name="care_note_nav_action">케어 노트</string>
     <string name="care_notes_title">케어 노트</string>
     <string name="care_note_related_title">관련 노트</string>
+    <string name="care_note_quick_add">관련 노트 추가</string>
+    <string name="care_note_quick_add_refused">이 항목은 다른 구성원의 것이어서 연결을 추가하지 않았습니다</string>
     <string name="care_note_fab_add">새 노트</string>
     <string name="care_note_search_hint">제목, 본문 또는 출처 검색</string>
     <string name="care_note_list_empty_title">케어 노트가 없습니다</string>

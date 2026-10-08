@@ -62,6 +62,7 @@ fun CareTaskDetailScreen(
     careTaskId: Long,
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
+    onQuickAddNote: () -> Unit,
     viewModel: CareTaskDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -89,6 +90,7 @@ fun CareTaskDetailScreen(
         onBack = onBack,
         onEdit = onEdit,
         onAction = viewModel::onAction,
+        onQuickAddNote = onQuickAddNote,
     )
 }
 
@@ -99,6 +101,7 @@ internal fun CareTaskDetailContent(
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
     onAction: (CareTaskDetailUiAction) -> Unit,
+    onQuickAddNote: () -> Unit = {},
 ) {
     var overlay by remember { mutableStateOf<ScreenOverlay?>(null) }
     var recordFor by remember { mutableStateOf<CareTaskOccurrenceUi?>(null) }
@@ -187,11 +190,9 @@ internal fun CareTaskDetailContent(
             }
             items(uiState.recentLogs, key = { it.id }) { log -> HistoryRow(log) }
 
-            // ── 相关笔记（底部；空态不渲染任何东西，docs/care-notes.md §7）──
-            if (uiState.relatedNotes.isNotEmpty()) {
-                item(key = "relatedNotes", contentType = "relatedNotes") {
-                    RelatedNotesSection(notes = uiState.relatedNotes)
-                }
+            // ── 相关笔记（底部；「＋」上下文快捷新增，含成员校验）──
+            item(key = "relatedNotes", contentType = "relatedNotes") {
+                RelatedNotesSection(notes = uiState.relatedNotes, onQuickAdd = onQuickAddNote)
             }
         }
     }
