@@ -45,6 +45,7 @@ interface CareNoteRepository {
         attributionName: String? = null,
         attributionAtMs: Long? = null,
         attributionText: String? = null,
+        attributionPersonId: Long? = null,
         links: List<CareNoteTarget> = emptyList(),
     ): Long
 
@@ -57,6 +58,7 @@ interface CareNoteRepository {
         attributionName: String? = null,
         attributionAtMs: Long? = null,
         attributionText: String? = null,
+        attributionPersonId: Long? = null,
         links: List<CareNoteTarget> = emptyList(),
     )
 

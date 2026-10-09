@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- People directory management (docs/care-people.md §4.2) -->
+    <string name="care_people_nav_action">People</string>
+    <string name="care_people_title">People</string>
+    <string name="care_people_fab_add">Add person</string>
+    <string name="care_people_empty_title">No people yet</string>
+    <string name="care_people_empty_body">Add people you deal with often so you can pick them when recording who said something.</string>
+    <string name="care_people_search_hint">Search by name</string>
+    <string name="care_people_add_title">Add person</string>
+    <string name="care_people_edit_title">Edit person</string>
+    <string name="care_people_field_name">Name</string>
+    <string name="care_people_field_gender">Gender (optional)</string>
+    <string name="care_people_field_age">Approximate age (optional)</string>
+    <string name="care_people_field_hospital">Hospital (optional)</string>
+    <string name="care_people_field_agency">Care agency (optional)</string>
+    <string name="care_people_field_phone">Phone (optional)</string>
+    <string name="care_people_save">Save</string>
+    <string name="care_people_name_required">Enter a name</string>
+    <string name="care_people_edit">Edit</string>
+    <string name="care_people_delete">Delete</string>
+    <string name="care_people_load_failed">Failed to load, try again</string>
+    <string name="care_people_save_failed">Save failed, try again</string>
+    <string name="care_people_delete_title">Delete person</string>
+    <string name="care_people_delete_body">%1$d notes recorded this person; those notes will keep the name.</string>
+    <string name="care_people_delete_body_zero">This cannot be undone; past notes keep the name.</string>
+
+    <!-- "Who said it" person picker / quick add (docs/care-people.md §4.1) -->
+    <string name="care_note_person_suggestions">Choose an existing person</string>
+    <string name="care_note_person_add">＋ Add person</string>
+    <string name="care_note_person_add_title">Add person</string>
+    <string name="care_note_person_add_hint">Name</string>
+    <string name="care_note_person_add_confirm">Save and select</string>
+</resources>

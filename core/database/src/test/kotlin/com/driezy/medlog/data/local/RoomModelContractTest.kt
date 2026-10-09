@@ -29,7 +29,7 @@ class RoomModelContractTest {
         assertEquals(7L, log.medicationId)
         assertEquals("WEIGHT", record.type)
         assertEquals("", symptom.medicationName)
-        assertEquals(23, DatabaseSchema.VERSION)
+        assertEquals(24, DatabaseSchema.VERSION)
     }
 
     @Test

@@ -22,6 +22,9 @@ class FakeCareNoteDao : CareNoteDao {
         CareNoteTargetType.CARE_TASK to mutableSetOf(),
         CareNoteTargetType.TODO to mutableSetOf(),
     )
+
+    /** 人员 id → 归属成员 id；用于校验保存笔记时的人员存在性与成员归属。 */
+    private val people = mutableMapOf<Long, Long>()
     private var nextNoteId = 1L
     private var nextLinkId = 1L
 
@@ -30,6 +33,15 @@ class FakeCareNoteDao : CareNoteDao {
         notes.value = notes.value + note.copy(id = id)
         if (id >= nextNoteId) nextNoteId = id + 1
         return id
+    }
+
+    /** 声明某人存在且属于某成员。 */
+    fun seedPerson(personId: Long, recipientId: Long) {
+        people[personId] = recipientId
+    }
+
+    fun removePerson(personId: Long) {
+        people.remove(personId)
     }
 
     fun seedLink(noteId: Long, targetType: String, targetId: Long): Long {
@@ -127,6 +139,9 @@ class FakeCareNoteDao : CareNoteDao {
 
     override suspend fun todoExists(id: Long): Int =
         if (id in existingTargets.getValue(CareNoteTargetType.TODO)) 1 else 0
+
+    override suspend fun personBelongsToRecipient(id: Long, recipientId: Long): Int =
+        if (people[id] == recipientId) 1 else 0
 
     private companion object {
         /** 与 DAO SQL 同构：QUESTIONABLE > ACTIVE > SUPERSEDED，再 updatedAtMs 倒序（空在后），再 createdAtMs 倒序、id 倒序。 */

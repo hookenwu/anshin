@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 인물 디렉터리 관리 (docs/care-people.md §4.2) -->
+    <string name="care_people_nav_action">인물</string>
+    <string name="care_people_title">인물</string>
+    <string name="care_people_fab_add">인물 추가</string>
+    <string name="care_people_empty_title">인물이 없습니다</string>
+    <string name="care_people_empty_body">자주 상대하는 사람을 추가하면 "누가 말했는지"를 기록할 때 선택할 수 있습니다.</string>
+    <string name="care_people_search_hint">이름 검색</string>
+    <string name="care_people_add_title">인물 추가</string>
+    <string name="care_people_edit_title">인물 편집</string>
+    <string name="care_people_field_name">이름</string>
+    <string name="care_people_field_gender">성별(선택)</string>
+    <string name="care_people_field_age">대략적인 나이(선택)</string>
+    <string name="care_people_field_hospital">병원(선택)</string>
+    <string name="care_people_field_agency">요양 회사(선택)</string>
+    <string name="care_people_field_phone">전화번호(선택)</string>
+    <string name="care_people_save">저장</string>
+    <string name="care_people_name_required">이름을 입력하세요</string>
+    <string name="care_people_edit">편집</string>
+    <string name="care_people_delete">삭제</string>
+    <string name="care_people_load_failed">불러오지 못했습니다. 다시 시도해 주세요</string>
+    <string name="care_people_save_failed">저장하지 못했습니다. 다시 시도해 주세요</string>
+    <string name="care_people_delete_title">인물 삭제</string>
+    <string name="care_people_delete_body">%1$d개의 기록이 이 인물을 기록했습니다. 삭제해도 기록에는 이름이 남습니다.</string>
+    <string name="care_people_delete_body_zero">삭제하면 되돌릴 수 없습니다. 지난 기록에는 이름이 남습니다.</string>
+
+    <!-- "누가 말했는지" 인물 선택 / 빠른 추가 (docs/care-people.md §4.1) -->
+    <string name="care_note_person_suggestions">기존 인물에서 선택</string>
+    <string name="care_note_person_add">＋ 인물 추가</string>
+    <string name="care_note_person_add_title">인물 추가</string>
+    <string name="care_note_person_add_hint">이름</string>
+    <string name="care_note_person_add_confirm">저장 후 선택</string>
+</resources>

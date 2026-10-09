@@ -55,6 +55,13 @@ data class CareNote(
     val supersededAtMs: Long? = null,
     val createdAtMs: Long = System.currentTimeMillis(),
     val updatedAtMs: Long? = null,
+    /**
+     * 可选关联的人员档案（docs/care-people.md §1）。**刻意不建外键**：
+     * 历史由 [attributionName] 姓名快照保护；删除人员后我们本就要**容忍悬挂并保留快照**；
+     * 且本仓对跨实体引用一律「无外键 + 读取容忍」（`CareTodo.source*`、`care_note_links.targetId`）。
+     * 不是身份事实源——成员归属仍由 [careRecipientId] 决定。
+     */
+    val attributionPersonId: Long? = null,
 )
 
 /**

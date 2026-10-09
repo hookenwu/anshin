@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 人物台帳の管理（docs/care-people.md §4.2） -->
+    <string name="care_people_nav_action">人物</string>
+    <string name="care_people_title">人物</string>
+    <string name="care_people_fab_add">人物を追加</string>
+    <string name="care_people_empty_title">人物がいません</string>
+    <string name="care_people_empty_body">よく関わる人を追加すると、「誰から聞いたか」を記録するときに選べます。</string>
+    <string name="care_people_search_hint">名前で検索</string>
+    <string name="care_people_add_title">人物を追加</string>
+    <string name="care_people_edit_title">人物を編集</string>
+    <string name="care_people_field_name">名前</string>
+    <string name="care_people_field_gender">性別（任意）</string>
+    <string name="care_people_field_age">おおよその年齢（任意）</string>
+    <string name="care_people_field_hospital">病院（任意）</string>
+    <string name="care_people_field_agency">介護事業者（任意）</string>
+    <string name="care_people_field_phone">電話番号（任意）</string>
+    <string name="care_people_save">保存</string>
+    <string name="care_people_name_required">名前を入力してください</string>
+    <string name="care_people_edit">編集</string>
+    <string name="care_people_delete">削除</string>
+    <string name="care_people_load_failed">読み込みに失敗しました。もう一度お試しください</string>
+    <string name="care_people_save_failed">保存に失敗しました。もう一度お試しください</string>
+    <string name="care_people_delete_title">人物を削除</string>
+    <string name="care_people_delete_body">%1$d 件の記録がこの人物を記録しています。削除後も記録には名前が残ります。</string>
+    <string name="care_people_delete_body_zero">削除すると元に戻せません。過去の記録には名前が残ります。</string>
+
+    <!-- 「誰が言ったか」の人物選択 / クイック追加（docs/care-people.md §4.1） -->
+    <string name="care_note_person_suggestions">既存の人物から選ぶ</string>
+    <string name="care_note_person_add">＋ 人物を追加</string>
+    <string name="care_note_person_add_title">人物を追加</string>
+    <string name="care_note_person_add_hint">名前</string>
+    <string name="care_note_person_add_confirm">保存して選択</string>
+</resources>

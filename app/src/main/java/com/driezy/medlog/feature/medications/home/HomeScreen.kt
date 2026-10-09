@@ -57,6 +57,7 @@ fun HomeScreen(
     onOpenCareTasks: () -> Unit = {},
     onOpenTodos: () -> Unit = {},
     onOpenCareNotes: () -> Unit = {},
+    onOpenCarePeople: () -> Unit = {},
     onCreateTodo: () -> Unit = {},
     familyMembers: List<CareRecipient> = emptyList(),
     activeRecipientId: Long = 0L,
@@ -127,6 +128,7 @@ fun HomeScreen(
         onOpenCareTasks = onOpenCareTasks,
         onOpenTodos = onOpenTodos,
         onOpenCareNotes = onOpenCareNotes,
+        onOpenCarePeople = onOpenCarePeople,
         onCreateTodo = onCreateTodo,
         familyMembers = familyMembers,
         activeRecipientId = activeRecipientId,
@@ -147,6 +149,7 @@ internal fun HomeContent(
     onOpenCareTasks: () -> Unit,
     onOpenTodos: () -> Unit = {},
     onOpenCareNotes: () -> Unit = {},
+    onOpenCarePeople: () -> Unit = {},
     onCreateTodo: () -> Unit = {},
     familyMembers: List<CareRecipient> = emptyList(),
     activeRecipientId: Long = 0L,
@@ -224,6 +227,12 @@ internal fun HomeContent(
                 priority = TopBarActionPriority.Secondary,
             ),
             TopBarAction(
+                id = "care_people",
+                label = stringResource(R.string.care_people_nav_action),
+                icon = MedLogIcons.VerifiedUser,
+                priority = TopBarActionPriority.Secondary,
+            ),
+            TopBarAction(
                 id = "qr",
                 label = stringResource(R.string.home_share_qr_cd),
                 icon = MedLogIcons.QrCode2,
@@ -280,6 +289,7 @@ internal fun HomeContent(
                 "care_tasks" -> onOpenCareTasks()
                 "todos" -> onOpenTodos()
                 "care_notes" -> onOpenCareNotes()
+                "care_people" -> onOpenCarePeople()
             }
         },
     ) { innerPadding ->

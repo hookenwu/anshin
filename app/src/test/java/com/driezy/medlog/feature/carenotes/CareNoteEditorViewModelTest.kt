@@ -5,6 +5,7 @@ import com.driezy.medlog.data.model.CareNote
 import com.driezy.medlog.data.model.CareNoteAttributionType
 import com.driezy.medlog.data.model.CareNoteStatus
 import com.driezy.medlog.data.model.CareNoteTargetType
+import com.driezy.medlog.data.model.CarePerson
 import com.driezy.medlog.data.model.CareTask
 import com.driezy.medlog.data.model.CareTodo
 import com.driezy.medlog.data.model.Medication
@@ -12,6 +13,7 @@ import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import com.driezy.medlog.data.repository.CareNoteRepositoryImpl
 import com.driezy.medlog.data.repository.CareNoteTarget
 import com.driezy.medlog.data.repository.FakeCareNoteDao
+import com.driezy.medlog.data.repository.FakeCarePersonRepository
 import com.driezy.medlog.data.repository.FakeCareTaskRepository
 import com.driezy.medlog.data.repository.FakeCareTodoRepository
 import com.driezy.medlog.data.repository.FakeMedicationRepository
@@ -48,6 +50,7 @@ class CareNoteEditorViewModelTest {
     private val medications = FakeMedicationRepository()
     private val careTasks = FakeCareTaskRepository()
     private val todos = FakeCareTodoRepository()
+    private val carePersons = FakeCarePersonRepository()
 
     private fun store(activeId: Long = 1L): ActiveRecipientStore = mock {
         on { recipientId } doReturn MutableStateFlow(activeId)
@@ -65,13 +68,14 @@ class CareNoteEditorViewModelTest {
         medications,
         careTasks,
         todos,
+        carePersons,
         store(activeId),
     )
 
     /** 可选项加载必定失败（药品读取抛错）的 VM，用于验证错误分支。 */
     private fun failingOptionsViewModel(): CareNoteEditorViewModel {
         val failingMedications = FakeMedicationRepository().apply { failReads = true }
-        return CareNoteEditorViewModel(repository(), failingMedications, careTasks, todos, store())
+        return CareNoteEditorViewModel(repository(), failingMedications, careTasks, todos, carePersons, store())
     }
 
     /** 写入必抛错的 DAO：读委托给内存假件，用于验证保存失败时的可见反馈。 */
@@ -211,7 +215,8 @@ class CareNoteEditorViewModelTest {
 
     @Test
     fun `a save failure emits a failure effect and clears the saving flag`() = runTest {
-        val viewModel = CareNoteEditorViewModel(repository(ThrowingWriteDao()), medications, careTasks, todos, store())
+        val viewModel =
+            CareNoteEditorViewModel(repository(ThrowingWriteDao()), medications, careTasks, todos, carePersons, store())
         advanceUntilIdle()
 
         val effect = async { viewModel.effects.first() }
@@ -305,6 +310,118 @@ class CareNoteEditorViewModelTest {
 
         assertTrue(viewModel.uiState.value.quickAddRefused)
         assertTrue(viewModel.uiState.value.draft.links.isEmpty())
+    }
+
+    // ── 「谁说的」选择器 / 快速新增 / 自由输入 + 三条边界规则（docs/care-people.md §2/§4.1）──
+
+    @Test
+    fun `selecting a person fills the name and id without changing the attribution type`() = runTest {
+        val personId = carePersons.seed(CarePerson(careRecipientId = 1L, name = "护士张"))
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        assertEquals(CareNoteAttributionType.PERSONAL_OBSERVATION, viewModel.uiState.value.draft.attributionType)
+        viewModel.onAction(CareNoteEditorUiAction.AttributionTypeChanged(CareNoteAttributionType.CLINICIAN))
+        viewModel.onAction(CareNoteEditorUiAction.AttributionPersonSelected(personId, "护士张"))
+        advanceUntilIdle()
+
+        assertEquals("护士张", viewModel.uiState.value.draft.attributionName)
+        assertEquals(personId, viewModel.uiState.value.draft.attributionPersonId)
+        assertEquals(
+            "选择人员不得设置或锁定归属类型（类型只属于笔记）",
+            CareNoteAttributionType.CLINICIAN,
+            viewModel.uiState.value.draft.attributionType,
+        )
+    }
+
+    @Test
+    fun `hand editing the name detaches the person while keeping the typed name`() = runTest {
+        val personId = carePersons.seed(CarePerson(careRecipientId = 1L, name = "护士张"))
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onAction(CareNoteEditorUiAction.AttributionPersonSelected(personId, "护士张"))
+        advanceUntilIdle()
+        assertEquals(personId, viewModel.uiState.value.draft.attributionPersonId)
+
+        viewModel.onAction(CareNoteEditorUiAction.AttributionNameChanged("张护工"))
+        advanceUntilIdle()
+
+        assertEquals("用户手改的名字必须保留", "张护工", viewModel.uiState.value.draft.attributionName)
+        assertNull("手动改姓名必须自动解除人员关联", viewModel.uiState.value.draft.attributionPersonId)
+    }
+
+    @Test
+    fun `quick add creates a name only person selects it and stays in the editor`() = runTest {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onAction(CareNoteEditorUiAction.QuickAddPerson("新护工"))
+        advanceUntilIdle()
+
+        val created = carePersons.stored().single()
+        assertEquals("快速新增只要求姓名", "新护工", created.name)
+        assertEquals("新增后自动选中", created.id, viewModel.uiState.value.draft.attributionPersonId)
+        assertEquals("新护工", viewModel.uiState.value.draft.attributionName)
+        // 不离开编辑流程：草稿仍在，可直接继续填写并保存。
+        viewModel.onAction(CareNoteEditorUiAction.TitleChanged("标题"))
+        viewModel.onAction(CareNoteEditorUiAction.BodyChanged("正文"))
+        viewModel.onAction(CareNoteEditorUiAction.Save)
+        advanceUntilIdle()
+        assertEquals(1, dao.stored().size)
+    }
+
+    @Test
+    fun `picker search narrows by name and a note still saves as free text without any person`() = runTest {
+        carePersons.seed(CarePerson(careRecipientId = 1L, name = "护士张"))
+        carePersons.seed(CarePerson(careRecipientId = 1L, name = "王医生"))
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        assertEquals(setOf("护士张", "王医生"), viewModel.uiState.value.personOptions.map { it.name }.toSet())
+
+        viewModel.onAction(CareNoteEditorUiAction.AttributionNameChanged("护士"))
+        advanceUntilIdle()
+        assertEquals(listOf("护士张"), viewModel.uiState.value.personOptions.map { it.name })
+
+        // 自由输入路径完全保留：不选人员也能保存（无人员记录）。
+        viewModel.onAction(CareNoteEditorUiAction.TitleChanged("标题"))
+        viewModel.onAction(CareNoteEditorUiAction.BodyChanged("正文"))
+        viewModel.onAction(CareNoteEditorUiAction.Save)
+        advanceUntilIdle()
+
+        val stored = dao.stored().single()
+        assertNull("自由输入不得凭空产生人员关联", stored.attributionPersonId)
+        assertEquals("护士", stored.attributionName)
+    }
+
+    @Test
+    fun `saving persists the person association and clears it once the person is gone`() = runTest {
+        dao.seedPerson(5L, recipientId = 1L)
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onAction(CareNoteEditorUiAction.AttributionPersonSelected(5L, "护士张"))
+        viewModel.onAction(CareNoteEditorUiAction.TitleChanged("标题"))
+        viewModel.onAction(CareNoteEditorUiAction.BodyChanged("正文"))
+        viewModel.onAction(CareNoteEditorUiAction.Save)
+        advanceUntilIdle()
+
+        val noteId = dao.stored().single().id
+        assertEquals(5L, dao.storedById(noteId)!!.attributionPersonId)
+
+        // 人员被删除 → 悬挂引用读取时被容忍；再次保存时确定性清空，姓名快照保留。
+        dao.removePerson(5L)
+        val reopened = viewModel()
+        reopened.onAction(CareNoteEditorUiAction.LoadExisting(noteId))
+        advanceUntilIdle()
+        assertEquals("读取容忍：悬挂 id 仍原样加载", 5L, reopened.uiState.value.draft.attributionPersonId)
+
+        reopened.onAction(CareNoteEditorUiAction.Save)
+        advanceUntilIdle()
+        val saved = dao.storedById(noteId)!!
+        assertNull("人员不存在时保存必须不写入关联", saved.attributionPersonId)
+        assertEquals("护士张", saved.attributionName)
     }
 
     private companion object {

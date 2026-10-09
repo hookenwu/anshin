@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
@@ -102,6 +103,7 @@ internal fun CareNoteEditorContent(
     val draft = uiState.draft
     val saveLabel = stringResource(R.string.care_note_save)
     var overlay by remember { mutableStateOf<ScreenOverlay?>(null) }
+    var quickAddOpen by remember { mutableStateOf(false) }
     val deleteTitle = stringResource(R.string.care_note_delete_title)
     val deleteBody = stringResource(R.string.care_note_delete_body)
     val deleteConfirm = stringResource(R.string.care_note_delete)
@@ -209,6 +211,30 @@ internal fun CareNoteEditorContent(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("careNoteAttributionNameField"),
             )
+            // 选择器：输入即搜索当前成员的已有人员，点选填写（前缀/包含皆可）。
+            // 选中人员**不改动、不锁定归属类型**——类型只属于这条笔记（docs/care-people.md §3）。
+            if (uiState.personOptions.isNotEmpty()) {
+                FieldLabel(stringResource(R.string.care_note_person_suggestions))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small)) {
+                    uiState.personOptions.forEach { person ->
+                        FilterChip(
+                            selected = draft.attributionPersonId == person.id,
+                            onClick = {
+                                onAction(CareNoteEditorUiAction.AttributionPersonSelected(person.id, person.name))
+                            },
+                            label = { Text(person.name) },
+                            modifier = Modifier.testTag("careNotePerson:${person.id}"),
+                        )
+                    }
+                }
+            }
+            // 快速新增：只填姓名；保存后自动选中并留在编辑器（不离开记录流程）。
+            TextButton(
+                onClick = { quickAddOpen = true },
+                modifier = Modifier.testTag("careNotePersonQuickAdd"),
+            ) {
+                Text(stringResource(R.string.care_note_person_add))
+            }
             DatePickerField(
                 label = stringResource(R.string.care_note_field_attribution_at),
                 timestamp = draft.attributionAtMs,
@@ -291,6 +317,47 @@ internal fun CareNoteEditorContent(
         overlay = overlay,
         onDismiss = { overlay = null },
         onConfirm = { _, _ -> onAction(CareNoteEditorUiAction.Delete) },
+    )
+
+    if (quickAddOpen) {
+        QuickAddPersonDialog(
+            onDismiss = { quickAddOpen = false },
+            onConfirm = { name ->
+                onAction(CareNoteEditorUiAction.QuickAddPerson(name))
+                quickAddOpen = false
+            },
+        )
+    }
+}
+
+/**「＋ 新增人员」：只要求姓名（其余字段可在人员档案里补），确认后自动选中并留在编辑器。 */
+@Composable
+private fun QuickAddPersonDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.care_note_person_add_title)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(R.string.care_note_person_add_hint)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("careNotePersonQuickAddField"),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (name.isNotBlank()) onConfirm(name) },
+                enabled = name.isNotBlank(),
+                modifier = Modifier.testTag("careNotePersonQuickAddConfirm"),
+            ) {
+                Text(stringResource(R.string.care_note_person_add_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
     )
 }
 

@@ -105,4 +105,11 @@ interface CareNoteDao {
 
     @Query("SELECT COUNT(*) FROM care_todos WHERE id = :id")
     suspend fun todoExists(id: Long): Int
+
+    // ── 人员关联的存在性/成员归属校验（保存笔记时二次校验，docs/care-people.md §2）──────
+    // 悬挂人员引用**读取容忍、不做后台清理**；保存时若人员不存在或不属于当前成员，
+    // 则不写入关联（禁止跨成员关联），并保留姓名快照。
+
+    @Query("SELECT COUNT(*) FROM care_people WHERE id = :id AND careRecipientId = :recipientId")
+    suspend fun personBelongsToRecipient(id: Long, recipientId: Long): Int
 }

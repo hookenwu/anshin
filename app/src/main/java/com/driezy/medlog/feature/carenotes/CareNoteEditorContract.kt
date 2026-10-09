@@ -2,6 +2,7 @@ package com.driezy.medlog.feature.carenotes
 
 import com.driezy.medlog.data.model.CareNoteAttributionType
 import com.driezy.medlog.data.model.CareNoteStatus
+import com.driezy.medlog.data.model.CarePerson
 import com.driezy.medlog.data.repository.CareNoteTarget
 
 /** 可挂接目标（药/照护事项/待办）的展示项；[label] 为目标名称。 */
@@ -16,6 +17,11 @@ data class CareNoteDraft(
     val attributionName: String = "",
     val attributionAtMs: Long? = null,
     val attributionText: String = "",
+    /**
+     * 可选关联的人员（docs/care-people.md §4.1）。选中人员后填写；**手动改姓名即自动解除关联**
+     * （清空本字段）并保留用户新输入的姓名（边界规则①，用户的手改优先）。
+     */
+    val attributionPersonId: Long? = null,
     /** 状态，默认 ACTIVE；只有用户能改。 */
     val status: String = CareNoteStatus.ACTIVE,
     val supersededText: String = "",
@@ -33,6 +39,8 @@ data class CareNoteEditorUiState(
     val isSaving: Boolean = false,
     val validationError: CareNoteValidationError? = null,
     val linkOptions: List<CareNoteLinkOption> = emptyList(),
+    /** 选择器：当前成员中按姓名匹配的已有人员（选择即填写，选中不改变归属类型）。 */
+    val personOptions: List<CarePerson> = emptyList(),
     /**
      * 上下文快捷新增的成员校验结果：目标不属于当前成员时置为 true，
      * **不预挂**跨成员关联，仅给出中性提示（docs/record-center-spec.md §3 D4 硬规则）。
@@ -50,6 +58,18 @@ sealed interface CareNoteEditorUiAction {
     data class AttributionTypeChanged(val type: String) : CareNoteEditorUiAction
 
     data class AttributionNameChanged(val name: String) : CareNoteEditorUiAction
+
+    /**
+     * 从选择器选中一名人员：填写其姓名并关联人员 id。
+     * **不设置、不锁定 `attributionType`**（类型只属于笔记，docs/care-people.md §3）。
+     */
+    data class AttributionPersonSelected(val personId: Long, val name: String) : CareNoteEditorUiAction
+
+    /**
+     *「＋ 新增人员」快速新增：只填姓名（必填）→ 保存后**自动选中**并回到笔记编辑流程，
+     * 不离开编辑器（docs/care-people.md §4.1、原则 6）。
+     */
+    data class QuickAddPerson(val name: String) : CareNoteEditorUiAction
 
     data class AttributionAtChanged(val atMs: Long?) : CareNoteEditorUiAction
 

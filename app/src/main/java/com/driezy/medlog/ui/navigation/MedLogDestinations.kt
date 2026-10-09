@@ -51,6 +51,9 @@ import kotlinx.serialization.Serializable
     /** 照护笔记列表（搜索 + 状态过滤）。入口在「更多」溢出菜单（与待办/照护事项并列）。 */
     @Serializable data object CareNotes : Route
 
+    /** 人员档案管理（列表 + 新增/编辑/删除）。入口在「更多」溢出菜单，**不是底部 tab**。 */
+    @Serializable data object CarePeople : Route
+
     /**
      * @param noteId 编辑模式已有记录的 id（-1 代表新增）
      * @param prelinkType 上下文快捷新增预挂关联的目标类型（空串代表无预挂）

@@ -27,6 +27,7 @@ import com.driezy.medlog.data.model.CareNoteTargetType
 import com.driezy.medlog.data.model.CareRecipient
 import com.driezy.medlog.feature.carenotes.CareNoteEditorScreen
 import com.driezy.medlog.feature.carenotes.CareNotesScreen
+import com.driezy.medlog.feature.carepeople.CarePeopleScreen
 import com.driezy.medlog.feature.caretasks.CareTaskDetailScreen
 import com.driezy.medlog.feature.caretasks.CareTaskEditorScreen
 import com.driezy.medlog.feature.caretasks.CareTasksScreen
@@ -234,6 +235,7 @@ private fun MedLogNavHost(
                 onOpenCareTasks = { navController.navigate(Route.CareTasks) },
                 onOpenTodos = { navController.navigate(Route.Todos) },
                 onOpenCareNotes = { navController.navigate(Route.Records) },
+                onOpenCarePeople = { navController.navigate(Route.CarePeople) },
                 onCreateTodo = { navController.navigate(Route.TodoEditor()) },
                 familyMembers = familyMembers,
                 activeRecipientId = activeRecipientId,
@@ -527,6 +529,14 @@ private fun MedLogNavHost(
                 onOpen = { id -> navController.navigate(Route.CareNoteEditor(id)) },
                 onBack = { navController.popBackStack() },
             )
+        }
+        composable<Route.CarePeople>(
+            enterTransition = { materialSharedAxisX(forward = true) },
+            exitTransition = { navFadeOut },
+            popEnterTransition = { materialSharedAxisX(forward = false) },
+            popExitTransition = { materialSharedAxisXOut(forward = true) },
+        ) {
+            CarePeopleScreen(onBack = { navController.popBackStack() })
         }
         composable<Route.CareNoteEditor>(
             enterTransition = { materialSharedAxisX(forward = true) },

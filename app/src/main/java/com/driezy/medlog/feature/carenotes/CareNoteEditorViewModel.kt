@@ -6,6 +6,7 @@ import com.driezy.medlog.data.model.CareNoteTargetType
 import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import com.driezy.medlog.data.repository.CareNoteRepository
 import com.driezy.medlog.data.repository.CareNoteTarget
+import com.driezy.medlog.data.repository.CarePersonRepository
 import com.driezy.medlog.data.repository.CareTaskRepository
 import com.driezy.medlog.data.repository.CareTodoRepository
 import com.driezy.medlog.data.repository.MedicationRepository
@@ -14,6 +15,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import javax.inject.Inject
@@ -37,6 +39,7 @@ class CareNoteEditorViewModel @Inject constructor(
     private val medicationRepository: MedicationRepository,
     private val careTaskRepository: CareTaskRepository,
     private val careTodoRepository: CareTodoRepository,
+    private val carePersonRepository: CarePersonRepository,
     private val activeRecipient: ActiveRecipientStore,
 ) : BaseViewModel() {
 
@@ -52,6 +55,8 @@ class CareNoteEditorViewModel @Inject constructor(
     init {
         // 新建时也要能选择挂接目标：进入编辑器即加载可选项（与是否编辑无关）。
         ensureOptions()
+        // 预载当前成员的人员，让「谁说的」选择器无需先输入即可用（输入即收窄）。
+        refreshPersonOptions("")
     }
 
     fun onAction(action: CareNoteEditorUiAction) {
@@ -60,7 +65,9 @@ class CareNoteEditorViewModel @Inject constructor(
             is CareNoteEditorUiAction.TitleChanged -> editDraft { it.copy(title = action.title) }
             is CareNoteEditorUiAction.BodyChanged -> editDraft { it.copy(body = action.body) }
             is CareNoteEditorUiAction.AttributionTypeChanged -> editDraft { it.copy(attributionType = action.type) }
-            is CareNoteEditorUiAction.AttributionNameChanged -> editDraft { it.copy(attributionName = action.name) }
+            is CareNoteEditorUiAction.AttributionNameChanged -> onNameChanged(action.name)
+            is CareNoteEditorUiAction.AttributionPersonSelected -> onPersonSelected(action.personId, action.name)
+            is CareNoteEditorUiAction.QuickAddPerson -> quickAddPerson(action.name)
             is CareNoteEditorUiAction.AttributionAtChanged -> editDraft { it.copy(attributionAtMs = action.atMs) }
             is CareNoteEditorUiAction.AttributionTextChanged -> editDraft { it.copy(attributionText = action.text) }
             is CareNoteEditorUiAction.StatusChanged -> editDraft { it.copy(status = action.status) }
@@ -100,6 +107,7 @@ class CareNoteEditorViewModel @Inject constructor(
                         attributionName = note.attributionName.orEmpty(),
                         attributionAtMs = note.attributionAtMs,
                         attributionText = note.attributionText.orEmpty(),
+                        attributionPersonId = note.attributionPersonId,
                         status = note.status,
                         supersededText = note.supersededText.orEmpty(),
                         links = links,
@@ -134,6 +142,7 @@ class CareNoteEditorViewModel @Inject constructor(
                         attributionName = name,
                         attributionAtMs = draft.attributionAtMs,
                         attributionText = text,
+                        attributionPersonId = draft.attributionPersonId,
                         links = draft.links.toList(),
                     )
                     if (draft.status != CareNoteStatus.ACTIVE) {
@@ -148,6 +157,7 @@ class CareNoteEditorViewModel @Inject constructor(
                         attributionName = name,
                         attributionAtMs = draft.attributionAtMs,
                         attributionText = text,
+                        attributionPersonId = draft.attributionPersonId,
                         links = draft.links.toList(),
                     )
                     if (draft.status != current.status || draft.status == CareNoteStatus.SUPERSEDED) {
@@ -243,5 +253,41 @@ class CareNoteEditorViewModel @Inject constructor(
 
     private fun editDraft(block: (CareNoteDraft) -> CareNoteDraft) {
         _uiState.update { it.copy(draft = block(it.draft), validationError = null, isLoading = false) }
+    }
+
+    /**
+     * 手动改姓名 → **自动解除人员关联**（清空 `attributionPersonId`）并保留用户新输入的姓名
+     * （边界规则①，docs/care-people.md §2）：用户的手改永远优先，绝不把名字改回档案里的名字。
+     */
+    private fun onNameChanged(name: String) {
+        editDraft { it.copy(attributionName = name, attributionPersonId = null) }
+        refreshPersonOptions(name)
+    }
+
+    /** 选中一名已有人员：填写其姓名并关联；**不改动、不锁定 `attributionType`**（§3）。 */
+    private fun onPersonSelected(personId: Long, name: String) {
+        editDraft { it.copy(attributionName = name, attributionPersonId = personId) }
+    }
+
+    /**
+     *「＋ 新增人员」快速新增（原则 6）：只要求姓名，保存后**自动选中**并留在笔记编辑流程。
+     */
+    private fun quickAddPerson(name: String) {
+        if (name.isBlank()) return
+        safeLaunch(onError = { failure ->
+            effectChannel.trySend(CareNoteEditorUiEffect.Failed(failure.localizedMessage))
+        }) {
+            val personId = carePersonRepository.createPerson(name = name)
+            editDraft { it.copy(attributionName = name, attributionPersonId = personId) }
+            refreshPersonOptions("")
+        }
+    }
+
+    /** 输入即搜索当前成员的已有人员（前缀/包含皆可）；读在 NO_RECIPIENT 时为空。 */
+    private fun refreshPersonOptions(query: String) {
+        safeLaunch(onError = { }) {
+            val options = carePersonRepository.searchPeople(query).first()
+            _uiState.update { it.copy(personOptions = options) }
+        }
     }
 }

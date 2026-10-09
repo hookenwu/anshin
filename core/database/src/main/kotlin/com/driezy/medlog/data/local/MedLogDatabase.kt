@@ -9,6 +9,7 @@ import com.driezy.medlog.data.model.AiAnalysisCacheEntry
 import com.driezy.medlog.data.model.AiUsageEvent
 import com.driezy.medlog.data.model.CareNote
 import com.driezy.medlog.data.model.CareNoteLink
+import com.driezy.medlog.data.model.CarePerson
 import com.driezy.medlog.data.model.CareRecipient
 import com.driezy.medlog.data.model.CareTask
 import com.driezy.medlog.data.model.CareTaskLog
@@ -27,6 +28,7 @@ import com.driezy.medlog.data.model.SymptomLog
         CareTodo::class,
         CareNote::class,
         CareNoteLink::class,
+        CarePerson::class,
         Medication::class,
         MedicationLog::class,
         MedicationPlanRevision::class,
@@ -45,6 +47,7 @@ abstract class MedLogDatabase : RoomDatabase() {
     abstract fun careTaskLogDao(): CareTaskLogDao
     abstract fun careTodoDao(): CareTodoDao
     abstract fun careNoteDao(): CareNoteDao
+    abstract fun carePersonDao(): CarePersonDao
     abstract fun medicationDao(): MedicationDao
     abstract fun medicationLogDao(): MedicationLogDao
     abstract fun symptomLogDao(): SymptomLogDao
@@ -237,6 +240,47 @@ abstract class MedLogDatabase : RoomDatabase() {
                     "CREATE INDEX IF NOT EXISTS `index_care_note_links_targetType_targetId` " +
                         "ON `care_note_links` (`targetType`, `targetId`)",
                 )
+            }
+        }
+
+        /**
+         * v23 → v24：新增人员档案表 `care_people` + `care_notes.attributionPersonId`（docs/care-people.md §5）。
+         *
+         * 照 `MIGRATION_22_23` 的先例，**纯新增、无表重建、零数据搬运**：
+         * - `CREATE TABLE care_people`（成员归属 FK CASCADE）+ 两条索引（careRecipientId / name）；
+         * - `ALTER TABLE care_notes ADD COLUMN attributionPersonId`（**可空、不建外键**）。
+         * `attributionPersonId` 不建外键：历史由 `attributionName` 快照保护，删除人员后**容忍悬挂**，
+         * 本仓对跨实体引用一律「无外键 + 读取容忍」。既有 `care_notes` 行的该列迁移后为 NULL。
+         * 同样适用于「恢复的 v23 备份」——被恢复的 v23 库首次打开时执行的正是这段迁移。
+         */
+        val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `care_people` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `careRecipientId` INTEGER NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `gender` TEXT,
+                        `approxAge` INTEGER,
+                        `hospital` TEXT,
+                        `agency` TEXT,
+                        `phone` TEXT,
+                        `createdAtMs` INTEGER NOT NULL,
+                        `updatedAtMs` INTEGER,
+                        FOREIGN KEY(`careRecipientId`) REFERENCES `care_recipients`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_people_careRecipientId` " +
+                        "ON `care_people` (`careRecipientId`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_care_people_name` ON `care_people` (`name`)",
+                )
+                db.execSQL("ALTER TABLE `care_notes` ADD COLUMN `attributionPersonId` INTEGER")
             }
         }
 

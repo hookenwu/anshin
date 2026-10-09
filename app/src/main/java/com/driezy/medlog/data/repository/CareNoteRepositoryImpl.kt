@@ -67,6 +67,7 @@ class CareNoteRepositoryImpl @Inject constructor(
         attributionName: String?,
         attributionAtMs: Long?,
         attributionText: String?,
+        attributionPersonId: Long?,
         links: List<CareNoteTarget>,
     ): Long {
         val recipientId = requireRecipientId()
@@ -80,6 +81,7 @@ class CareNoteRepositoryImpl @Inject constructor(
                 attributionName = attributionName.cleaned(),
                 attributionAtMs = attributionAtMs,
                 attributionText = attributionText.cleaned(),
+                attributionPersonId = validatedPersonId(attributionPersonId, recipientId),
                 status = CareNoteStatus.ACTIVE,
                 createdAtMs = clock.millis(),
             ),
@@ -96,9 +98,10 @@ class CareNoteRepositoryImpl @Inject constructor(
         attributionName: String?,
         attributionAtMs: Long?,
         attributionText: String?,
+        attributionPersonId: Long?,
         links: List<CareNoteTarget>,
     ) {
-        requireRecipientId()
+        val recipientId = requireRecipientId()
         val existing = careNoteDao.getById(id) ?: return
         careNoteDao.update(
             existing.copy(
@@ -109,6 +112,8 @@ class CareNoteRepositoryImpl @Inject constructor(
                 attributionName = attributionName.cleaned(),
                 attributionAtMs = attributionAtMs,
                 attributionText = attributionText.cleaned(),
+                // 保存时二次校验：人员必须存在且属于当前成员，否则不写入关联（保留姓名快照）。
+                attributionPersonId = validatedPersonId(attributionPersonId, recipientId),
                 updatedAtMs = clock.millis(),
             ),
         )
@@ -161,6 +166,16 @@ class CareNoteRepositoryImpl @Inject constructor(
 
     private suspend fun danglingLinksFor(noteId: Long): List<CareNoteLink> =
         careNoteDao.linksForNote(noteId).filter { isTargetMissing(it.targetType, it.targetId) }
+
+    /**
+     * 保存笔记时对人员关联做**二次校验**（docs/care-people.md §2 边界规则②③）：
+     * 人员必须存在且属于当前成员，否则**不写入关联**（禁止跨成员关联），并保留姓名快照。
+     *
+     * 悬挂引用在读取时被容忍、**无后台清理**，因而在下一次保存时被确定性地清空；
+     * 姓名快照由调用方原样传入，绝不被本方法改写。
+     */
+    private suspend fun validatedPersonId(personId: Long?, recipientId: Long): Long? =
+        personId?.takeIf { careNoteDao.personBelongsToRecipient(it, recipientId) == 1 }
 
     private suspend fun insertLinks(noteId: Long, links: List<CareNoteTarget>) {
         links.distinct().forEach { target ->

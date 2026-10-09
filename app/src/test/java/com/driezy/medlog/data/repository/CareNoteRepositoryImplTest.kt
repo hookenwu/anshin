@@ -308,6 +308,105 @@ class CareNoteRepositoryImplTest {
         assertEquals(1, dao.storedLinks().size)
     }
 
+    // ── 人员关联的三条边界规则 + 历史不可变（docs/care-people.md §2/§9.4）────────────
+
+    @Test
+    fun `saving re-validates person existence and membership and never persists a cross member link`(): Unit =
+        runBlocking {
+            dao.seedPerson(5L, recipientId = 1L)
+
+            // 存在且属于当前成员 → 写入关联
+            val owned = repoFor(1L).createNote(
+                title = "护士交代",
+                body = "正文",
+                attributionType = CareNoteAttributionType.CLINICIAN,
+                attributionName = "护士张",
+                attributionPersonId = 5L,
+            )
+            assertEquals(5L, dao.storedById(owned)!!.attributionPersonId)
+
+            // 人员存在但属于别的成员 → **不写入关联**（禁止跨成员关联），姓名快照保留
+            val crossMember = repoFor(2L).createNote(
+                title = "别人的笔记",
+                body = "正文",
+                attributionType = CareNoteAttributionType.CLINICIAN,
+                attributionName = "护士张",
+                attributionPersonId = 5L,
+            )
+            assertNull("跨成员人员引用不得写入", dao.storedById(crossMember)!!.attributionPersonId)
+            assertEquals("护士张", dao.storedById(crossMember)!!.attributionName)
+
+            // 人员根本不存在 → 不写入关联，姓名快照保留
+            val dangling = repoFor(1L).createNote(
+                title = "未知人员",
+                body = "正文",
+                attributionType = CareNoteAttributionType.PERSONAL_OBSERVATION,
+                attributionName = "某人",
+                attributionPersonId = 999L,
+            )
+            assertNull(dao.storedById(dangling)!!.attributionPersonId)
+            assertEquals("某人", dao.storedById(dangling)!!.attributionName)
+        }
+
+    @Test
+    fun `dangling person reference tolerated on read and cleared on next save`(): Unit = runBlocking {
+        dao.seedPerson(5L, recipientId = 1L)
+        val repo = repoFor(1L)
+        val id = repo.createNote(
+            title = "护士交代",
+            body = "  饭后半小时服药  ",
+            attributionType = CareNoteAttributionType.CLINICIAN,
+            attributionName = "护士张",
+            attributionPersonId = 5L,
+        )
+        // 人员被删除 → 引用悬挂
+        dao.removePerson(5L)
+
+        // 读取容忍：笔记照常返回，快照名与类型不变，悬挂 id 原样保留（**无后台清理**）
+        val row = repo.observeNotes().first().single().note
+        assertEquals(id, row.id)
+        assertEquals("护士张", row.attributionName)
+        assertEquals(CareNoteAttributionType.CLINICIAN, row.attributionType)
+        assertEquals("悬挂引用读取时被容忍、不被后台清理", 5L, row.attributionPersonId)
+
+        // 下次保存：确定性地清空无效 id，但不改写历史姓名/类型，正文原样
+        repo.updateNote(
+            id = id,
+            title = "护士交代",
+            body = "  饭后半小时服药  ",
+            attributionType = CareNoteAttributionType.CLINICIAN,
+            attributionName = "护士张",
+            attributionPersonId = 5L,
+        )
+        val saved = dao.storedById(id)!!
+        assertNull("悬挂引用必须在下次保存时清空", saved.attributionPersonId)
+        assertEquals("历史姓名不得被改写", "护士张", saved.attributionName)
+        assertEquals(CareNoteAttributionType.CLINICIAN, saved.attributionType)
+        assertEquals("  饭后半小时服药  ", saved.body)
+    }
+
+    @Test
+    fun `a person never supplies the note name or type and deleting the person leaves the note untouched`(): Unit =
+        runBlocking {
+            dao.seedPerson(5L, recipientId = 1L)
+            val repo = repoFor(1L)
+            val id = repo.createNote(
+                title = "笔记",
+                body = "正文",
+                attributionType = CareNoteAttributionType.CAREGIVER_EXPERIENCE,
+                attributionName = "手写的名字",
+                attributionPersonId = 5L,
+            )
+            val before = dao.storedById(id)!!
+
+            // 删除人员：笔记一行不动（正文/姓名快照/归属类型逐项不变）——历史不可变
+            dao.removePerson(5L)
+            val after = dao.storedById(id)!!
+            assertEquals(before.body, after.body)
+            assertEquals(before.attributionName, after.attributionName)
+            assertEquals(CareNoteAttributionType.CAREGIVER_EXPERIENCE, after.attributionType)
+        }
+
     private fun note(recipientId: Long, title: String) = CareNote(
         careRecipientId = recipientId,
         title = title,
