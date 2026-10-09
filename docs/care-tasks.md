@@ -191,6 +191,6 @@
 
 1. **AS_NEEDED 事项不再隐形（推翻本文件早先"按需项不进今日页"的决定）**。用户四条真实事项全是按需型，原设计等于该功能对他完全不可见。现改为：按需照护事项在今日页有**独立「按需」区块**（对齐用药侧 PRN 的既有做法），可在那里直接打卡/记录（复用 `CareTaskCompletionUseCase`，不另开日志路径）；**不进时间轴、不计入计划进度**，口径与 PRN 药一致；筛选 chips 只作用于时间轴条目。硬不变式保持不变：无照护事项时时间轴与改造前逐字节一致。
 2. **归档药不得进今日计划**（真机反馈）。原以为映射器滤了 PRN 就够，实则更隐蔽：`FuturePlanCalculator` 会跳过"当前已归档"的药，但**该药残留的计划版本快照里仍是 `isArchived=false`**，于是它又被投影回今日计划（连 hero、进度、二维码导出一起污染）。现于 `HomeViewModel` 用单一 `activeMedications = meds.filterNot { it.isArchived }` 栅栏收口，并在今日计划边界 `TodayItem` 处再滤一次。
-   - **有意保留归档清单的调用点**：`MyMedicationsViewModel`（我的药品：进行中/已停用视图）、`MedicationAdherence`（历史服用统计，`includeArchived=true`）、`WidgetUtils`（桌面小组件）。
-   - **遗留风险（本期未修）**：`WidgetUtils` 仍把含归档的清单交给 `FuturePlanCalculator`，同样会被残留版本快照坑到——小组件上可能显示已停用药的下一剂。
+   - **有意保留归档清单的调用点**：`MyMedicationsViewModel`（我的药品：进行中/已停用视图）、`MedicationAdherence`（历史服用统计，`includeArchived=true`）。
+   - **已修（2026-10-09）：`WidgetUtils` 的小组件归档残留**。`WidgetUtils.todayPlan()` 曾把含归档清单交给 `FuturePlanCalculator`，同样被残留版本快照坑到——`NextDoseWidget`／`MedLogWidget` 在归档当天仍会显示已停用药的下一剂，且用户可打卡、撑大 taken/total 分母。现于 `WidgetUtils.kt:26` 加唯一栅栏 `getAllMedications().first().filterNot { it.isArchived }`（两个 Widget 共用该入口，一处收口）；`FuturePlanCalculator.includeArchived` 契约与历史依从率（`MedicationAdherence` 传 `includeArchived=true`）**保持不变**。回归测试见 `WidgetTodayPlanTest`（stale-revision 排除 + 活药不误滤）。归档/恢复/删除均经 `ReconcileRemindersUseCase` → `AndroidReminderReconciler` 立即 `widgetRefresher.refreshAll()`，故修复即时生效。
 3. **单位新增 `μg`**：每次剂量与每粒规格两个选择器都加，旧条目原样保留且顺序不变；`doseUnitFamily` 把 `μg/µg/ug` 归入质量族，因此"计数单位 × 规格"仍可求和，且极小数值不再被格式化成 `0`（`formatDosePrecise` 修正）。

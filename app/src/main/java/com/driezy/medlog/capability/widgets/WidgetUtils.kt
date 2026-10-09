@@ -23,7 +23,10 @@ internal suspend fun WidgetEntryPoint.todayPlan(): WidgetPlan {
     val prefs = preferences().settingsFlow.first()
     val zone = prefs.reminderZone(clock.zone)
     val today = java.time.LocalDate.now(clock.withZone(zone))
-    val meds = medicationRepository().getAllMedications().first()
+    // 小组件今日计划的**唯一**归档过滤点（与 HomeViewModel 首页栅栏同一口径）：
+    // 已归档（停用）药品不得参与，否则其残留计划版本快照（isArchived=false）
+    // 会在归档当天被重新投影成"下一剂"，打卡按钮可用且 taken/total 分母被撑大。
+    val meds = medicationRepository().getAllMedications().first().filterNot { it.isArchived }
     val logs = logRepository().getLogsForRangeOnce(
         0L,
         today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1,
