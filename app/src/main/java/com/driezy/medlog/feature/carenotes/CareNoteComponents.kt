@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -26,8 +25,6 @@ import com.driezy.medlog.R
 import com.driezy.medlog.data.model.CareNote
 import com.driezy.medlog.data.model.CareNoteAttributionType
 import com.driezy.medlog.data.model.CareNoteLink
-import com.driezy.medlog.ui.icons.MedLogIcon
-import com.driezy.medlog.ui.icons.MedLogIcons
 import com.driezy.medlog.ui.theme.MedLogSpacing
 import java.time.Instant
 import java.time.ZoneId
@@ -194,46 +191,47 @@ private fun StatusChip(label: String) {
 /**
  * 就地「相关笔记」区块（药品详情 / 照护事项详情 / 待办详情）。
  *
- * 无笔记且未提供快捷新增（[onQuickAdd] == null）时**不渲染任何东西**：无 header、无占位
- * （docs/care-notes.md §7）。提供 [onQuickAdd] 时始终渲染标题行 + 「＋」，使「上下文快捷新增」
- * 在无既有笔记时也可达（新增入口本身不产生笔记，空态语义不变）。
+ * **空态无条件不渲染任何东西**：无笔记时整块卡片缺席——无 header、无占位（docs/care-notes.md §7）。
+ * 这是冻结规则，不得为了放快捷新增入口而让空态多出一个 header。
  */
 @Composable
 internal fun RelatedNotesSection(
     notes: List<CareNote>,
     modifier: Modifier = Modifier,
-    onQuickAdd: (() -> Unit)? = null,
     contentPadding: Dp = MedLogSpacing.Large,
 ) {
-    if (notes.isEmpty() && onQuickAdd == null) return
+    if (notes.isEmpty()) return
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
     ) {
-        Row(
+        Text(
+            text = stringResource(R.string.care_note_related_title),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.fillMaxWidth().padding(horizontal = contentPadding),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.care_note_related_title),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
-            )
-            if (onQuickAdd != null) {
-                TextButton(
-                    onClick = onQuickAdd,
-                    modifier = Modifier.testTag("careNoteQuickAdd"),
-                ) {
-                    MedLogIcon(
-                        MedLogIcons.Add,
-                        contentDescription = stringResource(R.string.care_note_quick_add),
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-            }
-        }
+        )
         notes.forEach { note -> CareNoteCard(note, modifier = Modifier.padding(horizontal = contentPadding)) }
+    }
+}
+
+/**
+ * 上下文快捷新增：一条**轻量文本**入口（不是卡片、不带 header），独立坐在「相关笔记」卡片原本的位置。
+ *
+ * 一次点击即进入编辑器且当前对象已预挂（docs/record-center-spec.md §4.4）。它与卡片解耦，因此空态下
+ * 卡片整体缺席时，「新建相关笔记」依然一次可达——两条规则不会互相打架（选项 B）。
+ */
+@Composable
+internal fun CareNoteQuickAddButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentPadding: Dp = MedLogSpacing.Large,
+) {
+    TextButton(
+        onClick = onClick,
+        modifier = modifier.padding(horizontal = contentPadding).testTag("careNoteQuickAdd"),
+    ) {
+        Text("＋ " + stringResource(R.string.care_note_quick_add))
     }
 }
 

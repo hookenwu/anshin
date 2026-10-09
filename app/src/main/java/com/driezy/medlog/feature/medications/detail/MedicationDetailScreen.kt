@@ -15,6 +15,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.TimePeriods
+import com.driezy.medlog.feature.carenotes.CareNoteQuickAddButton
 import com.driezy.medlog.feature.carenotes.RelatedNotesSection
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
 import com.driezy.medlog.ui.components.MedicationAdherenceCard
@@ -398,9 +399,12 @@ private fun MedicationDetailContent(
                 }
             }
 
-            // ── 相关笔记（底部；「＋」上下文快捷新增，含成员校验）──
+            // ── 相关笔记（底部；空态不渲染卡片）+ 独立文本快捷新增（含成员校验）──
             item(key = "relatedNotes", contentType = "relatedNotes") {
-                RelatedNotesSection(notes = uiState.relatedNotes, onQuickAdd = onQuickAddNote)
+                RelatedNotesSection(notes = uiState.relatedNotes)
+            }
+            item(key = "relatedNotesQuickAdd", contentType = "relatedNotes") {
+                CareNoteQuickAddButton(onClick = onQuickAddNote)
             }
         }
     }

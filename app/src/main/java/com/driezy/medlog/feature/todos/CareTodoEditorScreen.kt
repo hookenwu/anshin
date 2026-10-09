@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
+import com.driezy.medlog.feature.carenotes.CareNoteQuickAddButton
 import com.driezy.medlog.feature.carenotes.RelatedNotesSection
 import com.driezy.medlog.feature.medications.editor.DatePickerField
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
@@ -161,13 +162,10 @@ internal fun CareTodoEditorContent(
                 )
             }
 
-            // ── 相关笔记（编辑既有待办时；「＋」上下文快捷新增，含成员校验）──
+            // ── 相关笔记（编辑既有待办时；空态不渲染卡片）+ 独立文本快捷新增（含成员校验）──
             if (uiState.isEditing) {
-                RelatedNotesSection(
-                    notes = uiState.relatedNotes,
-                    onQuickAdd = onQuickAddNote,
-                    contentPadding = 0.dp,
-                )
+                RelatedNotesSection(notes = uiState.relatedNotes, contentPadding = 0.dp)
+                CareNoteQuickAddButton(onClick = onQuickAddNote, contentPadding = 0.dp)
             }
         }
     }
