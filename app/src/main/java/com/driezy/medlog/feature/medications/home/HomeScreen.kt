@@ -4,6 +4,7 @@ import android.animation.ValueAnimator
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,7 +26,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.CareRecipient
+import com.driezy.medlog.feature.careevents.CareEventEntriesSheet
 import com.driezy.medlog.feature.careevents.CareEventStatusUi
+import com.driezy.medlog.feature.careevents.shouldRenderTodayPlanHeader
 import com.driezy.medlog.feature.caretasks.careTaskCategoryLabel
 import com.driezy.medlog.ui.components.FamilyMemberPickerDialog
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
@@ -403,10 +406,11 @@ internal fun HomeContent(
                 }
             }
 
-            // 「今日计划」标题行（§6）：有用药计划时渲染计划行；无计划但有排便记录/追踪时，
-            // 同一 item 仍渲染以承载排便状态——保证「有排便数据却看不到状态」不会发生。
+            // 「今日计划」标题行（§6）：有用药计划时渲染计划行；否则只要有照护事件状态承载位
+            // （含「无记录」引导态）也渲染——保证无计划/零记录成员仍有『记录』入口（GAP3），
+            // 且「有排便数据却看不到状态」不会发生。
             val careEventStatus = uiState.careEventStatus
-            if (uiState.overallTotal > 0 || careEventStatus?.hasAnyRecord == true) {
+            if (shouldRenderTodayPlanHeader(uiState.overallTotal, careEventStatus)) {
                 item(key = "todayPlanHeader", contentType = "header") {
                     Column(
                         modifier = Modifier
@@ -453,6 +457,7 @@ internal fun HomeContent(
                             CareEventStatusLine(
                                 status = careEventStatus,
                                 onRecord = { onAction(HomeUiAction.RecordCareEventNow) },
+                                onOpenEntries = { onAction(HomeUiAction.OpenCareEventEntries) },
                             )
                         }
                     }
@@ -604,14 +609,30 @@ internal fun HomeContent(
         )
         else -> null
     }
+    // 排便记录列表（补记/编辑/删除）：由标题行状态行打开（不加 Tab、不新增区块）。
+    val entriesOverlay = if (uiState.careEventEntriesOpen) {
+        ScreenOverlay.BottomSheet(id = "home:careEventEntries") {
+            CareEventEntriesSheet(
+                entries = uiState.careEventEntries,
+                savingIds = uiState.savingCareEventIds,
+                onRecordAt = { ms, note -> onAction(HomeUiAction.RecordCareEventAt(ms, note)) },
+                onEdit = { id, ms, note -> onAction(HomeUiAction.EditCareEvent(id, ms, note)) },
+                onDelete = { id -> onAction(HomeUiAction.DeleteCareEvent(id)) },
+                onClose = { onAction(HomeUiAction.CloseCareEventEntries) },
+            )
+        }
+    } else {
+        null
+    }
     ScreenOverlayHost(
-        overlay = overlay ?: importOverlay,
+        overlay = overlay ?: importOverlay ?: entriesOverlay,
         onConfirm = { descriptor, _ ->
             if (descriptor.id == "home:import-error") onAction(HomeUiAction.ClearImportPreview)
         },
         onDismiss = {
             overlay = null
             onAction(HomeUiAction.ClearImportPreview)
+            onAction(HomeUiAction.CloseCareEventEntries)
         },
     )
 
@@ -635,29 +656,21 @@ internal fun HomeContent(
 /**
  * 「今日计划」标题行里的排便状态（§6）。**次级信息**：`maxLines = 1` 且省略号截断——
  * 真机小屏/字体放大/超长药品名下宁可截断状态，也不压缩上面的用药行（§6 A3）。
+ *
+ * 整行点按 = 打开排便记录列表（补记/编辑/删除，不加 Tab）；行首的 `记录` 按钮保持一键记录（GAP2：
+ * 按钮移到行首后不再被右下角的「添加药品」FAB 遮挡，无需滚动即可点到）。
  */
 @Composable
-private fun CareEventStatusLine(status: CareEventStatusUi, onRecord: () -> Unit) {
+private fun CareEventStatusLine(status: CareEventStatusUi, onRecord: () -> Unit, onOpenEntries: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = MedLogSpacing.Large, end = MedLogSpacing.Large)
+            .clickable(onClick = onOpenEntries)
             .testTag("homeCareEventStatus"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
     ) {
-        Text(
-            text = if (status.hasAnyRecord && status.daysSince != null) {
-                stringResource(R.string.home_care_event_status, status.daysSince)
-            } else {
-                stringResource(R.string.home_care_event_none)
-            },
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
         TextButton(
             onClick = onRecord,
             modifier = Modifier.testTag("homeCareEventRecord"),
@@ -667,5 +680,19 @@ private fun CareEventStatusLine(status: CareEventStatusUi, onRecord: () -> Unit)
                 style = MaterialTheme.typography.labelLarge,
             )
         }
+        Text(
+            text = if (status.hasAnyRecord && status.daysSince != null) {
+                stringResource(R.string.home_care_event_status, status.daysSince)
+            } else {
+                stringResource(R.string.home_care_event_none)
+            },
+            modifier = Modifier
+                .weight(1f)
+                .testTag("homeCareEventStatusText"),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }

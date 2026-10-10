@@ -147,6 +147,14 @@
     <string name="home_care_event_status">마지막 배변 기록 후 %1$d일</string>
     <string name="home_care_event_none">아직 배변 기록이 없습니다</string>
     <string name="home_care_event_record">기록</string>
+    <string name="home_care_event_entries_title">배변 기록</string>
+    <string name="home_care_event_backdate">소급 기록</string>
+    <string name="home_care_event_edit">편집</string>
+    <string name="home_care_event_delete">삭제</string>
+    <string name="home_care_event_delete_title">이 기록을 삭제할까요?</string>
+    <string name="home_care_event_delete_body">삭제하면 간격과 알림에서 제외됩니다.</string>
+    <string name="home_care_event_note_hint">메모(선택)</string>
+    <string name="home_care_event_moment">기록 시각</string>
     <plurals name="home_hero_plan_count"><item quantity="other">%d회</item></plurals>
     <string name="home_hero_completed_title">오늘 복약 완료</string>
     <plurals name="home_hero_completed_doses"><item quantity="other">%d회 모두 복용함</item></plurals>

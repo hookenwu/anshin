@@ -147,6 +147,14 @@
     <string name="home_care_event_status">前回の排便記録から %1$d 日</string>
     <string name="home_care_event_none">まだ排便の記録がありません</string>
     <string name="home_care_event_record">記録</string>
+    <string name="home_care_event_entries_title">排便の記録</string>
+    <string name="home_care_event_backdate">さかのぼって記録</string>
+    <string name="home_care_event_edit">編集</string>
+    <string name="home_care_event_delete">削除</string>
+    <string name="home_care_event_delete_title">この記録を削除しますか？</string>
+    <string name="home_care_event_delete_body">削除すると間隔と通知の対象から外れます。</string>
+    <string name="home_care_event_note_hint">メモ（任意）</string>
+    <string name="home_care_event_moment">記録した時刻</string>
     <plurals name="home_hero_plan_count"><item quantity="other">%d回</item></plurals>
     <string name="home_hero_completed_title">今日の服薬完了</string>
     <plurals name="home_hero_completed_doses"><item quantity="other">%d回すべて服用済み</item></plurals>

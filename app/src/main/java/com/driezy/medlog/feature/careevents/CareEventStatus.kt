@@ -20,3 +20,13 @@ fun buildCareEventStatus(anchorMs: Long?, nowMs: Long): CareEventStatusUi = Care
     daysSince = CareEventInterval.wholeDaysSince(anchorMs, nowMs),
     hasAnyRecord = anchorMs != null,
 )
+
+/**
+ * 「今日计划」标题行是否渲染（docs/tracked-events-spec.md §6）。
+ *
+ * 有用药计划时必渲染；否则只要有照护事件状态的承载位（[status] 非空，含「无记录」引导态）也渲染——
+ * 保证**无计划且零记录**的成员仍有可见的『记录』入口，冷启动也能记下第一条（GAP3）。
+ * 仅当既无用药计划、状态又尚未观察（null）时才不渲染（不新增任何区块）。
+ */
+fun shouldRenderTodayPlanHeader(overallTotal: Int, status: CareEventStatusUi?): Boolean =
+    overallTotal > 0 || status != null

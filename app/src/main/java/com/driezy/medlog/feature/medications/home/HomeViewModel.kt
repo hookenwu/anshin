@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.driezy.medlog.capability.reminders.NotificationHelper
 import com.driezy.medlog.capability.reminders.application.ProgressNotificationUseCase
+import com.driezy.medlog.data.model.CareEventLog
 import com.driezy.medlog.data.model.CareTask
 import com.driezy.medlog.data.model.CareTaskLog
 import com.driezy.medlog.data.model.DrugInteraction
@@ -112,6 +113,15 @@ data class HomeUiState(
      * null = 尚未观察；无记录时为 `hasAnyRecord = false`。
      */
     val careEventStatus: CareEventStatusUi? = null,
+    /**
+     * 当前成员的排便记录（最新发生在前）。entries 面板的数据源（docs/tracked-events-spec.md §6）。
+     * 只读展示；编辑/删除只经 [CareEventRepository]，派生状态由观察流自然刷新（R11 不即时通知）。
+     */
+    val careEventEntries: List<CareEventLog> = emptyList(),
+    /** entries 面板是否打开。入口在「今日计划」标题行的状态行，**不新增底部 Tab、不新增区块**。 */
+    val careEventEntriesOpen: Boolean = false,
+    /** 正在编辑/删除的记录 id，防重复点击。 */
+    val savingCareEventIds: Set<Long> = emptySet(),
 ) {
     val heroPresentation: HomeHeroPresentation by lazy {
         HomeHeroPresentation.from(items)
@@ -184,6 +194,22 @@ sealed interface HomeUiAction {
 
     /** 今日页快捷记录一次排便（occurredAtMs = now）；写入本身不触发任何即时通知（R11）。 */
     data object RecordCareEventNow : HomeUiAction
+
+    // ── 排便记录的补记/编辑/删除：入口在状态行（不加 Tab），全部经 CareEventRepository ──
+    /** 打开排便记录列表（补记/编辑/删除面）。 */
+    data object OpenCareEventEntries : HomeUiAction
+
+    /** 关闭排便记录列表。 */
+    data object CloseCareEventEntries : HomeUiAction
+
+    /** 补记一条（发生时刻可为过去）；经仓储写入，派生状态重算、绝不即时通知（R11）。 */
+    data class RecordCareEventAt(val occurredAtMs: Long, val note: String? = null) : HomeUiAction
+
+    /** 就地编辑一条记录的 occurredAtMs/备注；经仓储写入，派生状态重算、绝不即时通知（R11）。 */
+    data class EditCareEvent(val id: Long, val occurredAtMs: Long, val note: String?) : HomeUiAction
+
+    /** 物理删除一条记录；经仓储写入，锚点回退/清空后重算，绝不即时通知（R11）。 */
+    data class DeleteCareEvent(val id: Long) : HomeUiAction
 }
 
 sealed interface HomeUiEffect {
@@ -235,6 +261,7 @@ class HomeViewModel @Inject constructor(
     private val busyDoses = mutableSetOf<MedicationDoseKey>()
     private val busyCareSlots = mutableSetOf<String>()
     private val busyTodoIds = mutableSetOf<Long>()
+    private val busyCareEventIds = mutableSetOf<Long>()
 
     /** 照护事项时间轴输入；活跃事项流每次发射时刷新一次当日日志。 */
     private val careTimeline = MutableStateFlow(CareTimelineInput())
@@ -301,6 +328,11 @@ class HomeViewModel @Inject constructor(
             is HomeUiAction.TodoComplete -> completeTodo(action.todoId)
             is HomeUiAction.TodoReopen -> reopenTodo(action.todoId)
             HomeUiAction.RecordCareEventNow -> recordCareEvent()
+            HomeUiAction.OpenCareEventEntries -> openCareEventEntries()
+            HomeUiAction.CloseCareEventEntries -> closeCareEventEntries()
+            is HomeUiAction.RecordCareEventAt -> recordCareEventAt(action.occurredAtMs, action.note)
+            is HomeUiAction.EditCareEvent -> editCareEvent(action.id, action.occurredAtMs, action.note)
+            is HomeUiAction.DeleteCareEvent -> deleteCareEvent(action.id)
         }
     }
 
@@ -432,12 +464,65 @@ class HomeViewModel @Inject constructor(
                     _uiState.update { it.copy(careEventStatus = buildCareEventStatus(anchorMs, nowMs)) }
                 }
         }
+        // entries 面板的数据源：全部记录（最新发生在前）。仓库已按当前成员收口。
+        safeLaunch {
+            careEventRepository.getLogs()
+                .catch { error -> _uiState.update { it.copy(errorMessage = error.localizedMessage) } }
+                .collect { logs -> _uiState.update { it.copy(careEventEntries = logs) } }
+        }
+    }
+
+    /** 打开排便记录列表（入口在状态行，不新增 Tab/区块）。 */
+    fun openCareEventEntries() {
+        _uiState.update { it.copy(careEventEntriesOpen = true) }
+    }
+
+    /** 关闭排便记录列表。 */
+    fun closeCareEventEntries() {
+        _uiState.update { it.copy(careEventEntriesOpen = false) }
     }
 
     /** 快捷记录一次排便（occurredAtMs = now）。写入不触发任何即时通知（R11）。 */
     fun recordCareEvent() {
         safeLaunch(onError = { error -> _uiState.update { it.copy(errorMessage = error.localizedMessage) } }) {
             careEventRepository.record()
+        }
+    }
+
+    /** 补记一条（发生时刻可为过去）。写入只经仓储，派生状态重算、绝不即时通知（R11）。 */
+    fun recordCareEventAt(occurredAtMs: Long, note: String? = null) {
+        safeLaunch(onError = { error -> _uiState.update { it.copy(errorMessage = error.localizedMessage) } }) {
+            careEventRepository.record(occurredAtMs = occurredAtMs, note = note)
+        }
+    }
+
+    /** 就地编辑一条记录。仓储重算派生状态；本方法**不**触碰任何通知/提醒（R11）。 */
+    fun editCareEvent(id: Long, occurredAtMs: Long, note: String?) {
+        runCareEventWrite(id) { careEventRepository.edit(id, occurredAtMs, note) }
+    }
+
+    /** 物理删除一条记录。仓储重算派生状态；本方法**不**触碰任何通知/提醒（R11）。 */
+    fun deleteCareEvent(id: Long) {
+        runCareEventWrite(id) { careEventRepository.delete(id) }
+    }
+
+    /** 编辑/删除共用：防重复点击 + 统一错误处理。写入本身不产生任何通知或成功回执。 */
+    private fun runCareEventWrite(id: Long, write: suspend () -> Unit) {
+        if (!busyCareEventIds.add(id)) return
+        _uiState.update { it.copy(savingCareEventIds = busyCareEventIds.toSet(), errorMessage = null) }
+        safeLaunch(
+            onError = { error ->
+                _uiState.update {
+                    it.copy(savingCareEventIds = (busyCareEventIds - id).toSet(), errorMessage = error.localizedMessage)
+                }
+            },
+        ) {
+            try {
+                write()
+            } finally {
+                busyCareEventIds.remove(id)
+                _uiState.update { it.copy(savingCareEventIds = busyCareEventIds.toSet()) }
+            }
         }
     }
 
@@ -558,6 +643,9 @@ class HomeViewModel @Inject constructor(
                     todoBlock = previous.todoBlock,
                     savingTodoIds = previous.savingTodoIds,
                     careEventStatus = previous.careEventStatus,
+                    careEventEntries = previous.careEventEntries,
+                    careEventEntriesOpen = previous.careEventEntriesOpen,
+                    savingCareEventIds = previous.savingCareEventIds,
                 )
                 // 实时更新今日进度通知（去重：仅在 taken/total 真正变化时更新）
                 val hero = state.heroPresentation

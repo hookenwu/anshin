@@ -160,6 +160,14 @@
     <string name="home_care_event_status">No bowel-movement record for %1$d day(s)</string>
     <string name="home_care_event_none">No bowel-movement record yet</string>
     <string name="home_care_event_record">Record</string>
+    <string name="home_care_event_entries_title">Bowel-movement records</string>
+    <string name="home_care_event_backdate">Back-date</string>
+    <string name="home_care_event_edit">Edit</string>
+    <string name="home_care_event_delete">Delete</string>
+    <string name="home_care_event_delete_title">Delete this record?</string>
+    <string name="home_care_event_delete_body">It will no longer count toward the interval or reminders.</string>
+    <string name="home_care_event_note_hint">Note (optional)</string>
+    <string name="home_care_event_moment">Recorded time</string>
     <plurals name="home_hero_plan_count">
         <item quantity="one">1 dose</item>
         <item quantity="other">%d doses</item>

@@ -156,6 +156,14 @@
     <string name="home_care_event_status">距上次记录排便 %1$d 天</string>
     <string name="home_care_event_none">还没有排便记录</string>
     <string name="home_care_event_record">记录</string>
+    <string name="home_care_event_entries_title">排便记录</string>
+    <string name="home_care_event_backdate">补记</string>
+    <string name="home_care_event_edit">编辑</string>
+    <string name="home_care_event_delete">删除</string>
+    <string name="home_care_event_delete_title">删除这条记录？</string>
+    <string name="home_care_event_delete_body">删除后不再计入间隔与提醒。</string>
+    <string name="home_care_event_note_hint">备注（可选）</string>
+    <string name="home_care_event_moment">记录时刻</string>
     <plurals name="home_hero_plan_count">
         <item quantity="other">%d 次</item>
     </plurals>

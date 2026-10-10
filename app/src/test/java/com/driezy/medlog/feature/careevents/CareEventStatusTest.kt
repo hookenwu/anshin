@@ -27,4 +27,22 @@ class CareEventStatusTest {
         assertEquals(3L, buildCareEventStatus(now - (3 * day + 5_000L), now).daysSince)
         assertEquals(0L, buildCareEventStatus(now + day, now).daysSince)
     }
+
+    @Test
+    fun `header renders for a plan-less member with no records so the first record is reachable`() {
+        // 冷启动洞（GAP3）：无计划 + 零记录时状态行为空态，但承载位存在 → 必须渲染。
+        val empty = buildCareEventStatus(anchorMs = null, nowMs = now)
+        assertFalse(empty.hasAnyRecord)
+        assertTrue(shouldRenderTodayPlanHeader(overallTotal = 0, status = empty))
+    }
+
+    @Test
+    fun `header renders whenever there is a plan or an observed status`() {
+        val empty = buildCareEventStatus(anchorMs = null, nowMs = now)
+        val recorded = buildCareEventStatus(anchorMs = now - day, nowMs = now)
+        assertTrue(shouldRenderTodayPlanHeader(overallTotal = 2, status = null))
+        assertTrue(shouldRenderTodayPlanHeader(overallTotal = 0, status = recorded))
+        // 仅「无计划且状态尚未观察」才不渲染——不新增任何区块。
+        assertFalse(shouldRenderTodayPlanHeader(overallTotal = 0, status = null))
+    }
 }
