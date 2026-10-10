@@ -96,6 +96,8 @@ class AlarmProjectionRegistryTest {
                 when (target.type) {
                     ReminderTargetType.MEDICATION -> target.id == 4L
                     ReminderTargetType.CARE_TASK -> target.id == 1L
+                    // 照护事件不进闹钟投影登记表（无此类型条目）。
+                    ReminderTargetType.CARE_EVENT -> false
                 }
         }
 

@@ -8,6 +8,7 @@ import com.driezy.medlog.data.repository.LogRepository
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.data.repository.SettingsPreferences
 import com.driezy.medlog.data.repository.UserPreferencesRepository
+import com.driezy.medlog.feature.careevents.reminder.CareEventReminderCheckUseCase
 import com.driezy.medlog.feature.medications.application.ToggleMedicationDoseUseCase
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -49,6 +50,7 @@ class WidgetTodayPlanTest {
             override fun logRepository(): LogRepository = logs
             override fun preferences(): UserPreferencesRepository = prefs
             override fun clock(): Clock = clock
+            override fun careEventReminderCheck(): CareEventReminderCheckUseCase = error("todayPlan 不使用")
         }
     }
 

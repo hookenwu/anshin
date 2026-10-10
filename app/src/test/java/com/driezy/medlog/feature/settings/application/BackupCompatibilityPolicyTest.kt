@@ -18,13 +18,14 @@ class BackupCompatibilityPolicyTest {
     }
 
     @Test
-    fun `restored v21 backup is admitted and upgraded to the current schema`() {
-        // v21 备份上界跟随 DatabaseSchema.VERSION：bump 到 24 后自动放行，
-        // 恢复的 v21 库在 App 首次打开时依次执行 MIGRATION_21_22、MIGRATION_22_23 与 MIGRATION_23_24。
-        assertEquals(24, DatabaseSchema.VERSION)
+    fun `restored v24 backup is admitted and upgraded to the current schema`() {
+        // v24 备份上界跟随 DatabaseSchema.VERSION：bump 到 25 后自动放行，
+        // 恢复的 v24 库在 App 首次打开时执行 MIGRATION_24_25。
+        assertEquals(25, DatabaseSchema.VERSION)
         assertTrue(BackupCompatibilityPolicy.canRestore(21))
         assertTrue(BackupCompatibilityPolicy.canRestore(22))
         assertTrue(BackupCompatibilityPolicy.canRestore(23))
+        assertTrue(BackupCompatibilityPolicy.canRestore(24))
     }
 
     @Test

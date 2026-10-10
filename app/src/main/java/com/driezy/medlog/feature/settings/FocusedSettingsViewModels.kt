@@ -6,8 +6,11 @@ import com.driezy.medlog.capability.ai.AiApiKeyStore
 import com.driezy.medlog.capability.reminders.application.ReconcileRemindersUseCase
 import com.driezy.medlog.capability.reminders.application.ResyncRemindersUseCase
 import com.driezy.medlog.capability.widgets.WidgetRefresher
+import com.driezy.medlog.data.model.CareEventKind
+import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import com.driezy.medlog.data.repository.AiPreferences
 import com.driezy.medlog.data.repository.AppearancePreferences
+import com.driezy.medlog.data.repository.CareEventReminderPreferences
 import com.driezy.medlog.data.repository.FeaturePreferences
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.data.repository.ReminderPreferences
@@ -17,10 +20,12 @@ import com.driezy.medlog.domain.model.MedicationId
 import com.driezy.medlog.ui.BaseViewModel
 import com.driezy.medlog.ui.theme.ThemePalette
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.Clock
@@ -82,8 +87,19 @@ class SettingsReminderViewModel @Inject constructor(
     private val resyncReminders: ResyncRemindersUseCase,
     private val reconcileReminders: ReconcileRemindersUseCase,
     private val clock: Clock,
+    private val careEventReminderPreferences: CareEventReminderPreferences,
+    private val activeRecipient: ActiveRecipientStore,
 ) : BaseViewModel() {
-    val uiState = combine(preferences.reminders, featurePreferences.features) { reminder, feature ->
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val careEventReminder = activeRecipient.recipientId.flatMapLatest { recipientId ->
+        careEventReminderPreferences.reminderSetting(recipientId, CareEventKind.BOWEL)
+    }
+
+    val uiState = combine(
+        preferences.reminders,
+        featurePreferences.features,
+        careEventReminder,
+    ) { reminder, feature, careEvent ->
         SettingsUiState(
             persistentReminder = reminder.persistentReminder,
             persistentIntervalMinutes = reminder.persistentIntervalMinutes,
@@ -95,6 +111,8 @@ class SettingsReminderViewModel @Inject constructor(
             followUpDelayMinutes = reminder.followUpDelayMinutes,
             followUpMaxCount = reminder.followUpMaxCount,
             enableTimePeriodMode = feature.enableTimePeriodMode,
+            careEventReminderEnabled = careEvent.enabled,
+            careEventThresholdDays = careEvent.thresholdDays,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
@@ -131,6 +149,16 @@ class SettingsReminderViewModel @Inject constructor(
                 }
                 is SettingsUiAction.SetTimePeriodMode -> featurePreferences.updateFeatureFlags(
                     enableTimePeriodMode = action.enabled,
+                )
+                is SettingsUiAction.SetCareEventReminder -> careEventReminderPreferences.setEnabled(
+                    activeRecipient.current(),
+                    CareEventKind.BOWEL,
+                    action.enabled,
+                )
+                is SettingsUiAction.SetCareEventThresholdDays -> careEventReminderPreferences.setThresholdDays(
+                    activeRecipient.current(),
+                    CareEventKind.BOWEL,
+                    action.days,
                 )
                 else -> Unit
             }

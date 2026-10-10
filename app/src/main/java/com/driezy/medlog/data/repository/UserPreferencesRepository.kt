@@ -524,6 +524,14 @@ class UserPreferencesRepository @Inject constructor(
             prefs.remove(booleanKey(TRAVEL_MODE, recipientId))
             prefs.remove(stringKey(HOME_TIMEZONE_ID, recipientId))
             prefs.remove(floatKey(USER_HEIGHT_CM, recipientId))
+            // 照护事件提醒偏好（键形如 `care_event_*#<recipientId>#<kind>`，见
+            // docs/tracked-events-spec.md §4 D3）同样随成员一并清理，避免 id 复用后串档。
+            prefs.asMap().keys
+                .filter { it.name.startsWith("care_event_") && it.name.contains("#$recipientId#") }
+                .forEach { key ->
+                    @Suppress("UNCHECKED_CAST")
+                    prefs.remove(key as Preferences.Key<Any>)
+                }
         }
     }
 

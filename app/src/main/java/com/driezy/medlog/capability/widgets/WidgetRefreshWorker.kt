@@ -7,6 +7,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import dagger.hilt.android.EntryPointAccessors
 import java.util.concurrent.TimeUnit
 
 /**
@@ -25,6 +26,12 @@ class WidgetRefreshWorker(private val context: Context, params: WorkerParameters
         MedLogWidget().updateAll(context)
         NextDoseWidget().updateAll(context)
         StreakWidget().updateAll(context)
+        // 骑既有 15 分钟周期：顺带做一次照护事件（排便）的缺席型每日判定（不新增闹钟/调度器）。
+        runCatching {
+            EntryPointAccessors.fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
+                .careEventReminderCheck()
+                .invoke()
+        }
         return Result.success()
     }
 

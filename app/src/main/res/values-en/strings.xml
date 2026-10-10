@@ -157,6 +157,9 @@
     <string name="home_hero_name_and_dose">%1$s · %2$s</string>
     <string name="home_hero_take_now">Take now</string>
     <string name="home_hero_plan_title">Today’s plan</string>
+    <string name="home_care_event_status">No bowel-movement record for %1$d day(s)</string>
+    <string name="home_care_event_none">No bowel-movement record yet</string>
+    <string name="home_care_event_record">Record</string>
     <plurals name="home_hero_plan_count">
         <item quantity="one">1 dose</item>
         <item quantity="other">%d doses</item>
@@ -207,6 +210,11 @@
     <string name="settings_group_appearance_home">Appearance &amp; Home</string>
     <string name="settings_group_appearance_home_desc">Theme palettes, dynamic color, and Today view display preferences</string>
     <string name="settings_group_reminders_routine">Reminders &amp; Routine</string>
+    <string name="settings_care_event_section">Bowel-movement reminder</string>
+    <string name="settings_care_event_enable">Enable reminder</string>
+    <string name="settings_care_event_enable_desc">After a record, remind once when the interval is exceeded</string>
+    <string name="settings_care_event_threshold">Attention interval (days)</string>
+    <string name="settings_care_event_note">This is your own attention interval, not medical advice</string>
     <string name="settings_group_reminders_routine_desc">Notification cadence, follow-ups, routine periods, and travel timezone</string>
     <string name="settings_group_intelligence">AI &amp; OCR</string>
     <string name="settings_group_intelligence_desc">Local OCR model, cloud analysis, and upload controls</string>
@@ -594,6 +602,8 @@
     <string name="notif_reminder_dose_label">Dose: %s</string>
     <string name="notif_reminder_subtext">Medication reminder</string>
     <string name="notif_care_task_body">Care task reminder</string>
+    <string name="notif_care_event_title">No bowel-movement record for %1$d day(s)</string>
+    <string name="notif_care_event_body">This is your own attention interval, not medical advice</string>
     <string name="notif_reminder_big_text">Take %1$s of %2$s</string>
     <string name="notif_reminder_ticker">Time to take: %s</string>
     <string name="notif_action_skip">Skip</string>

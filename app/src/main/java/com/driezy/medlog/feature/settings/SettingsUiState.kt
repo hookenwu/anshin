@@ -31,6 +31,9 @@ data class SettingsUiState(
     val enableDrugDatabase: Boolean = true,
     val enableHealthModule: Boolean = true,
     val enableTimePeriodMode: Boolean = true,
+    /** 照护事件「排便」超期提醒开关（默认关）与阈值天数（推荐 3，可改）。 */
+    val careEventReminderEnabled: Boolean = false,
+    val careEventThresholdDays: Int = 3,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val useDynamicColor: Boolean = false,
     val themePalette: ThemePalette = ThemePalette.ANSHIN,

@@ -107,6 +107,8 @@ class AndroidReminderReconciler @Inject constructor(
                 when (target.type) {
                     ReminderTargetType.MEDICATION -> target.id in liveMedications
                     ReminderTargetType.CARE_TASK -> target.id in liveCareTasks
+                    // 照护事件不进闹钟投影登记表；万一出现也不视为存活（无可取消闹钟）。
+                    ReminderTargetType.CARE_EVENT -> false
                 }
         }.cancelNotifications()
         widgetRefresher.refreshAll()
@@ -120,6 +122,8 @@ class AndroidReminderReconciler @Inject constructor(
                     notificationHelper.cancelAllReminderNotifications(target.id)
                 ReminderTargetType.CARE_TASK ->
                     notificationHelper.cancelCareTaskNotifications(target.id)
+                // 照护事件通知为一次性（setAutoCancel），无按目标取消接口。
+                ReminderTargetType.CARE_EVENT -> Unit
             }
         }
     }

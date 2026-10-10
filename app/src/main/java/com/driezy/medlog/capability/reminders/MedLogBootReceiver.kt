@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import com.driezy.medlog.capability.reminders.application.ReconcileRemindersUseCase
 import com.driezy.medlog.domain.ReminderReconcileReason
+import com.driezy.medlog.feature.careevents.reminder.CareEventReminderCheckUseCase
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -14,6 +15,9 @@ class MedLogBootReceiver : BroadcastReceiver() {
 
     @Inject
     lateinit var reconcileReminders: ReconcileRemindersUseCase
+
+    @Inject
+    lateinit var careEventReminderCheck: CareEventReminderCheckUseCase
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action !in setOf(
@@ -28,6 +32,8 @@ class MedLogBootReceiver : BroadcastReceiver() {
         }
         goAsyncSafe {
             reconcileReminders.all(ReminderReconcileReason.SYSTEM_EVENT)
+            // 接收器只给照护事件提醒一次「新的重新判定机会」（不清除日标记，spec R6/R13）。
+            runCatching { careEventReminderCheck() }
         }
     }
 }

@@ -7,6 +7,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.driezy.medlog.data.model.AiAnalysisCacheEntry
 import com.driezy.medlog.data.model.AiUsageEvent
+import com.driezy.medlog.data.model.CareEventLog
 import com.driezy.medlog.data.model.CareNote
 import com.driezy.medlog.data.model.CareNoteLink
 import com.driezy.medlog.data.model.CarePerson
@@ -26,6 +27,7 @@ import com.driezy.medlog.data.model.SymptomLog
         CareTask::class,
         CareTaskLog::class,
         CareTodo::class,
+        CareEventLog::class,
         CareNote::class,
         CareNoteLink::class,
         CarePerson::class,
@@ -46,6 +48,7 @@ abstract class MedLogDatabase : RoomDatabase() {
     abstract fun careTaskDao(): CareTaskDao
     abstract fun careTaskLogDao(): CareTaskLogDao
     abstract fun careTodoDao(): CareTodoDao
+    abstract fun careEventLogDao(): CareEventLogDao
     abstract fun careNoteDao(): CareNoteDao
     abstract fun carePersonDao(): CarePersonDao
     abstract fun medicationDao(): MedicationDao
@@ -281,6 +284,38 @@ abstract class MedLogDatabase : RoomDatabase() {
                     "CREATE INDEX IF NOT EXISTS `index_care_people_name` ON `care_people` (`name`)",
                 )
                 db.execSQL("ALTER TABLE `care_notes` ADD COLUMN `attributionPersonId` INTEGER")
+            }
+        }
+
+        /**
+         * v24 → v25：新增照护事件日志表 `care_event_logs`（docs/tracked-events-spec.md §4/§8）。
+         *
+         * 照 `MIGRATION_23_24` 的先例，**纯新增、无表重建、零数据搬运**：只建表 + 一条复合索引，
+         * 不触碰任何既有表与数据。`careRecipientId` 挂 `care_recipients` FK CASCADE（成员删除级联清日志）。
+         * 同样适用于「恢复的 v24 备份」——被恢复的 v24 库首次打开时执行的正是这段迁移。
+         */
+        val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `care_event_logs` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `careRecipientId` INTEGER NOT NULL,
+                        `kind` TEXT NOT NULL,
+                        `occurredAtMs` INTEGER NOT NULL,
+                        `note` TEXT,
+                        `createdAtMs` INTEGER NOT NULL,
+                        `updatedAtMs` INTEGER,
+                        FOREIGN KEY(`careRecipientId`) REFERENCES `care_recipients`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS " +
+                        "`index_care_event_logs_careRecipientId_kind_occurredAtMs` " +
+                        "ON `care_event_logs` (`careRecipientId`, `kind`, `occurredAtMs`)",
+                )
             }
         }
 

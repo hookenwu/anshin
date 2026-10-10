@@ -1,5 +1,7 @@
 package com.driezy.medlog.data.local
 
+import com.driezy.medlog.data.model.CareEventKind
+import com.driezy.medlog.data.model.CareEventLog
 import com.driezy.medlog.data.model.CareNote
 import com.driezy.medlog.data.model.CareNoteAttributionType
 import com.driezy.medlog.data.model.CareNoteStatus
@@ -29,7 +31,7 @@ class RoomModelContractTest {
         assertEquals(7L, log.medicationId)
         assertEquals("WEIGHT", record.type)
         assertEquals("", symptom.medicationName)
-        assertEquals(24, DatabaseSchema.VERSION)
+        assertEquals(25, DatabaseSchema.VERSION)
     }
 
     @Test
@@ -70,6 +72,22 @@ class RoomModelContractTest {
         // 三态语义互不重叠：DONE 计完成、CANCELLED 不计完成也不计逾期。
         assertEquals(listOf("DONE", "CANCELLED"), CareTodoStatus.closed)
         assertEquals(listOf("OPEN", "DONE", "CANCELLED"), CareTodoStatus.all)
+    }
+
+    @Test
+    fun `care event log defaults to bowel kind with two timestamps and no audit fields`() {
+        val log = CareEventLog(careRecipientId = 3L, occurredAtMs = 1_700_000_000_000L)
+
+        // 首期唯一 kind 是代码常量 BOWEL；类型不是用户可管理数据。
+        assertEquals("BOWEL", CareEventKind.BOWEL)
+        assertEquals(listOf("BOWEL"), CareEventKind.all)
+        assertEquals(CareEventKind.BOWEL, log.kind)
+        // 双时间戳：发生 vs 记录彼此独立；补记时 occurredAtMs 可为过去。
+        assertEquals(1_700_000_000_000L, log.occurredAtMs)
+        // 无版本审计字段（就地编辑置 updatedAtMs），无 note 时为空。
+        assertEquals(null, log.updatedAtMs)
+        assertEquals(null, log.note)
+        assertEquals(0L, log.id)
     }
 
     @Test

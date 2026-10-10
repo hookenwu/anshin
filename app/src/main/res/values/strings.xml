@@ -153,6 +153,9 @@
     <string name="home_hero_name_and_dose">%1$s · %2$s</string>
     <string name="home_hero_take_now">现在服用</string>
     <string name="home_hero_plan_title">今日计划</string>
+    <string name="home_care_event_status">距上次记录排便 %1$d 天</string>
+    <string name="home_care_event_none">还没有排便记录</string>
+    <string name="home_care_event_record">记录</string>
     <plurals name="home_hero_plan_count">
         <item quantity="other">%d 次</item>
     </plurals>
@@ -199,6 +202,11 @@
     <string name="settings_group_appearance_home">外观与首页</string>
     <string name="settings_group_appearance_home_desc">主题配色、动态颜色与今日页面显示偏好</string>
     <string name="settings_group_reminders_routine">提醒与作息</string>
+    <string name="settings_care_event_section">排便提醒</string>
+    <string name="settings_care_event_enable">开启提醒</string>
+    <string name="settings_care_event_enable_desc">记录排便后，超过关注间隔提醒一次</string>
+    <string name="settings_care_event_threshold">关注间隔（天）</string>
+    <string name="settings_care_event_note">这是你自己设置的关注间隔，不是医学建议</string>
     <string name="settings_group_reminders_routine_desc">通知节奏、漏服再提醒、作息时段和旅行时区</string>
     <string name="settings_group_intelligence">AI 与 OCR</string>
     <string name="settings_group_intelligence_desc">OCR 模型、云端分析与上传控制</string>
@@ -572,6 +580,8 @@
     <string name="notif_reminder_dose_label">剂量：%s</string>
     <string name="notif_reminder_subtext">用药提醒</string>
     <string name="notif_care_task_body">照护事项提醒</string>
+    <string name="notif_care_event_title">已 %1$d 天未记录排便</string>
+    <string name="notif_care_event_body">这是你自己设置的关注间隔，不是医学建议</string>
     <string name="notif_reminder_big_text">该服用 %1$s 的 %2$s</string>
     <string name="notif_reminder_ticker">该服药了：%s</string>
     <string name="notif_action_skip">跳过</string>

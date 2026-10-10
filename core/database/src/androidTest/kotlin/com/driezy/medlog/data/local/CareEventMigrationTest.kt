@@ -12,18 +12,17 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * v21 → v22（新增待办表 `care_todos`）迁移测试，docs/todos.md §4。
+ * v24 → v25（新增照护事件日志表 `care_event_logs`）迁移测试，docs/tracked-events-spec.md §4/§8。
  *
  * 关键约束：
- * - **纯新增**：既有成员/药品/照护事项/日志逐行保留、内容不变；不触碰任何既有表；
- * - 新表建好后为空、可读写，两条索引（careRecipientId / status）存在；
- * - 成员删除按 FK CASCADE 连带删除其待办；
- * - 同一段迁移也覆盖「恢复的 v21 备份」——被恢复的 v21 库文件在 App 首次打开时
- *   执行的正是 [MedLogDatabase.MIGRATION_21_22]（`BackupCompatibilityPolicy.canRestore`
- *   上界跟随 `DatabaseSchema.VERSION`，旧备份自动放行）。
+ * - **纯新增、无表重建**：既有成员/药品/日志/照护事项/待办逐行保留、内容不变；不触碰任何既有表；
+ * - 新表建好后可读写，复合索引 `(careRecipientId, kind, occurredAtMs)` 存在；
+ * - 删除成员 → 其事件由 FK **级联删除**，不影响其他成员；
+ * - 同一段迁移也覆盖「恢复的 v24 备份」——被恢复的 v24 库首次打开时执行的正是
+ *   [MedLogDatabase.MIGRATION_24_25]（`BackupCompatibilityPolicy.canRestore` 上界跟随 `DatabaseSchema.VERSION`）。
  */
 @RunWith(AndroidJUnit4::class)
-class CareTodoMigrationTest {
+class CareEventMigrationTest {
 
     @get:Rule
     val helper = MigrationTestHelper(
@@ -36,101 +35,83 @@ class CareTodoMigrationTest {
         InstrumentationRegistry.getInstrumentation().targetContext.deleteDatabase(TEST_DATABASE)
     }
 
-    /**
-     * 用一份「有数据的 v21 库」驱动迁移——等价于就地升级，也等价于把一份 v21 备份文件
-     * 恢复进应用数据库目录后首次打开（两条路径都走同一段迁移）。
-     */
     @Test
-    fun migrate21To22_keepsLegacyRows_andAddsWritableCareTodosWithIndicesAndCascade() {
-        seedPopulatedV21()
+    fun migrate24To25_keepsLegacyRows_andAddsWritableCareEventLogsWithIndexAndCascade() {
+        seedPopulatedV24()
 
         helper.runMigrationsAndValidate(
             TEST_DATABASE,
             DatabaseSchema.VERSION,
             true,
-            MedLogDatabase.MIGRATION_21_22,
-            MedLogDatabase.MIGRATION_22_23,
-            MedLogDatabase.MIGRATION_23_24,
             MedLogDatabase.MIGRATION_24_25,
         ).use { db ->
             // (a) 既有行零丢失、内容逐项不变
-            assertEquals(1, db.count("SELECT COUNT(*) FROM care_recipients WHERE id = 1"))
             assertEquals(2, db.count("SELECT COUNT(*) FROM care_recipients"))
             assertEquals(1, db.count("SELECT COUNT(*) FROM medications"))
             assertEquals("二甲双胍", db.text("SELECT name FROM medications WHERE id = 1"))
             assertEquals(1, db.count("SELECT COUNT(*) FROM medication_logs"))
             assertEquals(1, db.count("SELECT COUNT(*) FROM care_tasks"))
             assertEquals("吸氧", db.text("SELECT title FROM care_tasks WHERE id = 1"))
-            assertEquals(1, db.count("SELECT COUNT(*) FROM care_task_logs"))
+            assertEquals(1, db.count("SELECT COUNT(*) FROM care_todos"))
+            assertEquals("让护士看一下压疮风险", db.text("SELECT title FROM care_todos WHERE id = 1"))
 
-            // (b) 新表存在且为空，可读写
-            assertEquals(0, db.count("SELECT COUNT(*) FROM care_todos"))
+            // (b) 新表存在且为空，可读写（双时间戳：发生 vs 记录）
+            assertEquals(0, db.count("SELECT COUNT(*) FROM care_event_logs"))
             db.execSQL(
                 """
-                INSERT INTO care_todos (
-                    careRecipientId, title, status, dueAtMs, sourceType, sourceId, sourceNote,
-                    createdAtMs, closedAtMs, resolutionNote
-                ) VALUES (
-                    1, '让护士看一下压疮风险', 'OPEN', NULL, 'OBSERVATION', NULL, '护工：骶尾处发红',
-                    1700000000000, NULL, NULL
-                )
+                INSERT INTO care_event_logs
+                    (careRecipientId, kind, occurredAtMs, note, createdAtMs, updatedAtMs)
+                VALUES (1, 'BOWEL', 1700000000000, '补记：昨天下午', 1700003600000, NULL)
                 """.trimIndent(),
             )
-            assertEquals(1, db.count("SELECT COUNT(*) FROM care_todos WHERE status = 'OPEN'"))
-            db.execSQL("UPDATE care_todos SET status = 'DONE', closedAtMs = 1700000005000 WHERE id = 1")
-            assertEquals("DONE", db.text("SELECT status FROM care_todos WHERE id = 1"))
-            assertEquals(1_700_000_005_000L, db.long("SELECT closedAtMs FROM care_todos WHERE id = 1"))
+            assertEquals(1, db.count("SELECT COUNT(*) FROM care_event_logs WHERE kind = 'BOWEL'"))
+            assertEquals(1_700_000_000_000L, db.long("SELECT occurredAtMs FROM care_event_logs WHERE id = 1"))
+            assertEquals(null, db.textOrNull("SELECT note FROM care_event_logs WHERE kind = 'SOMETHING_ELSE'"))
+            db.execSQL("UPDATE care_event_logs SET occurredAtMs = 1699990000000, updatedAtMs = 1700004000000 WHERE id = 1")
+            assertEquals(1_699_990_000_000L, db.long("SELECT occurredAtMs FROM care_event_logs WHERE id = 1"))
+            assertEquals(1_700_004_000_000L, db.long("SELECT updatedAtMs FROM care_event_logs WHERE id = 1"))
 
-            // (c) 两条索引存在
-            val indices = db.indexNames("care_todos")
+            // (c) 复合索引存在
+            val indices = db.indexNames("care_event_logs")
             assertTrue(
-                "care_todos 缺少 careRecipientId 索引：$indices",
-                "index_care_todos_careRecipientId" in indices,
-            )
-            assertTrue(
-                "care_todos 缺少 status 索引：$indices",
-                "index_care_todos_status" in indices,
+                "care_event_logs 缺少 (careRecipientId,kind,occurredAtMs) 索引：$indices",
+                "index_care_event_logs_careRecipientId_kind_occurredAtMs" in indices,
             )
 
-            // (d) 成员删除级联：确认 FK 开启后删除 1 号成员，其待办随之消失
+            // (d) 成员删除级联：删除 1 号成员，其事件随之消失，不影响 2 号成员
             db.execSQL("PRAGMA foreign_keys = ON")
             db.execSQL(
-                "INSERT INTO care_todos (careRecipientId, title, status, createdAtMs) " +
-                    "VALUES (2, '家属：复查预约', 'OPEN', 1700000001000)",
+                "INSERT INTO care_event_logs (careRecipientId, kind, occurredAtMs, createdAtMs) " +
+                    "VALUES (2, 'BOWEL', 1700000001000, 1700000001000)",
             )
-            assertEquals(1, db.count("SELECT COUNT(*) FROM care_todos WHERE careRecipientId = 2"))
+            assertEquals(1, db.count("SELECT COUNT(*) FROM care_event_logs WHERE careRecipientId = 2"))
             db.execSQL("DELETE FROM care_recipients WHERE id = 1")
-            assertEquals(0, db.count("SELECT COUNT(*) FROM care_todos WHERE careRecipientId = 1"))
+            assertEquals(0, db.count("SELECT COUNT(*) FROM care_event_logs WHERE careRecipientId = 1"))
             assertEquals(
-                "删除 1 号成员不得影响 2 号成员的待办",
+                "删除 1 号成员不得影响 2 号成员的事件",
                 1,
-                db.count("SELECT COUNT(*) FROM care_todos WHERE careRecipientId = 2"),
+                db.count("SELECT COUNT(*) FROM care_event_logs WHERE careRecipientId = 2"),
             )
         }
     }
 
     @Test
-    fun migrate21To22_onEmptyDatabase_createsEmptyCareTodosTableWithIndices() {
-        helper.createDatabase(TEST_DATABASE, 21).use { /* 空库 */ }
+    fun migrate24To25_onEmptyDatabase_createsEmptyCareEventLogsTableWithIndex() {
+        helper.createDatabase(TEST_DATABASE, 24).use { /* 空库 */ }
 
         helper.runMigrationsAndValidate(
             TEST_DATABASE,
             DatabaseSchema.VERSION,
             true,
-            MedLogDatabase.MIGRATION_21_22,
-            MedLogDatabase.MIGRATION_22_23,
-            MedLogDatabase.MIGRATION_23_24,
             MedLogDatabase.MIGRATION_24_25,
         ).use { db ->
-            assertEquals(0, db.count("SELECT COUNT(*) FROM care_todos"))
-            val indices = db.indexNames("care_todos")
-            assertTrue("index_care_todos_careRecipientId" in indices)
-            assertTrue("index_care_todos_status" in indices)
+            assertEquals(0, db.count("SELECT COUNT(*) FROM care_event_logs"))
+            assertTrue("index_care_event_logs_careRecipientId_kind_occurredAtMs" in db.indexNames("care_event_logs"))
         }
     }
 
-    private fun seedPopulatedV21() {
-        helper.createDatabase(TEST_DATABASE, 21).use { db ->
+    private fun seedPopulatedV24() {
+        helper.createDatabase(TEST_DATABASE, 24).use { db ->
             db.execSQL(
                 "INSERT INTO care_recipients (id, uuid, displayName, createdAtMs, updatedAtMs) " +
                     "VALUES (1, 'uuid-dad', '爸爸', 1, 1), (2, 'uuid-mom', '妈妈', 1, 1)",
@@ -170,15 +151,14 @@ class CareTodoMigrationTest {
                 """.trimIndent(),
             )
             db.execSQL(
-                "INSERT INTO care_task_logs (careTaskId, scheduledTimeMs, status, actualStartMs, actualEndMs, " +
-                    "actualDurationMinutes, notes, createdAtMs, revisionType) " +
-                    "VALUES (1, 1700000000000, 'DONE', 1700000000000, 1700001800000, 30, '', 1, 'ORIGINAL')",
+                "INSERT INTO care_todos (id, careRecipientId, title, status, createdAtMs) " +
+                    "VALUES (1, 1, '让护士看一下压疮风险', 'OPEN', 1700000000000)",
             )
         }
     }
 }
 
-private const val TEST_DATABASE = "care-todo-migration-test"
+private const val TEST_DATABASE = "care-event-migration-test"
 
 private fun SupportSQLiteDatabase.count(sql: String): Int = query(sql).use { cursor ->
     if (cursor.moveToFirst()) cursor.getInt(0) else 0
@@ -186,6 +166,10 @@ private fun SupportSQLiteDatabase.count(sql: String): Int = query(sql).use { cur
 
 private fun SupportSQLiteDatabase.text(sql: String): String = query(sql).use { cursor ->
     if (cursor.moveToFirst()) cursor.getString(0) else ""
+}
+
+private fun SupportSQLiteDatabase.textOrNull(sql: String): String? = query(sql).use { cursor ->
+    if (cursor.moveToFirst()) cursor.getString(0) else null
 }
 
 private fun SupportSQLiteDatabase.long(sql: String): Long = query(sql).use { cursor ->

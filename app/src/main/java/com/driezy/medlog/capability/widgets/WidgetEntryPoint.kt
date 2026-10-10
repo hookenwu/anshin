@@ -2,6 +2,7 @@ package com.driezy.medlog.capability.widgets
 
 import com.driezy.medlog.data.repository.LogRepository
 import com.driezy.medlog.data.repository.MedicationRepository
+import com.driezy.medlog.feature.careevents.reminder.CareEventReminderCheckUseCase
 import com.driezy.medlog.feature.medications.application.ToggleMedicationDoseUseCase
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -25,4 +26,7 @@ interface WidgetEntryPoint {
     fun logRepository(): LogRepository
     fun preferences(): com.driezy.medlog.data.repository.UserPreferencesRepository
     fun clock(): Clock
+
+    /** 照护事件（排便）缺席型每日提醒：由 15 分钟周期 worker 每轮调用。 */
+    fun careEventReminderCheck(): CareEventReminderCheckUseCase
 }

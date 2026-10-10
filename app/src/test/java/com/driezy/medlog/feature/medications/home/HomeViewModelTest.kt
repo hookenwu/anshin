@@ -2,6 +2,7 @@ package com.driezy.medlog.feature.medications.home
 
 import app.cash.turbine.test
 import com.driezy.medlog.data.local.TransactionRunner
+import com.driezy.medlog.data.model.CareEventLog
 import com.driezy.medlog.data.model.CareTodo
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationPlanRevision
@@ -43,6 +44,9 @@ class HomeViewModelTest {
             on { getActiveTasks() } doReturn flowOf(emptyList())
             onBlocking { getLogsForToday(any()) } doReturn emptyList()
         }
+        val careEvents = mock<CareEventRepository> {
+            on { getNewest() } doReturn flowOf(null as CareEventLog?)
+        }
         return HomeViewModel(
             medicationRepo = meds,
             logRepo = logs,
@@ -57,6 +61,7 @@ class HomeViewModelTest {
             careTaskRepo = careTasks,
             careTaskCompletion = mock(),
             careTodoRepository = todos,
+            careEventRepository = careEvents,
             computationDispatcher = dispatcher,
         )
     }

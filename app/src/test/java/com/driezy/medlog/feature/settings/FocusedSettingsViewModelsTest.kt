@@ -3,12 +3,16 @@ package com.driezy.medlog.feature.settings
 import com.driezy.medlog.capability.reminders.application.ReconcileRemindersUseCase
 import com.driezy.medlog.capability.reminders.application.ResyncRemindersUseCase
 import com.driezy.medlog.data.model.RoutineSchedule
+import com.driezy.medlog.data.recipient.ActiveRecipientStore
+import com.driezy.medlog.data.repository.CareEventReminderPreferences
+import com.driezy.medlog.data.repository.CareEventReminderSetting
 import com.driezy.medlog.data.repository.FeaturePreferences
 import com.driezy.medlog.data.repository.ReminderPreferenceState
 import com.driezy.medlog.data.repository.ReminderPreferences
 import com.driezy.medlog.domain.ReminderReconcileReason
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -18,6 +22,8 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -43,7 +49,7 @@ class FocusedSettingsViewModelsTest {
         val features: FeaturePreferences = mock()
         val resync: ResyncRemindersUseCase = mock()
         val reconcile: ReconcileRemindersUseCase = mock()
-        val viewModel = SettingsReminderViewModel(preferences, features, resync, reconcile, clock)
+        val viewModel = reminderViewModel(preferences, features, resync, reconcile)
 
         viewModel.onAction(SettingsUiAction.SetEarlyReminder(30))
         advanceUntilIdle()
@@ -59,12 +65,35 @@ class FocusedSettingsViewModelsTest {
         val features: FeaturePreferences = mock()
         val resync: ResyncRemindersUseCase = mock()
         val reconcile: ReconcileRemindersUseCase = mock()
-        val viewModel = SettingsReminderViewModel(preferences, features, resync, reconcile, clock)
+        val viewModel = reminderViewModel(preferences, features, resync, reconcile)
 
         viewModel.onAction(SettingsUiAction.PermissionsRecovered)
         advanceUntilIdle()
 
         verify(reconcile).all(ReminderReconcileReason.SYSTEM_EVENT)
+    }
+
+    private fun reminderViewModel(
+        preferences: ReminderPreferences,
+        features: FeaturePreferences,
+        resync: ResyncRemindersUseCase,
+        reconcile: ReconcileRemindersUseCase,
+    ): SettingsReminderViewModel {
+        val careEventPreferences: CareEventReminderPreferences = mock {
+            on { reminderSetting(any(), any()) } doReturn flowOf(CareEventReminderSetting())
+        }
+        val activeRecipient: ActiveRecipientStore = mock {
+            on { this.recipientId } doReturn MutableStateFlow(1L)
+        }
+        return SettingsReminderViewModel(
+            preferences,
+            features,
+            resync,
+            reconcile,
+            clock,
+            careEventPreferences,
+            activeRecipient,
+        )
     }
 
     private fun reminderState() = ReminderPreferenceState(

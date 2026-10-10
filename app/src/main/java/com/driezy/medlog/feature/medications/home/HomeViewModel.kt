@@ -10,6 +10,7 @@ import com.driezy.medlog.data.model.DrugInteraction
 import com.driezy.medlog.data.model.LogStatus
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
+import com.driezy.medlog.data.repository.CareEventRepository
 import com.driezy.medlog.data.repository.CareTaskRepository
 import com.driezy.medlog.data.repository.CareTodoRepository
 import com.driezy.medlog.data.repository.HomeHeroStyle
@@ -21,6 +22,8 @@ import com.driezy.medlog.data.repository.reminderZone
 import com.driezy.medlog.di.ComputationDispatcher
 import com.driezy.medlog.domain.StreakCalculator
 import com.driezy.medlog.domain.todayRange
+import com.driezy.medlog.feature.careevents.CareEventStatusUi
+import com.driezy.medlog.feature.careevents.buildCareEventStatus
 import com.driezy.medlog.feature.caretasks.application.CareTaskCompletionUseCase
 import com.driezy.medlog.feature.medications.application.DoseChange
 import com.driezy.medlog.feature.medications.application.FuturePlanCalculator
@@ -104,6 +107,11 @@ data class HomeUiState(
     val todoBlock: HomeTodoBlock? = null,
     /** 正在写入的待办 id，防重复点击。 */
     val savingTodoIds: Set<Long> = emptySet(),
+    /**
+     * 今日页「今日计划」标题行里的排便状态（docs/tracked-events-spec.md §6）。
+     * null = 尚未观察；无记录时为 `hasAnyRecord = false`。
+     */
+    val careEventStatus: CareEventStatusUi? = null,
 ) {
     val heroPresentation: HomeHeroPresentation by lazy {
         HomeHeroPresentation.from(items)
@@ -173,6 +181,9 @@ sealed interface HomeUiAction {
     // ── 待办闭环：只经 CareTodoRepository（不新建记录通路，不触发任何提醒/通知） ──
     data class TodoComplete(val todoId: Long) : HomeUiAction
     data class TodoReopen(val todoId: Long) : HomeUiAction
+
+    /** 今日页快捷记录一次排便（occurredAtMs = now）；写入本身不触发任何即时通知（R11）。 */
+    data object RecordCareEventNow : HomeUiAction
 }
 
 sealed interface HomeUiEffect {
@@ -213,6 +224,7 @@ class HomeViewModel @Inject constructor(
     private val careTaskRepo: CareTaskRepository,
     private val careTaskCompletion: CareTaskCompletionUseCase,
     private val careTodoRepository: CareTodoRepository,
+    private val careEventRepository: CareEventRepository,
     @param:ComputationDispatcher private val computationDispatcher: CoroutineDispatcher,
 ) : BaseViewModel() {
 
@@ -248,6 +260,7 @@ class HomeViewModel @Inject constructor(
         observeMedications()
         observeCareTasks()
         observeTodos()
+        observeCareEvents()
         computeStreak()
         scanLowStockOnLaunch()
     }
@@ -287,6 +300,7 @@ class HomeViewModel @Inject constructor(
                 }
             is HomeUiAction.TodoComplete -> completeTodo(action.todoId)
             is HomeUiAction.TodoReopen -> reopenTodo(action.todoId)
+            HomeUiAction.RecordCareEventNow -> recordCareEvent()
         }
     }
 
@@ -400,6 +414,30 @@ class HomeViewModel @Inject constructor(
                 busyTodoIds.remove(todoId)
                 _uiState.update { it.copy(savingTodoIds = busyTodoIds.toSet()) }
             }
+        }
+    }
+
+    /**
+     * 今日页「今日计划」标题行里的排便状态：最新锚点 × 当前时间 → 距上次记录天数。
+     * 写入路径**不碰这里**——记录只经 [CareEventRepository]，状态随后由本观察流自然刷新。
+     */
+    private fun observeCareEvents() {
+        safeLaunch {
+            combine(
+                careEventRepository.getNewest(),
+                currentTime,
+            ) { newest, now -> newest?.occurredAtMs to now.toEpochMilli() }
+                .catch { error -> _uiState.update { it.copy(errorMessage = error.localizedMessage) } }
+                .collect { (anchorMs, nowMs) ->
+                    _uiState.update { it.copy(careEventStatus = buildCareEventStatus(anchorMs, nowMs)) }
+                }
+        }
+    }
+
+    /** 快捷记录一次排便（occurredAtMs = now）。写入不触发任何即时通知（R11）。 */
+    fun recordCareEvent() {
+        safeLaunch(onError = { error -> _uiState.update { it.copy(errorMessage = error.localizedMessage) } }) {
+            careEventRepository.record()
         }
     }
 
@@ -519,6 +557,7 @@ class HomeViewModel @Inject constructor(
                     savingCareKeys = previous.savingCareKeys,
                     todoBlock = previous.todoBlock,
                     savingTodoIds = previous.savingTodoIds,
+                    careEventStatus = previous.careEventStatus,
                 )
                 // 实时更新今日进度通知（去重：仅在 taken/total 真正变化时更新）
                 val hero = state.heroPresentation

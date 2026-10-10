@@ -42,6 +42,8 @@ sealed interface SettingsUiAction {
     data class SetDrugDatabase(val enabled: Boolean) : SettingsUiAction
     data class SetHealthModule(val enabled: Boolean) : SettingsUiAction
     data class SetTimePeriodMode(val enabled: Boolean) : SettingsUiAction
+    data class SetCareEventReminder(val enabled: Boolean) : SettingsUiAction
+    data class SetCareEventThresholdDays(val days: Int) : SettingsUiAction
     data class UnarchiveMedication(val id: Long) : SettingsUiAction
 
     data class SetOcrModel(val value: OcrModelType) : SettingsUiAction

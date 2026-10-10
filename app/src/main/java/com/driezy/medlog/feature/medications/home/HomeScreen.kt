@@ -19,11 +19,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.CareRecipient
+import com.driezy.medlog.feature.careevents.CareEventStatusUi
 import com.driezy.medlog.feature.caretasks.careTaskCategoryLabel
 import com.driezy.medlog.ui.components.FamilyMemberPickerDialog
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
@@ -401,41 +403,57 @@ internal fun HomeContent(
                 }
             }
 
-            if (uiState.overallTotal > 0) {
+            // 「今日计划」标题行（§6）：有用药计划时渲染计划行；无计划但有排便记录/追踪时，
+            // 同一 item 仍渲染以承载排便状态——保证「有排便数据却看不到状态」不会发生。
+            val careEventStatus = uiState.careEventStatus
+            if (uiState.overallTotal > 0 || careEventStatus?.hasAnyRecord == true) {
                 item(key = "todayPlanHeader", contentType = "header") {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = MedLogSpacing.Medium, bottom = MedLogSpacing.Tiny),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = stringResource(R.string.home_hero_plan_title),
-                            style = MaterialTheme.emphasizedTypography.titleLarge,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            text = pluralStringResource(
-                                R.plurals.home_hero_plan_count,
-                                uiState.overallTotal,
-                                uiState.overallTotal,
-                            ),
-                            modifier = Modifier.testTag("homePlanCount"),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        // 照护事项时间轴段标题旁的「管理照护事项」入口（复用既有区块，不新增区块）。
-                        if (uiState.todayItems.any { it.isCareTask }) {
-                            TextButton(
-                                onClick = onOpenCareTasks,
-                                modifier = Modifier.testTag("homeManageCareTasks"),
+                        if (uiState.overallTotal > 0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    stringResource(R.string.home_manage_care_tasks),
-                                    style = MaterialTheme.typography.labelLarge,
+                                    text = stringResource(R.string.home_hero_plan_title),
+                                    style = MaterialTheme.emphasizedTypography.titleLarge,
+                                    modifier = Modifier.weight(1f),
                                 )
+                                Text(
+                                    text = pluralStringResource(
+                                        R.plurals.home_hero_plan_count,
+                                        uiState.overallTotal,
+                                        uiState.overallTotal,
+                                    ),
+                                    modifier = Modifier.testTag("homePlanCount"),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                // 照护事项时间轴段标题旁的「管理照护事项」入口（复用既有区块，不新增区块）。
+                                if (uiState.todayItems.any { it.isCareTask }) {
+                                    TextButton(
+                                        onClick = onOpenCareTasks,
+                                        modifier = Modifier.testTag("homeManageCareTasks"),
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.home_manage_care_tasks),
+                                            style = MaterialTheme.typography.labelLarge,
+                                        )
+                                    }
+                                }
                             }
+                        }
+                        // 次级信息：状态放不下时截断/让位，绝不压缩上面的用药行（§6 A3）。
+                        if (careEventStatus != null) {
+                            CareEventStatusLine(
+                                status = careEventStatus,
+                                onRecord = { onAction(HomeUiAction.RecordCareEventNow) },
+                            )
                         }
                     }
                 }
@@ -611,5 +629,43 @@ internal fun HomeContent(
             },
             onDismiss = { memberPickerOpen = false },
         )
+    }
+}
+
+/**
+ * 「今日计划」标题行里的排便状态（§6）。**次级信息**：`maxLines = 1` 且省略号截断——
+ * 真机小屏/字体放大/超长药品名下宁可截断状态，也不压缩上面的用药行（§6 A3）。
+ */
+@Composable
+private fun CareEventStatusLine(status: CareEventStatusUi, onRecord: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = MedLogSpacing.Large, end = MedLogSpacing.Large)
+            .testTag("homeCareEventStatus"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
+    ) {
+        Text(
+            text = if (status.hasAnyRecord && status.daysSince != null) {
+                stringResource(R.string.home_care_event_status, status.daysSince)
+            } else {
+                stringResource(R.string.home_care_event_none)
+            },
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        TextButton(
+            onClick = onRecord,
+            modifier = Modifier.testTag("homeCareEventRecord"),
+        ) {
+            Text(
+                stringResource(R.string.home_care_event_record),
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
     }
 }

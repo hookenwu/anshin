@@ -344,6 +344,8 @@ class AlarmScheduler @Inject constructor(
         when (target.type) {
             ReminderTargetType.MEDICATION -> cancelAllAlarms(target.id, target.recipientId)
             ReminderTargetType.CARE_TASK -> cancelCareTaskAlarms(target.id, target.recipientId)
+            // 照护事件由 worker 驱动、不排任何闹钟，因此没有可取消的闹钟。
+            ReminderTargetType.CARE_EVENT -> Unit
         }
     }
 

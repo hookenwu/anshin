@@ -144,6 +144,9 @@
     <string name="home_hero_name_and_dose">%1$s · %2$s</string>
     <string name="home_hero_take_now">今すぐ服用</string>
     <string name="home_hero_plan_title">今日の予定</string>
+    <string name="home_care_event_status">前回の排便記録から %1$d 日</string>
+    <string name="home_care_event_none">まだ排便の記録がありません</string>
+    <string name="home_care_event_record">記録</string>
     <plurals name="home_hero_plan_count"><item quantity="other">%d回</item></plurals>
     <string name="home_hero_completed_title">今日の服薬完了</string>
     <plurals name="home_hero_completed_doses"><item quantity="other">%d回すべて服用済み</item></plurals>
@@ -186,6 +189,11 @@
     <string name="settings_group_appearance_home">外観とホーム</string>
     <string name="settings_group_appearance_home_desc">テーマ配色、ダイナミックカラー、今日画面の表示設定</string>
     <string name="settings_group_reminders_routine">リマインダーと生活リズム</string>
+    <string name="settings_care_event_section">排便リマインダー</string>
+    <string name="settings_care_event_enable">通知を有効にする</string>
+    <string name="settings_care_event_enable_desc">記録後、関心間隔を超えたら一度通知します</string>
+    <string name="settings_care_event_threshold">関心間隔（日）</string>
+    <string name="settings_care_event_note">これはご自身の関心間隔で、医学的助言ではありません</string>
     <string name="settings_group_reminders_routine_desc">通知間隔、再通知、生活リズム、旅行時のタイムゾーン</string>
     <string name="settings_group_intelligence">スマート機能</string>
     <string name="settings_group_intelligence_desc">ローカル OCR モデル、クラウド分析、アップロード制御</string>
@@ -537,6 +545,8 @@
     <string name="notif_reminder_dose_label">用量：%s</string>
     <string name="notif_reminder_subtext">服薬リマインダー</string>
     <string name="notif_care_task_body">ケア項目のリマインダー</string>
+    <string name="notif_care_event_title">%1$d 日排便の記録がありません</string>
+    <string name="notif_care_event_body">これはご自身の関心間隔で、医学的助言ではありません</string>
     <string name="notif_reminder_big_text">%2$s を %1$s 服用しましょう</string>
     <string name="notif_reminder_ticker">服薬時刻です：%s</string>
     <string name="notif_action_skip">スキップ</string>

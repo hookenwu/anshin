@@ -14,6 +14,7 @@ import com.driezy.medlog.capability.widgets.GlanceWidgetRefresher
 import com.driezy.medlog.capability.widgets.WidgetRefresher
 import com.driezy.medlog.data.local.AiAnalysisCacheDao
 import com.driezy.medlog.data.local.AiUsageEventDao
+import com.driezy.medlog.data.local.CareEventLogDao
 import com.driezy.medlog.data.local.CareNoteDao
 import com.driezy.medlog.data.local.CarePersonDao
 import com.driezy.medlog.data.local.CareRecipientDao
@@ -32,6 +33,10 @@ import com.driezy.medlog.data.repository.AiCacheRepository
 import com.driezy.medlog.data.repository.AiCacheRepositoryImpl
 import com.driezy.medlog.data.repository.AiPreferences
 import com.driezy.medlog.data.repository.AppearancePreferences
+import com.driezy.medlog.data.repository.CareEventReminderPreferences
+import com.driezy.medlog.data.repository.CareEventReminderPreferencesImpl
+import com.driezy.medlog.data.repository.CareEventRepository
+import com.driezy.medlog.data.repository.CareEventRepositoryImpl
 import com.driezy.medlog.data.repository.CareNoteRepository
 import com.driezy.medlog.data.repository.CareNoteRepositoryImpl
 import com.driezy.medlog.data.repository.CarePersonRepository
@@ -110,6 +115,7 @@ object DatabaseModule {
             MedLogDatabase.MIGRATION_21_22,
             MedLogDatabase.MIGRATION_22_23,
             MedLogDatabase.MIGRATION_23_24,
+            MedLogDatabase.MIGRATION_24_25,
         )
         .build()
 
@@ -130,6 +136,9 @@ object DatabaseModule {
 
     @Provides
     fun provideCareTodoDao(db: MedLogDatabase): CareTodoDao = db.careTodoDao()
+
+    @Provides
+    fun provideCareEventLogDao(db: MedLogDatabase): CareEventLogDao = db.careEventLogDao()
 
     @Provides
     fun provideCareNoteDao(db: MedLogDatabase): CareNoteDao = db.careNoteDao()
@@ -204,6 +213,10 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindCareEventRepository(impl: CareEventRepositoryImpl): CareEventRepository
+
+    @Binds
+    @Singleton
     abstract fun bindCareNoteRepository(impl: CareNoteRepositoryImpl): CareNoteRepository
 
     @Binds
@@ -270,6 +283,10 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindWidgetPreferences(impl: UserPreferencesRepository): WidgetPreferences
+
+    @Binds
+    @Singleton
+    abstract fun bindCareEventReminderPreferences(impl: CareEventReminderPreferencesImpl): CareEventReminderPreferences
 
     @Binds
     abstract fun bindOnboardingPreferences(impl: UserPreferencesRepository): OnboardingPreferences

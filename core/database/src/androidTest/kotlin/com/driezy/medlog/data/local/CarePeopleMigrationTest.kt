@@ -45,6 +45,7 @@ class CarePeopleMigrationTest {
             DatabaseSchema.VERSION,
             true,
             MedLogDatabase.MIGRATION_23_24,
+            MedLogDatabase.MIGRATION_24_25,
         ).use { db ->
             // (1) 既有行零丢失、内容逐项不变（含既有照护笔记的正文与姓名快照）
             assertEquals(2, db.count("SELECT COUNT(*) FROM care_recipients"))
@@ -133,6 +134,7 @@ class CarePeopleMigrationTest {
             DatabaseSchema.VERSION,
             true,
             MedLogDatabase.MIGRATION_23_24,
+            MedLogDatabase.MIGRATION_24_25,
         ).use { db ->
             assertEquals(0, db.count("SELECT COUNT(*) FROM care_people"))
             val indices = db.indexNames("care_people")

@@ -64,6 +64,9 @@ enum class ReminderTargetType(val key: String, val codeBase: Int) {
     /** 照护事项：独立基数，避免与用药撞码。 */
     CARE_TASK("task", CARE_TASK_CODE_BASE),
 
+    /** 照护事件（排便）缺席型每日提醒：再取一个独立基数，与用药/照护事项互不撞码。 */
+    CARE_EVENT("care_event", CARE_EVENT_CODE_BASE),
+
     ;
 
     companion object {
@@ -80,3 +83,9 @@ enum class ReminderTargetType(val key: String, val codeBase: Int) {
  * 由 `ReminderTargetTest` 断言。
  */
 const val CARE_TASK_CODE_BASE = 100_000_000
+
+/**
+ * 照护事件（排便）提醒 requestCode 基数。照护事项上限约 1e8 + 90万*100 ≈ 1.9e8；
+ * 取 2e8 作照护事件的基数后，两类互不重叠。由 `ReminderTargetTest` 覆盖。
+ */
+const val CARE_EVENT_CODE_BASE = 200_000_000

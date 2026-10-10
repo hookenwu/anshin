@@ -125,3 +125,32 @@ interface WidgetPreferences {
         textScale: WidgetTextScale? = null,
     )
 }
+
+/**
+ * 照护事件提醒偏好（docs/tracked-events-spec.md §4 D3 / §5）。
+ *
+ * 键一律按 **(成员, kind)** 分片：`care_event_reminder_enabled#<recipientId>#<kind>`、
+ * `care_event_reminder_threshold_days#<recipientId>#<kind>`、`care_event_nudged_day#<recipientId>#<kind>`。
+ * 落在既有成员级 DataStore 偏好层——**不建表**、无类型管理 UI；`kind` 恒为代码常量（首期 `BOWEL`）。
+ * 缺省：开关 **false**、阈值 **3**、日标记 **缺省（从未提醒）**。
+ */
+interface CareEventReminderPreferences {
+    suspend fun isEnabled(recipientId: Long, kind: String): Boolean
+    suspend fun setEnabled(recipientId: Long, kind: String, enabled: Boolean)
+
+    suspend fun thresholdDays(recipientId: Long, kind: String): Int
+    suspend fun setThresholdDays(recipientId: Long, kind: String, days: Int)
+
+    /** 上次提醒的设备本地 epochDay；从未提醒返回 null。 */
+    suspend fun nudgedDay(recipientId: Long, kind: String): Long?
+    suspend fun setNudgedDay(recipientId: Long, kind: String, epochDay: Long)
+
+    /** 成员删除时清理其所有 kind 的偏好键（R8）。 */
+    suspend fun clearForRecipient(recipientId: Long)
+
+    /** 响应式读取（设置页控件用）：开关 + 阈值。 */
+    fun reminderSetting(recipientId: Long, kind: String): Flow<CareEventReminderSetting>
+}
+
+/** 设置页显示的照护事件提醒设置（纯数据）。 */
+data class CareEventReminderSetting(val enabled: Boolean = false, val thresholdDays: Int = 3)

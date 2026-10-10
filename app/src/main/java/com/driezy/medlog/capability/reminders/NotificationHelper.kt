@@ -368,6 +368,40 @@ class NotificationHelper @Inject constructor(
         notificationManager.notify(notificationId, notification)
     }
 
+    // ─── 照护事件（排便）缺席型提醒通知 ──────────────────────────────
+
+    /**
+     * 发送照护事件超期提醒通知（docs/tracked-events-spec.md §5 R10）。
+     *
+     * - 文案口径固定「已 X 天未**记录**排便」，绝不表述成「未发生」，并附「这是你关注的间隔，
+     *   不是医学建议」的中性说明；
+     * - 通知 id 取 CARE_EVENT 编号空间（`CARE_EVENT_CODE_BASE + recipientId * 100`），与用药/照护事项不撞码；
+     * - 无动作按钮（记录/补记走今日页），点击打开 App。
+     */
+    fun showCareEventNotification(daysSince: Long, recipientId: Long, memberName: String? = null) {
+        if (!notificationManager.areNotificationsEnabled()) return
+        val notificationId = ReminderTarget(
+            recipientId = 0,
+            type = ReminderTargetType.CARE_EVENT,
+            id = recipientId,
+        ).slotRequestCode(0)
+        val days = daysSince.coerceAtLeast(0L).toInt()
+        val body = context.getString(R.string.notif_care_event_body)
+        val notification = NotificationCompat.Builder(context, CHANNEL_REMINDER)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(notificationColor)
+            .setContentTitle(memberTitle(memberName, context.getString(R.string.notif_care_event_title, days)))
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(openAppPendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setGroup(GROUP_REMINDERS)
+            .setAutoCancel(true)
+            .build()
+        notificationManager.notify(notificationId, notification)
+    }
+
     // ─── 取消通知 ─────────────────────────────────────────────
 
     /**

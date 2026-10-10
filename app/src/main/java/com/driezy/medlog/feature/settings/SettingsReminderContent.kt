@@ -222,11 +222,60 @@ internal fun SettingsReminderContent(uiState: SettingsUiState, onAction: (Settin
                 }
             }
         }
+        // ── 排便提醒（照护事件缺席型，docs/tracked-events-spec.md §5 D3/D5）──
+        SettingsSectionDivider(
+            title = stringResource(R.string.settings_care_event_section),
+            icon = MedLogIcons.NotificationsActive,
+        )
+        SettingsSwitchRow(
+            title = stringResource(R.string.settings_care_event_enable),
+            subtitle = stringResource(R.string.settings_care_event_enable_desc),
+            icon = MedLogIcons.NotificationsActive,
+            checked = uiState.careEventReminderEnabled,
+            onCheckedChange = { onAction(SettingsUiAction.SetCareEventReminder(it)) },
+        )
+        AnimatedVisibility(
+            visible = uiState.careEventReminderEnabled,
+            enter = expandVertically(motionScheme.defaultSpatialSpec()) + fadeIn(motionScheme.defaultEffectsSpec()),
+            exit = shrinkVertically(motionScheme.fastSpatialSpec()) + fadeOut(motionScheme.fastEffectsSpec()),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MedLogSpacing.Large)
+                    .padding(bottom = MedLogSpacing.Medium),
+                verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
+            ) {
+                HorizontalDivider()
+                Text(
+                    stringResource(R.string.settings_care_event_threshold),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
+                ) {
+                    listOf(1, 2, 3, 5, 7).forEach { days ->
+                        FilterChip(
+                            selected = uiState.careEventThresholdDays == days,
+                            onClick = { onAction(SettingsUiAction.SetCareEventThresholdDays(days)) },
+                            label = { Text("$days") },
+                        )
+                    }
+                }
+                Text(
+                    stringResource(R.string.settings_care_event_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         SettingsSectionDivider(
             title = stringResource(R.string.settings_routine),
             icon = MedLogIcons.Schedule,
         )
-        // ── 模式开关 ──────────────────────────────────────
         SettingsSwitchRow(
             title = stringResource(R.string.settings_routine_mode_title),
             subtitle = if (uiState.enableTimePeriodMode) {

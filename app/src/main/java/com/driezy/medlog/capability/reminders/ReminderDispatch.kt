@@ -80,6 +80,8 @@ data class ReminderDispatch(
                         )
                     }
                 }
+                // 照护事件不排闹钟，绝不会出现在闹钟 intent 里；出现即忽略。
+                ReminderTargetType.CARE_EVENT -> null
             }
         }
 
