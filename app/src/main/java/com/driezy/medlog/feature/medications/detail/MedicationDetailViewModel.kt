@@ -7,11 +7,13 @@ import com.driezy.medlog.data.model.CareNote
 import com.driezy.medlog.data.model.CareNoteTargetType
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
+import com.driezy.medlog.data.model.MedicationStatusKind
 import com.driezy.medlog.data.repository.CareNoteRepository
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.domain.model.MedicationId
 import com.driezy.medlog.feature.medications.application.ObserveMedicationAdherence
+import com.driezy.medlog.feature.medications.application.SetMedicationStatusUseCase
 import com.driezy.medlog.feature.medications.application.accumulatedDoseUsage
 import com.driezy.medlog.ui.BaseViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -33,6 +35,10 @@ data class DetailUiState(
     val partial30d: Int = 0,
     /** 近30天计划次数 */
     val total30d: Int = 0,
+    /** 近30天因暂停而逐剂排除的剂次数（§6.2）。 */
+    val pausedExcluded30d: Int = 0,
+    /** 近30天因「状态未知（早于本次迁移）」而逐剂排除的剂次数（§6.3）。 */
+    val unknownExcluded30d: Int = 0,
     /** 累计用量文本（如 `0.5 g` / `4 粒`），无服药记录时为 null。 */
     val accumulatedUsage: String? = null,
     /** 当前库存占初始设置的比率（0-1） */
@@ -64,6 +70,7 @@ class MedicationDetailViewModel @Inject constructor(
     private val observeAdherence: ObserveMedicationAdherence,
     private val transactions: TransactionRunner,
     private val careNoteRepository: CareNoteRepository,
+    private val setMedicationStatus: SetMedicationStatusUseCase,
 ) : BaseViewModel() {
 
     private val _uiState = MutableStateFlow(DetailUiState())
@@ -105,6 +112,8 @@ class MedicationDetailViewModel @Inject constructor(
                             taken30d = summary.taken30d,
                             partial30d = summary.partial30d,
                             total30d = summary.total30d,
+                            pausedExcluded30d = summary.pausedExcluded30d,
+                            unknownExcluded30d = summary.unknownExcluded30d,
                             adherence30d = summary.rate30d,
                             isLoading = false,
                             error = false,
@@ -136,13 +145,13 @@ class MedicationDetailViewModel @Inject constructor(
     fun archiveMedication() {
         val medication = _uiState.value.medication ?: return
         val id = medication.id
+        // 单药路径（docs/medication-status-spec.md §10）：归档 = DISCONTINUE，恢复 = RESUME；
+        // 经状态用例 append 事件 + 同事务直写缓存 + reconcile（不再只改计划链）。
+        val desiredKind =
+            if (medication.isArchived) MedicationStatusKind.RESUME else MedicationStatusKind.DISCONTINUE
         mutate {
-            if (medication.isArchived) {
-                medicationRepo.unarchiveMedication(id)
-            } else {
-                medicationRepo.archiveMedication(id)
-            }
-            reconcileReminders.medication(MedicationId(id), ReminderReconcileReason.MEDICATION_CHANGED)
+            val today = java.time.Instant.ofEpochMilli(clock.millis()).atZone(clock.zone).toLocalDate()
+            setMedicationStatus.apply(id, desiredKind, today)
             effectChannel.send(DetailUiEffect.NavigateBack)
         }
     }

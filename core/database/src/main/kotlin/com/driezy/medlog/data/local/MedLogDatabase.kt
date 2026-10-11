@@ -19,6 +19,7 @@ import com.driezy.medlog.data.model.HealthRecord
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
 import com.driezy.medlog.data.model.MedicationPlanRevision
+import com.driezy.medlog.data.model.MedicationStatusEvent
 import com.driezy.medlog.data.model.SymptomLog
 
 @Database(
@@ -34,6 +35,7 @@ import com.driezy.medlog.data.model.SymptomLog
         Medication::class,
         MedicationLog::class,
         MedicationPlanRevision::class,
+        MedicationStatusEvent::class,
         SymptomLog::class,
         HealthRecord::class,
         AiAnalysisCacheEntry::class,
@@ -53,6 +55,7 @@ abstract class MedLogDatabase : RoomDatabase() {
     abstract fun carePersonDao(): CarePersonDao
     abstract fun medicationDao(): MedicationDao
     abstract fun medicationLogDao(): MedicationLogDao
+    abstract fun medicationStatusEventDao(): MedicationStatusEventDao
     abstract fun symptomLogDao(): SymptomLogDao
     abstract fun healthRecordDao(): HealthRecordDao
     abstract fun aiAnalysisCacheDao(): AiAnalysisCacheDao
@@ -315,6 +318,53 @@ abstract class MedLogDatabase : RoomDatabase() {
                     "CREATE INDEX IF NOT EXISTS " +
                         "`index_care_event_logs_careRecipientId_kind_occurredAtMs` " +
                         "ON `care_event_logs` (`careRecipientId`, `kind`, `occurredAtMs`)",
+                )
+            }
+        }
+
+        /**
+         * v25 → v26：新增药品状态事件表 `medication_status_events` + 遗留基线补种
+         * （docs/medication-status-spec.md §12）。
+         *
+         * **纯新增、无表重建、零数据搬运**：只建表 + 两条索引，再为每个 `isArchived = 1` 的
+         * 遗留药补种**恰一条** `LEGACY_BASELINE` 行（`effectiveAtMs = NULL` = 显式未知；
+         * `recordedAtMs = 迁移时刻` = 认知地平线 `M`）。
+         * **不写** `effectiveAtMs`（不伪造暂停起点）、**不 UPDATE** `medications.isArchived`、
+         * **不** 触碰 `medication_logs`、**不**为 `isArchived = 0` 的药写任何行。
+         * 同样适用于「恢复的 v25 备份」——被恢复的 v25 库首次打开时执行的正是这段迁移。
+         */
+        val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `medication_status_events` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `medicationId` INTEGER NOT NULL,
+                        `kind` TEXT NOT NULL,
+                        `effectiveAtMs` INTEGER,
+                        `recordedAtMs` INTEGER NOT NULL,
+                        `reason` TEXT,
+                        `supersedesId` INTEGER,
+                        FOREIGN KEY(`medicationId`) REFERENCES `medications`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_medication_status_events_medicationId` " +
+                        "ON `medication_status_events` (`medicationId`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS " +
+                        "`index_medication_status_events_medicationId_effectiveAtMs` " +
+                        "ON `medication_status_events` (`medicationId`, `effectiveAtMs`)",
+                )
+                val migrationMs = System.currentTimeMillis()
+                db.execSQL(
+                    "INSERT INTO `medication_status_events` " +
+                        "(`medicationId`, `kind`, `effectiveAtMs`, `recordedAtMs`, `reason`, `supersedesId`) " +
+                        "SELECT `id`, 'LEGACY_BASELINE', NULL, $migrationMs, NULL, NULL " +
+                        "FROM `medications` WHERE `isArchived` = 1",
                 )
             }
         }

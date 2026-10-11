@@ -46,6 +46,10 @@ fun MedicationAdherenceCard(
     modifier: Modifier = Modifier,
     /** 累计用量文本（如 `0.5 g` / `4 粒`）；无数据时为 null，不占位。 */
     accumulatedUsage: String? = null,
+    /** 近 30 天因暂停而逐剂排除的剂次数（docs/medication-status-spec.md §6.2）；>0 才显示。 */
+    pausedExcluded: Int = 0,
+    /** 近 30 天因「状态未知（早于本次迁移）」而逐剂排除的剂次数（§6.3）；>0 才显示、与暂停分列。 */
+    unknownExcluded: Int = 0,
 ) {
     val rate = if (total == 0) 0f else (taken.toFloat() / total).coerceIn(0f, 1f)
     val colors = MaterialTheme.colorScheme
@@ -97,6 +101,20 @@ fun MedicationAdherenceCard(
                     stringResource(R.string.detail_accumulated_usage, usage),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
+                )
+            }
+            if (pausedExcluded > 0) {
+                Text(
+                    stringResource(R.string.medication_status_paused_excluded, pausedExcluded),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.tertiary,
+                )
+            }
+            if (unknownExcluded > 0) {
+                Text(
+                    stringResource(R.string.medication_status_unknown_excluded, unknownExcluded),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
                 )
             }
             Text(

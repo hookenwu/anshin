@@ -4,6 +4,7 @@ import com.driezy.medlog.data.model.LogStatus
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
 import com.driezy.medlog.data.model.MedicationPlanRevision
+import com.driezy.medlog.data.model.MedicationStatusEvent
 import com.driezy.medlog.data.model.applyTo
 import com.driezy.medlog.data.model.toDomainSchedule
 import com.driezy.medlog.domain.ReminderOccurrence
@@ -36,6 +37,11 @@ class FuturePlanCalculator @Inject constructor(private val clock: Clock) {
         includeArchived: Boolean = false,
         revisions: List<MedicationPlanRevision> = emptyList(),
         logs: List<MedicationLog> = emptyList(),
+        /**
+         * 正交状态层事件（docs/medication-status-spec.md §5.3）：对每个 occurrence 用**共享**的
+         * `MedicationStatusDerivation.doseActiveAt` 过滤。留空 ⇒ 无事件 ⇒ 恒 `ACTIVE`（行为与改造前一致）。
+         */
+        statusEvents: List<MedicationStatusEvent> = emptyList(),
     ): List<FuturePlanItem> {
         if (days <= 0) return emptyList()
         val firstDate = from.atZone(zoneId).toLocalDate()
@@ -43,6 +49,7 @@ class FuturePlanCalculator @Inject constructor(private val clock: Clock) {
         val end = firstDate.plusDays(days.toLong()).atStartOfDay(zoneId).toInstant()
         val revisionsByMedication = revisions.groupBy { it.medicationId }
         val logsByMedication = logs.groupBy { it.medicationId }
+        val statusEventsByMedication = statusEvents.groupBy { it.medicationId }
         return medications.flatMap { current ->
             val history = revisionsByMedication[current.id].orEmpty()
             val plans = history.map { it.applyTo(current) to it.effectiveUntilMs } + (current to Long.MAX_VALUE)
@@ -70,16 +77,20 @@ class FuturePlanCalculator @Inject constructor(private val clock: Clock) {
                         zoneId,
                     )
                 }
-                occurrences.map { occurrence ->
-                    val local = occurrence.scheduledAt.atZone(zoneId)
-                    FuturePlanItem(
-                        medication = medication,
-                        day = local.toLocalDate(),
-                        scheduledAt = occurrence.scheduledAt,
-                        timeSlotIndex = occurrence.slotIndex,
-                        timeLabel = local.toLocalTime().format(TIME_FORMATTER),
-                    )
-                }
+                val medicationEvents = statusEventsByMedication[current.id].orEmpty()
+                occurrences
+                    // dose 级暂停 / 未知排除（§5.3、更正 J）：投影与依从率共用同一谓词
+                    .filter { MedicationStatusDerivation.doseActiveAt(medicationEvents, it.scheduledAt.toEpochMilli()) }
+                    .map { occurrence ->
+                        val local = occurrence.scheduledAt.atZone(zoneId)
+                        FuturePlanItem(
+                            medication = medication,
+                            day = local.toLocalDate(),
+                            scheduledAt = occurrence.scheduledAt,
+                            timeSlotIndex = occurrence.slotIndex,
+                            timeLabel = local.toLocalTime().format(TIME_FORMATTER),
+                        )
+                    }
             }
         }.sortedBy(FuturePlanItem::scheduledAt)
     }

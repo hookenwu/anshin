@@ -97,6 +97,16 @@ class MedicationRepositoryImpl @Inject constructor(
 
     override suspend fun unarchiveMedication(id: Long) = setArchived(id, false)
 
+    override suspend fun setArchivedCache(id: Long, archived: Boolean) {
+        val owner = medicationDao.getMedicationById(id)?.careRecipientId ?: return
+        if (owner == ActiveRecipientStore.NO_RECIPIENT) return
+        if (archived) {
+            medicationDao.archiveMedication(id, owner)
+        } else {
+            medicationDao.unarchiveMedication(id, owner)
+        }
+    }
+
     private suspend fun setArchived(id: Long, archived: Boolean) = transactions.withTransaction {
         medicationDao.getMedicationById(id)?.let {
             medicationDao.updatePlan(it.copy(isArchived = archived), clock.millis())

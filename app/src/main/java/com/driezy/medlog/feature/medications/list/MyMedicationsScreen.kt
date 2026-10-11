@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -15,6 +16,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.Medication
+import com.driezy.medlog.data.model.MedicationStatusKind
 import com.driezy.medlog.data.repository.MedicationSortOrder
 import com.driezy.medlog.ui.components.*
 import com.driezy.medlog.ui.icons.MedLogIcons
@@ -23,6 +25,7 @@ import com.driezy.medlog.ui.util.doseDisplayText
 import com.driezy.medlog.ui.util.formatDose
 import com.driezy.medlog.ui.util.timePeriodsLabel
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -43,6 +46,7 @@ fun MyMedicationsScreen(
         onSettings = onSettings,
         onRetry = viewModel::retry,
         onSortOrderChange = viewModel::onSortOrderChange,
+        onBatchStatusChange = { ids, kind, date, reason -> viewModel.applyStatus(ids.toList(), kind, date, reason) },
     )
 }
 
@@ -56,9 +60,20 @@ internal fun MyMedicationsContent(
     onSettings: () -> Unit,
     onRetry: () -> Unit,
     onSortOrderChange: (MedicationSortOrder) -> Unit,
+    /** 批量停用 / 恢复 / 归档：`(选中 id, kind, 生效日期, 原因)`（docs/medication-status-spec.md §10）。 */
+    onBatchStatusChange: (Set<Long>, String, LocalDate, String?) -> Unit = { _, _, _, _ -> },
+    today: LocalDate = LocalDate.now(),
 ) {
     var archived by rememberSaveable { mutableStateOf(false) }
+    var selectionMode by rememberSaveable { mutableStateOf(false) }
+    val selected = remember { mutableStateListOf<Long>() }
+    var pendingKind by remember { mutableStateOf<String?>(null) }
     val visible = remember(state.medications, archived) { state.medications.filter { it.isArchived == archived } }
+
+    fun toggleSelection(id: Long) {
+        if (id in selected) selected.remove(id) else selected.add(id)
+    }
+
     MedLogScreenScaffold(
         title = { Text(stringResource(R.string.my_medications)) },
         actions = buildList {
@@ -111,6 +126,14 @@ internal fun MyMedicationsContent(
                             onClick = { archived = true },
                             label = { Text(stringResource(R.string.medication_archived)) },
                         )
+                        FilterChip(
+                            selected = selectionMode,
+                            onClick = {
+                                selectionMode = !selectionMode
+                                if (!selectionMode) selected.clear()
+                            },
+                            label = { Text(stringResource(R.string.medication_batch)) },
+                        )
                     }
                     Row(
                         modifier = Modifier
@@ -125,6 +148,17 @@ internal fun MyMedicationsContent(
                                 label = { Text(stringResource(order.labelRes)) },
                             )
                         }
+                    }
+                    if (selectionMode) {
+                        Text(
+                            stringResource(R.string.medication_batch_selected, selected.size),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Text(
+                            stringResource(R.string.medication_batch_select_hint),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -148,43 +182,150 @@ internal fun MyMedicationsContent(
             }
             items(visible, key = { it.id }, contentType = { "medication" }) { med ->
                 Card(
-                    onClick = { onOpen(med.id) },
+                    onClick = { if (selectionMode) toggleSelection(med.id) else onOpen(med.id) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.extraLarge,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                 ) {
-                    Column(
+                    Row(
                         Modifier.padding(MedLogSpacing.Large),
-                        verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Medium),
                     ) {
-                        Text(med.name, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "${med.doseDisplayText()} · ${scheduleLabel(med)}",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        med.stock?.let { stock ->
-                            Text(
-                                stringResource(R.string.medication_stock_value, stock.formatDose(), med.doseUnit),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (stock <= (med.refillThreshold ?: 0.0)) {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
+                        if (selectionMode) {
+                            Checkbox(
+                                checked = med.id in selected,
+                                onCheckedChange = { toggleSelection(med.id) },
                             )
                         }
-                        Text(
-                            stringResource(
-                                if (archived) R.string.medication_archived_hint else R.string.medication_manage_hint,
-                            ),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Column(
+                            Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
+                        ) {
+                            Text(med.name, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "${med.doseDisplayText()} · ${scheduleLabel(med)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            statusBadgeLabel(state.statusKinds[med.id])?.let { badge ->
+                                Text(
+                                    badge,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                )
+                            }
+                            med.stock?.let { stock ->
+                                Text(
+                                    stringResource(R.string.medication_stock_value, stock.formatDose(), med.doseUnit),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (stock <= (med.refillThreshold ?: 0.0)) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                )
+                            }
+                            Text(
+                                stringResource(
+                                    if (archived) {
+                                        R.string.medication_archived_hint
+                                    } else {
+                                        R.string.medication_manage_hint
+                                    },
+                                ),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+            if (selectionMode && selected.isNotEmpty()) {
+                item(key = "batch_actions", contentType = "batch_actions") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
+                    ) {
+                        Button(onClick = { pendingKind = MedicationStatusKind.PAUSE }) {
+                            Text(stringResource(R.string.medication_batch_pause))
+                        }
+                        Button(onClick = { pendingKind = MedicationStatusKind.RESUME }) {
+                            Text(stringResource(R.string.medication_batch_resume))
+                        }
+                        OutlinedButton(onClick = { pendingKind = MedicationStatusKind.DISCONTINUE }) {
+                            Text(stringResource(R.string.medication_batch_discontinue))
+                        }
                     }
                 }
             }
         }
     }
+
+    pendingKind?.let { kind ->
+        BatchStatusDialog(
+            today = today,
+            onConfirm = { date, reason ->
+                onBatchStatusChange(selected.toSet(), kind, date, reason)
+                pendingKind = null
+                selected.clear()
+            },
+            onDismiss = { pendingKind = null },
+        )
+    }
+}
+
+@Composable
+private fun statusBadgeLabel(kind: String?): String? = when (kind) {
+    MedicationStatusKind.PAUSE -> stringResource(R.string.medication_status_paused)
+    MedicationStatusKind.DISCONTINUE -> stringResource(R.string.medication_status_archived)
+    else -> null
+}
+
+@Composable
+private fun BatchStatusDialog(today: LocalDate, onConfirm: (LocalDate, String?) -> Unit, onDismiss: () -> Unit) {
+    var dateText by remember { mutableStateOf(today.toString()) }
+    var reason by remember { mutableStateOf("") }
+    val parsed = EffectiveDateInput.parse(dateText, today)
+    val valid = parsed != null
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.medication_batch)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small)) {
+                OutlinedTextField(
+                    value = dateText,
+                    onValueChange = { dateText = it },
+                    label = { Text(stringResource(R.string.medication_batch_effective_date)) },
+                    isError = !valid,
+                    singleLine = true,
+                )
+                if (!valid) {
+                    Text(
+                        stringResource(R.string.medication_batch_future_date_rejected),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    label = { Text(stringResource(R.string.medication_batch_reason)) },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = valid,
+                onClick = { parsed?.let { onConfirm(it, reason.ifBlank { null }) } },
+            ) {
+                Text(stringResource(R.string.medication_batch_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.medication_batch_cancel)) }
+        },
+    )
 }
 
 @Composable

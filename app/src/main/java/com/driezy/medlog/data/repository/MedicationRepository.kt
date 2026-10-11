@@ -30,6 +30,12 @@ interface MedicationRepository {
     suspend fun deleteMedication(medication: Medication)
     suspend fun archiveMedication(id: Long)
     suspend fun unarchiveMedication(id: Long)
+
+    /**
+     * **直写**派生缓存列 `medications.isArchived`（不改计划链、不新建计划段），
+     * 由状态写入 / 自动核对在同事务内调用（docs/medication-status-spec.md §2.A.3 / §8.1）。
+     */
+    suspend fun setArchivedCache(id: Long, archived: Boolean)
     suspend fun updateStock(id: Long, newStock: Double)
 
     /** Widget / 一次性读取活跃药品列表（非 Flow），用于 Glance Widget 刷新 */

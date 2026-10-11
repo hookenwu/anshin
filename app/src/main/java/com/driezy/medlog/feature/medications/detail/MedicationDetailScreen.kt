@@ -208,6 +208,8 @@ private fun MedicationDetailContent(
                     uiState.partial30d,
                     uiState.total30d,
                     accumulatedUsage = uiState.accumulatedUsage,
+                    pausedExcluded = uiState.pausedExcluded30d,
+                    unknownExcluded = uiState.unknownExcluded30d,
                 )
             }
 

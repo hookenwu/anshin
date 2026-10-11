@@ -36,4 +36,35 @@
     <plurals name="medication_every_hours">
         <item quantity="other">每 %1$d 小时</item>
     </plurals>
+    <string name="medication_status_temporary_pause">临时停用</string>
+    <string name="medication_status_discontinue">归档（停药）</string>
+    <string name="medication_status_resume">恢复服用</string>
+    <string name="medication_status_paused">暂停中</string>
+    <string name="medication_status_archived">已归档</string>
+    <string name="medication_status_paused_since">暂停中·自 %1$s</string>
+    <string name="medication_status_paused_range">暂停·%1$s–%2$s</string>
+    <string name="medication_status_paused_no_missed">暂停（不计漏服）</string>
+    <string name="medication_status_partial_pause">部分暂停（该时点不计漏服）</string>
+    <string name="medication_status_unknown">状态未知（早于本次迁移）</string>
+    <string name="medication_status_archived_since_migration">已归档·自迁移</string>
+    <string name="medication_status_resumed_from">%1$s 起恢复</string>
+    <string name="medication_status_paused_excluded">已扣除暂停 %1$d 剂</string>
+    <string name="medication_status_unknown_excluded">状态未知 %1$d 剂（早于本次迁移，不计入依从率）</string>
+    <string name="medication_status_adjusted">已调整</string>
+    <string name="medication_status_adjusted_explain">因停药生效日更正，本日不再计入应服</string>
+    <string name="medication_batch">批量操作</string>
+    <string name="medication_batch_select_hint">选择要操作的药品</string>
+    <string name="medication_batch_pause">批量停用</string>
+    <string name="medication_batch_resume">批量恢复</string>
+    <string name="medication_batch_discontinue">批量归档</string>
+    <string name="medication_batch_effective_date">生效日期（今天或更早）</string>
+    <string name="medication_batch_reason">原因（可选）</string>
+    <string name="medication_batch_confirm">确认</string>
+    <string name="medication_batch_cancel">取消</string>
+    <string name="medication_batch_future_date_rejected">生效日期不得晚于今天</string>
+    <string name="medication_batch_empty_selection">请先选择药品</string>
+    <string name="medication_batch_done">已应用</string>
+    <string name="medication_batch_selected">已选 %1$d 项</string>
+    <string name="medication_status_user_checked">已核对医嘱（非服药记录）</string>
+    <string name="medication_status_auto_reconciled">系统自检时间</string>
 </resources>

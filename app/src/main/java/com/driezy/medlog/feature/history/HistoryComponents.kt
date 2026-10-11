@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -202,13 +203,31 @@ internal fun DayCell(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = dayNum.toString(),
-            style = MaterialTheme.typography.bodySmall,
-            fontSize = 12.sp,
-            color = textColor,
-            fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = dayNum.toString(),
+                style = MaterialTheme.typography.bodySmall,
+                fontSize = 12.sp,
+                color = textColor,
+                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
+            )
+            // 暂停 / 未知剂量标记（docs/medication-status-spec.md §6.1）：该日存在被排除剂次时，在日号下加一点。
+            val markerColor = when {
+                adherenceDay == null -> null
+                adherenceDay.pausedDoses > 0 -> colorScheme.tertiary
+                adherenceDay.unknownDoses > 0 -> colorScheme.onSurfaceVariant
+                else -> null
+            }
+            if (markerColor != null) {
+                Box(
+                    Modifier
+                        .padding(top = 1.dp)
+                        .size(3.dp)
+                        .clip(CircleShape)
+                        .background(markerColor),
+                )
+            }
+        }
     }
 }
 
@@ -217,15 +236,29 @@ internal fun DayCell(
 @Composable
 internal fun LegendRow(modifier: Modifier = Modifier) {
     val colorScheme = MaterialTheme.colorScheme
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        LegendItem(color = colorScheme.tertiary, label = stringResource(R.string.history_legend_all))
-        LegendItem(color = colorScheme.secondary, label = stringResource(R.string.history_legend_partial))
-        LegendItem(color = colorScheme.error, label = stringResource(R.string.history_missed))
-        LegendItem(color = colorScheme.outline, label = stringResource(R.string.history_pending))
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LegendItem(color = colorScheme.tertiary, label = stringResource(R.string.history_legend_all))
+            LegendItem(color = colorScheme.secondary, label = stringResource(R.string.history_legend_partial))
+            LegendItem(color = colorScheme.error, label = stringResource(R.string.history_missed))
+            LegendItem(color = colorScheme.outline, label = stringResource(R.string.history_pending))
+        }
+        // 暂停 / 未知区间图例（docs/medication-status-spec.md §6.1）：二者视觉与文案都区分。
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LegendItem(
+                color = colorScheme.tertiary,
+                label = stringResource(R.string.medication_status_paused_no_missed),
+            )
+            LegendItem(color = colorScheme.onSurfaceVariant, label = stringResource(R.string.medication_status_unknown))
+        }
     }
 }
 
@@ -297,13 +330,58 @@ internal fun DayDetailSection(
                 }
             }
 
-            if (day == null || day.total == 0) {
+            // 「已调整」标记（docs/medication-status-spec.md §6.1）：本日因倒填更正被改写。
+            if (day?.adjusted == true) {
+                AssistChip(
+                    onClick = {},
+                    label = {
+                        Text(
+                            stringResource(R.string.medication_status_adjusted),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = colorScheme.tertiaryContainer,
+                        labelColor = colorScheme.onTertiaryContainer,
+                    ),
+                    modifier = Modifier.height(24.dp),
+                )
+                Text(
+                    stringResource(R.string.medication_status_adjusted_explain),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // 暂停 / 未知条带（§6.1）：全部剂次暂停 vs 部分暂停；未知与暂停分列，绝不呈现为空白或漏服。
+            if (day != null && day.pausedDoses > 0) {
+                ExclusionBand(
+                    label = stringResource(
+                        if (day.fullyPaused) {
+                            R.string.medication_status_paused_no_missed
+                        } else {
+                            R.string.medication_status_partial_pause
+                        },
+                    ),
+                    color = colorScheme.tertiary,
+                )
+            }
+            if (day != null && day.unknownDoses > 0) {
+                ExclusionBand(
+                    label = stringResource(R.string.medication_status_unknown),
+                    color = colorScheme.onSurfaceVariant,
+                )
+            }
+
+            val hasPlan = day != null && day.total > 0
+            val excludedOnly = day != null && (day.fullyPaused || day.unknownDoses > 0)
+            if (!hasPlan && !excludedOnly) {
                 Text(
                     stringResource(R.string.history_no_plan),
                     style = MaterialTheme.typography.bodySmall,
                     color = colorScheme.onSurfaceVariant,
                 )
-            } else {
+            } else if (hasPlan) {
                 HorizontalDivider(color = colorScheme.outlineVariant)
                 day.logs.forEach { (log, name) ->
                     DayLogRow(
@@ -319,6 +397,24 @@ internal fun DayDetailSection(
                 }
             }
         }
+    }
+}
+
+/** 暂停 / 未知条带的一行（彩色竖条 + 文案）。 */
+@Composable
+private fun ExclusionBand(label: String, color: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(width = 3.dp, height = 16.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(color),
+        )
+        Text(label, style = MaterialTheme.typography.bodySmall, color = color)
     }
 }
 

@@ -44,6 +44,7 @@ class CareEventMigrationTest {
             DatabaseSchema.VERSION,
             true,
             MedLogDatabase.MIGRATION_24_25,
+            MedLogDatabase.MIGRATION_25_26,
         ).use { db ->
             // (a) 既有行零丢失、内容逐项不变
             assertEquals(2, db.count("SELECT COUNT(*) FROM care_recipients"))
@@ -67,7 +68,9 @@ class CareEventMigrationTest {
             assertEquals(1, db.count("SELECT COUNT(*) FROM care_event_logs WHERE kind = 'BOWEL'"))
             assertEquals(1_700_000_000_000L, db.long("SELECT occurredAtMs FROM care_event_logs WHERE id = 1"))
             assertEquals(null, db.textOrNull("SELECT note FROM care_event_logs WHERE kind = 'SOMETHING_ELSE'"))
-            db.execSQL("UPDATE care_event_logs SET occurredAtMs = 1699990000000, updatedAtMs = 1700004000000 WHERE id = 1")
+            db.execSQL(
+                "UPDATE care_event_logs SET occurredAtMs = 1699990000000, updatedAtMs = 1700004000000 WHERE id = 1",
+            )
             assertEquals(1_699_990_000_000L, db.long("SELECT occurredAtMs FROM care_event_logs WHERE id = 1"))
             assertEquals(1_700_004_000_000L, db.long("SELECT updatedAtMs FROM care_event_logs WHERE id = 1"))
 
@@ -104,6 +107,7 @@ class CareEventMigrationTest {
             DatabaseSchema.VERSION,
             true,
             MedLogDatabase.MIGRATION_24_25,
+            MedLogDatabase.MIGRATION_25_26,
         ).use { db ->
             assertEquals(0, db.count("SELECT COUNT(*) FROM care_event_logs"))
             assertTrue("index_care_event_logs_careRecipientId_kind_occurredAtMs" in db.indexNames("care_event_logs"))

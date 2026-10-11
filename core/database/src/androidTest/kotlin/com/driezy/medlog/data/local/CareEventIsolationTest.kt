@@ -33,8 +33,18 @@ class CareEventIsolationTest {
             val dadEvent = database.careEventLogDao().insert(event(dad, 1_700_000_000_000L))
             val momEvent = database.careEventLogDao().insert(event(mom, 1_700_000_500_000L))
 
-            assertEquals(listOf(dadEvent), database.careEventLogDao().getLogsOnce(dad, CareEventKind.BOWEL).map { it.id })
-            assertEquals(listOf(momEvent), database.careEventLogDao().getLogsOnce(mom, CareEventKind.BOWEL).map { it.id })
+            assertEquals(
+                listOf(dadEvent),
+                database.careEventLogDao().getLogsOnce(dad, CareEventKind.BOWEL).map {
+                    it.id
+                },
+            )
+            assertEquals(
+                listOf(momEvent),
+                database.careEventLogDao().getLogsOnce(mom, CareEventKind.BOWEL).map {
+                    it.id
+                },
+            )
         } finally {
             database.close()
         }

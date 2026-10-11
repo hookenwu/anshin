@@ -12,6 +12,7 @@ import com.driezy.medlog.data.repository.CareRecipientRepository
 import com.driezy.medlog.data.repository.CareTaskRepository
 import com.driezy.medlog.data.repository.FakeLogRepository
 import com.driezy.medlog.data.repository.FakeMedicationRepository
+import com.driezy.medlog.data.repository.FakeMedicationStatusRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.domain.model.MedicationId
 import kotlinx.coroutines.flow.flowOf
@@ -59,6 +60,7 @@ class AndroidReminderReconcilerTest {
             alarms,
             notifications,
             widgets,
+            FakeMedicationStatusRepository(),
         )
     }
 

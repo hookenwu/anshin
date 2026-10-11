@@ -10,9 +10,11 @@ import com.driezy.medlog.data.repository.CareRecipientRepository
 import com.driezy.medlog.data.repository.CareTaskRepository
 import com.driezy.medlog.data.repository.LogRepository
 import com.driezy.medlog.data.repository.MedicationRepository
+import com.driezy.medlog.data.repository.MedicationStatusRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.domain.ReminderReconciler
 import com.driezy.medlog.domain.model.MedicationId
+import com.driezy.medlog.feature.medications.application.MedicationStatusDerivation
 import kotlinx.coroutines.flow.first
 import java.time.Instant
 import javax.inject.Inject
@@ -27,6 +29,7 @@ class AndroidReminderReconciler @Inject constructor(
     private val alarmScheduler: AlarmScheduler,
     private val notificationHelper: NotificationHelper,
     private val widgetRefresher: WidgetRefresher,
+    private val statusEvents: MedicationStatusRepository,
 ) : ReminderReconciler {
     override suspend fun reconcileMedication(id: MedicationId, reason: ReminderReconcileReason) {
         val medication = medications.getMedicationById(id.value)
@@ -37,10 +40,22 @@ class AndroidReminderReconciler @Inject constructor(
             alarmScheduler.cancelAlarmsForMissingOwner(ReminderTargetType.MEDICATION, id.value).cancelNotifications()
         }
         notificationHelper.cancelAllReminderNotifications(id.value)
-        if (medication != null && !medication.isArchived && !medication.isPRN) {
+        // A 类排程闸门改**读派生**（§1.3/§2.A）：缓存 `isArchived` 不再单独决定排程。
+        // 兼容 OR：缓存说已归档（遗留 / 写路径未覆盖）**或** 派生说已暂停 ⇒ 不排期；
+        // 这样陈旧缓存（false）与事件（PAUSE）不一致时以派生为准，也不会为已归档药重排。
+        if (medication != null && !pausedNow(medication) && !medication.isPRN) {
             schedule(medication)
         }
         widgetRefresher.refreshAll()
+    }
+
+    /** 派生优先的暂停判定：缓存 `isArchived` **或** 事件派生结果（§5 `deriveCurrentStatus`，不读 `legacyArchived`）。 */
+    private suspend fun pausedNow(medication: com.driezy.medlog.data.model.Medication): Boolean {
+        val derived = MedicationStatusDerivation.deriveCurrentStatus(
+            statusEvents.getEventsOnce(medication.id),
+            System.currentTimeMillis(),
+        )
+        return medication.isArchived || derived
     }
 
     /**
@@ -85,7 +100,7 @@ class AndroidReminderReconciler @Inject constructor(
             // 用"含归档"的整份清单做清理：归档药品的残留通知也要收掉（改造前就是这么做的）
             medications.getAllMedicationsFor(recipientId).forEach { medication ->
                 notificationHelper.cancelAllReminderNotifications(medication.id)
-                if (!medication.isArchived && !medication.isPRN) {
+                if (!pausedNow(medication) && !medication.isPRN) {
                     liveMedications += medication.id
                     schedule(medication)
                 }

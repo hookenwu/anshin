@@ -33,6 +33,10 @@ data class HistoryUiState(
     val taken30d: Int = 0,
     val partial30d: Int = 0,
     val total30d: Int = 0,
+    /** 近30天因暂停而逐剂排除的剂次数（docs/medication-status-spec.md §6.2）。 */
+    val pausedExcluded30d: Int = 0,
+    /** 近30天因「状态未知（早于本次迁移）」而逐剂排除的剂次数（§6.3）。 */
+    val unknownExcluded30d: Int = 0,
     /** 当前连续服药天数（从今天/昨天起，每天 ≥1 次 TAKEN 计入） */
     val currentStreak: Int = 0,
     /** 历史最长连续天数 */
@@ -110,6 +114,8 @@ class HistoryViewModel @Inject constructor(
                             calendarDays = summary.days,
                             overallAdherence = summary.rate30d,
                             taken30d = summary.taken30d, partial30d = summary.partial30d, total30d = summary.total30d,
+                            pausedExcluded30d = summary.pausedExcluded30d,
+                            unknownExcluded30d = summary.unknownExcluded30d,
                             currentStreak = summary.currentStreak,
                             longestStreak = summary.longestStreak,
                             isLoading = false,

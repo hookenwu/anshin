@@ -33,6 +33,7 @@ class ObserveMedicationAdherenceTest {
                 meds,
                 logs,
                 prefs,
+                FakeMedicationStatusRepository(),
                 MedicationAdherenceCalculator(FuturePlanCalculator(clock)),
                 clock,
                 StandardTestDispatcher(testScheduler),

@@ -94,6 +94,8 @@ private fun HistoryContent(uiState: HistoryUiState, onOpenSettings: () -> Unit, 
                     uiState.taken30d,
                     uiState.partial30d,
                     uiState.total30d,
+                    pausedExcluded = uiState.pausedExcluded30d,
+                    unknownExcluded = uiState.unknownExcluded30d,
                 )
             }
 

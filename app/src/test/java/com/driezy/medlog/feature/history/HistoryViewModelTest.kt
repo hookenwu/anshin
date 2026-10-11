@@ -86,6 +86,7 @@ class HistoryViewModelTest {
                     on { settingsFlow } doReturn
                         kotlinx.coroutines.flow.flowOf(com.driezy.medlog.data.repository.SettingsPreferences())
                 },
+                com.driezy.medlog.data.repository.FakeMedicationStatusRepository(),
                 com.driezy.medlog.feature.medications.application.MedicationAdherenceCalculator(
                     FuturePlanCalculator(clock),
                 ),

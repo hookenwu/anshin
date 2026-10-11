@@ -65,6 +65,10 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
     @Inject
     lateinit var prefsRepository: UserPreferencesRepository
 
+    /** 发送前派生校验守卫（更正 N，首期交付，§7 / §14 T10 / §16.20）。 */
+    @Inject
+    lateinit var statusGate: MedicationReminderGate
+
     @Inject
     lateinit var clock: Clock
 
@@ -128,6 +132,8 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
                 if (isEarly) {
                     val earlyMinutes = intent.getIntExtra("early_minutes", 15)
                     goAsyncSafe {
+                        // 发送前派生校验：非 ACTIVE（暂停 / 未知）一律抑制，不弹通知（§7）
+                        if (suppressed(medId)) return@goAsyncSafe
                         val med = medicationRepo.getMedicationById(medId) ?: return@goAsyncSafe
                         notificationHelper.showEarlyReminderNotification(
                             medId,
@@ -145,6 +151,8 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
                     val followUpMaxCount = intent.getIntExtra(EXTRA_FOLLOW_UP_MAX_COUNT, 1)
                     val followUpDelayMs = intent.getLongExtra(EXTRA_FOLLOW_UP_DELAY_MS, 15 * 60_000L)
                     goAsyncSafe {
+                        // 发送前派生校验：非 ACTIVE 一律抑制，且不续排下一次（§7）
+                        if (suppressed(medId)) return@goAsyncSafe
                         val med = medicationRepo.getMedicationById(medId) ?: return@goAsyncSafe
                         // 检查用户是否已在原时间前后窗口内服药或跳过该药
                         val windowMs = 30 * 60_000L
@@ -184,6 +192,8 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
                     return
                 } // 正式服药时间到：显示通知，并调度下一次闹钟
                 goAsyncSafe {
+                    // 发送前派生校验（正式服药提醒）：非 ACTIVE 一律抑制，且不续排 / 不排漏服再提醒（§7）
+                    if (suppressed(medId)) return@goAsyncSafe
                     val med = medicationRepo.getMedicationById(medId) ?: return@goAsyncSafe
                     notificationHelper.showReminderNotification(
                         medId,
@@ -220,6 +230,9 @@ class MedLogAlarmReceiver : BroadcastReceiver() {
             }
         }
     }
+
+    /** 发送前派生校验（§7）：`true` 表示非 ACTIVE ⇒ 抑制该次通知且不续排。 */
+    private suspend fun suppressed(medId: Long): Boolean = statusGate.decide(medId) == ReminderDecision.SUPPRESS
 
     /**
      * 照护事项提醒通路（T3 最小实现）：标题带成员名与事项名，点击打开 App。

@@ -36,4 +36,35 @@
     <plurals name="medication_every_hours">
         <item quantity="other">%1$d時間ごと</item>
     </plurals>
+    <string name="medication_status_temporary_pause">一時停止</string>
+    <string name="medication_status_discontinue">アーカイブ（中止）</string>
+    <string name="medication_status_resume">服用を再開</string>
+    <string name="medication_status_paused">一時停止中</string>
+    <string name="medication_status_archived">アーカイブ済み</string>
+    <string name="medication_status_paused_since">%1$s から一時停止</string>
+    <string name="medication_status_paused_range">一時停止 %1$s–%2$s</string>
+    <string name="medication_status_paused_no_missed">一時停止（飲み忘れに含めない）</string>
+    <string name="medication_status_partial_pause">一部一時停止（その時刻は飲み忘れに含めない）</string>
+    <string name="medication_status_unknown">状態不明（今回の移行より前）</string>
+    <string name="medication_status_archived_since_migration">移行時点からアーカイブ</string>
+    <string name="medication_status_resumed_from">%1$s から再開</string>
+    <string name="medication_status_paused_excluded">一時停止 %1$d 回分を除外</string>
+    <string name="medication_status_unknown_excluded">状態不明 %1$d 回分（移行前、遵守率に含めない）</string>
+    <string name="medication_status_adjusted">調整済み</string>
+    <string name="medication_status_adjusted_explain">中止の効力発生日を修正したため、この日は服薬予定に含めません</string>
+    <string name="medication_batch">一括操作</string>
+    <string name="medication_batch_select_hint">操作する薬を選択</string>
+    <string name="medication_batch_pause">一括一時停止</string>
+    <string name="medication_batch_resume">一括再開</string>
+    <string name="medication_batch_discontinue">一括アーカイブ</string>
+    <string name="medication_batch_effective_date">効力発生日（本日以前）</string>
+    <string name="medication_batch_reason">理由（任意）</string>
+    <string name="medication_batch_confirm">確認</string>
+    <string name="medication_batch_cancel">キャンセル</string>
+    <string name="medication_batch_future_date_rejected">効力発生日は本日以前にしてください</string>
+    <string name="medication_batch_empty_selection">薬を1つ以上選択してください</string>
+    <string name="medication_batch_done">適用しました</string>
+    <string name="medication_batch_selected">%1$d 件選択中</string>
+    <string name="medication_status_user_checked">処方を確認済み（服薬記録ではありません）</string>
+    <string name="medication_status_auto_reconciled">自動チェック時刻</string>
 </resources>

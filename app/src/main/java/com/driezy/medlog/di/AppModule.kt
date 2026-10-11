@@ -26,6 +26,7 @@ import com.driezy.medlog.data.local.HealthRecordDao
 import com.driezy.medlog.data.local.MedLogDatabase
 import com.driezy.medlog.data.local.MedicationDao
 import com.driezy.medlog.data.local.MedicationLogDao
+import com.driezy.medlog.data.local.MedicationStatusEventDao
 import com.driezy.medlog.data.local.RoomTransactionRunner
 import com.driezy.medlog.data.local.SymptomLogDao
 import com.driezy.medlog.data.local.TransactionRunner
@@ -56,6 +57,10 @@ import com.driezy.medlog.data.repository.LogRepository
 import com.driezy.medlog.data.repository.LogRepositoryImpl
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.data.repository.MedicationRepositoryImpl
+import com.driezy.medlog.data.repository.MedicationStatusPreferences
+import com.driezy.medlog.data.repository.MedicationStatusPreferencesImpl
+import com.driezy.medlog.data.repository.MedicationStatusRepository
+import com.driezy.medlog.data.repository.MedicationStatusRepositoryImpl
 import com.driezy.medlog.data.repository.OnboardingPreferences
 import com.driezy.medlog.data.repository.ReminderPreferences
 import com.driezy.medlog.data.repository.SymptomRepository
@@ -116,6 +121,7 @@ object DatabaseModule {
             MedLogDatabase.MIGRATION_22_23,
             MedLogDatabase.MIGRATION_23_24,
             MedLogDatabase.MIGRATION_24_25,
+            MedLogDatabase.MIGRATION_25_26,
         )
         .build()
 
@@ -127,6 +133,9 @@ object DatabaseModule {
 
     @Provides
     fun provideMedicationLogDao(db: MedLogDatabase): MedicationLogDao = db.medicationLogDao()
+
+    @Provides
+    fun provideMedicationStatusEventDao(db: MedLogDatabase): MedicationStatusEventDao = db.medicationStatusEventDao()
 
     @Provides
     fun provideCareTaskDao(db: MedLogDatabase): CareTaskDao = db.careTaskDao()
@@ -226,6 +235,14 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindMedicationRepository(impl: MedicationRepositoryImpl): MedicationRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindMedicationStatusRepository(impl: MedicationStatusRepositoryImpl): MedicationStatusRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindMedicationStatusPreferences(impl: MedicationStatusPreferencesImpl): MedicationStatusPreferences
 
     @Binds
     @Singleton

@@ -85,6 +85,12 @@ class FakeMedicationRepository : MedicationRepository {
         }
     }
 
+    override suspend fun setArchivedCache(id: Long, archived: Boolean) {
+        medicationsState.value = medicationsState.value.map {
+            if (it.id == id) it.copy(isArchived = archived) else it
+        }
+    }
+
     override suspend fun updateStock(id: Long, newStock: Double) {
         medicationsState.value = medicationsState.value.map {
             if (it.id == id) it.copy(stock = newStock) else it

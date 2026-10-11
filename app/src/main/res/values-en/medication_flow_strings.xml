@@ -37,4 +37,35 @@
         <item quantity="one">Every %1$d hour</item>
         <item quantity="other">Every %1$d hours</item>
     </plurals>
+    <string name="medication_status_temporary_pause">Temporarily stop</string>
+    <string name="medication_status_discontinue">Archive (discontinue)</string>
+    <string name="medication_status_resume">Resume</string>
+    <string name="medication_status_paused">Paused</string>
+    <string name="medication_status_archived">Archived</string>
+    <string name="medication_status_paused_since">Paused since %1$s</string>
+    <string name="medication_status_paused_range">Paused %1$s–%2$s</string>
+    <string name="medication_status_paused_no_missed">Paused (not counted as missed)</string>
+    <string name="medication_status_partial_pause">Partly paused (that slot is not counted as missed)</string>
+    <string name="medication_status_unknown">Status unknown (before this migration)</string>
+    <string name="medication_status_archived_since_migration">Archived since migration</string>
+    <string name="medication_status_resumed_from">Resumed from %1$s</string>
+    <string name="medication_status_paused_excluded">%1$d paused dose(s) excluded</string>
+    <string name="medication_status_unknown_excluded">%1$d dose(s) unknown (before migration, excluded from rate)</string>
+    <string name="medication_status_adjusted">Adjusted</string>
+    <string name="medication_status_adjusted_explain">Effective date corrected; this day no longer counts as due</string>
+    <string name="medication_batch">Batch</string>
+    <string name="medication_batch_select_hint">Select medications to change</string>
+    <string name="medication_batch_pause">Stop selected</string>
+    <string name="medication_batch_resume">Resume selected</string>
+    <string name="medication_batch_discontinue">Archive selected</string>
+    <string name="medication_batch_effective_date">Effective date (today or earlier)</string>
+    <string name="medication_batch_reason">Reason (optional)</string>
+    <string name="medication_batch_confirm">Confirm</string>
+    <string name="medication_batch_cancel">Cancel</string>
+    <string name="medication_batch_future_date_rejected">Effective date cannot be later than today</string>
+    <string name="medication_batch_empty_selection">Select at least one medication</string>
+    <string name="medication_batch_done">Applied</string>
+    <string name="medication_batch_selected">%1$d selected</string>
+    <string name="medication_status_user_checked">Prescription checked (not a dose record)</string>
+    <string name="medication_status_auto_reconciled">Last auto check</string>
 </resources>
