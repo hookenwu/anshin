@@ -32,6 +32,13 @@ class FakeMedicationRepository : MedicationRepository {
     val planRevisions = MutableStateFlow<List<MedicationPlanRevision>>(emptyList())
     override fun observePlanRevisions(): Flow<List<MedicationPlanRevision>> = planRevisions
 
+    /** 测试用：整份药品清单的快照 / 回滚（模拟 Room 事务回滚，供事务测试用）。 */
+    fun snapshotAll(): List<Medication> = medicationsState.value
+
+    fun restoreAll(snapshot: List<Medication>) {
+        medicationsState.value = snapshot
+    }
+
     override suspend fun getMedicationById(id: Long): Medication? = medicationsState.value.find { it.id == id }
 
     override suspend fun addMedication(medication: Medication): Long {

@@ -6,7 +6,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import com.driezy.medlog.data.local.settingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,6 +36,9 @@ class MedicationStatusPreferencesImpl @Inject constructor(@param:ApplicationCont
 
     override suspend fun userCheckedDate(recipientId: Long): Long? =
         context.settingsDataStore.data.first()[userCheckedKey(recipientId)]
+
+    override fun userCheckedDateFlow(recipientId: Long): Flow<Long?> =
+        context.settingsDataStore.data.map { it[userCheckedKey(recipientId)] }
 
     override suspend fun setUserCheckedDate(recipientId: Long, epochDay: Long) {
         context.settingsDataStore.edit { it[userCheckedKey(recipientId)] = epochDay }

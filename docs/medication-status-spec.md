@@ -644,7 +644,7 @@ fun liveStatusKind(events, now): Kind? =
 | E7 | **恢复的日期** | 历史从恢复日恢复活跃；提醒从当下向前重排（未来排期可接受） |
 | E8 | **生效日早于该药最后一次计划变更** | **不再依赖 `updatePlan` 的落段守卫**（§2.B）：状态层与计划链正交，倒填不影响计划链，**无空洞/重叠** |
 | E9 | **删除带状态事件的药** | FK **CASCADE**：连同状态事件（含更正链）一起删。要求 5 的「历史不可丢」约束**跨停用**，不跨**删除** |
-| E10 | **批量的原子性** | 一次事务内为 N 个药写事件 + 缓存列；任一失败整体回滚（对齐 `updateMedications` `MedicationRepositoryImpl.kt:83-86`） |
+| E10 | **批量的原子性** | 一次事务内为 N 个药写事件 + 缓存列；**同一批量事务内各药可携带不同 kind（`PAUSE`/`RESUME` 混合，勿误解为同类操作）**；任一失败整体回滚（对齐 `updateMedications` `MedicationRepositoryImpl.kt:83-86`）。**事务外 post-commit 事实（例外，不在该事务边界/回滚内）**：`lastUserCheckedDate` 由核对流程（`docs/medication-daily-reconcile.md`）在**事务提交之后**单独写入（DataStore，与 Room 不同存储，跨存储无回滚）——**不得**读作「该事务一并写入核对日期」 |
 | E11 | **生效日跨时区** | 批量 UI 的「生效日期」按**成员提醒时区**的本地日界换算为 `effectiveAtMs`；D11 的「≤ 今天」也按该时区判定 |
 | E12 | **误记更正** | 追加取代/更正事件 + 重算（§2.C/§9.2）；不改旧行、不删日志 |
 | E13 | **系统自动核对 vs 用户主动核对** | 自动只写缓存 + `lastAutoReconciledAtMs`、**绝不**写 `lastUserCheckedDate`；用户核对**只**写 `lastUserCheckedDate`、不写事件、不算服药（§8、§9.3） |

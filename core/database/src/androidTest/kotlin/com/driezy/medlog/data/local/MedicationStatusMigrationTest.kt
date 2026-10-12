@@ -56,7 +56,10 @@ class MedicationStatusMigrationTest {
 
             // (b) 新表存在
             assertTrue("medication_status_events 表必须存在", db.tableExists("medication_status_events"))
-            assertEquals(2, db.count("SELECT COUNT(*) FROM medication_status_events"))
+            // 种子（见 seedPopulatedV25）只有 **1 味**归档药（id=1，isArchived=1；id=2 活跃），迁移按
+            // 「每个 isArchived=1 恰一条 LEGACY_BASELINE」补种 ⇒ 全表总数 = 1，与下方逐药断言
+            // （id=1 恰 1 条、id=2 恰 0 条）自洽。旧断言写 2 是笔误（与 (c)/(d) 自相矛盾）。
+            assertEquals(1, db.count("SELECT COUNT(*) FROM medication_status_events"))
 
             // (c) 恰一条 LEGACY_BASELINE，生效日显式 NULL（不伪造日期），recordedAtMs 为迁移时刻附近
             val archived = db.count("SELECT COUNT(*) FROM medication_status_events WHERE medicationId = 1")

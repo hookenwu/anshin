@@ -68,6 +68,12 @@ import kotlinx.serialization.Serializable
     @Serializable data class MedDetail(val medicationId: Long) : Route
 
     /**
+     * 今日用药核对（批量确认「仍在服用」）——**子路由**，不是顶层目的地
+     * （docs/medication-daily-reconcile.md §3.1 / D10）。
+     */
+    @Serializable data object MedicationDailyReconcile : Route
+
+    /**
      * @param medicationId  编辑模式下已有记录的 id（-1 代表新增）
      * @param drugName      从药品数据库选中后预填的药品名
      * @param drugCategory  从药品数据库选中后预填的分类

@@ -35,9 +35,11 @@ fun MyMedicationsScreen(
     onOpen: (Long) -> Unit,
     onCatalog: (() -> Unit)?,
     onSettings: () -> Unit,
+    onReconcile: () -> Unit = {},
     viewModel: MyMedicationsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val checkedInToday by viewModel.checkedInToday.collectAsStateWithLifecycle()
     MyMedicationsContent(
         state = state,
         onAdd = onAdd,
@@ -47,6 +49,8 @@ fun MyMedicationsScreen(
         onRetry = viewModel::retry,
         onSortOrderChange = viewModel::onSortOrderChange,
         onBatchStatusChange = { ids, kind, date, reason -> viewModel.applyStatus(ids.toList(), kind, date, reason) },
+        onReconcile = onReconcile,
+        checkedInToday = checkedInToday,
     )
 }
 
@@ -62,6 +66,10 @@ internal fun MyMedicationsContent(
     onSortOrderChange: (MedicationSortOrder) -> Unit,
     /** 批量停用 / 恢复 / 归档：`(选中 id, kind, 生效日期, 原因)`（docs/medication-status-spec.md §10）。 */
     onBatchStatusChange: (Set<Long>, String, LocalDate, String?) -> Unit = { _, _, _, _ -> },
+    /** 入口：导航到「今日用药核对」子路由（docs/medication-daily-reconcile.md T4/T6）。 */
+    onReconcile: () -> Unit = {},
+    /** 「今天尚未核对」提示：读 `lastUserCheckedDate`（T6）。 */
+    checkedInToday: Boolean = true,
     today: LocalDate = LocalDate.now(),
 ) {
     var archived by rememberSaveable { mutableStateOf(false) }
@@ -134,7 +142,23 @@ internal fun MyMedicationsContent(
                             },
                             label = { Text(stringResource(R.string.medication_batch)) },
                         )
+                        FilterChip(
+                            selected = false,
+                            onClick = onReconcile,
+                            label = { Text(stringResource(R.string.medication_reconcile_entry)) },
+                        )
                     }
+                    Text(
+                        stringResource(
+                            if (checkedInToday) {
+                                R.string.medication_reconcile_checked_hint
+                            } else {
+                                R.string.medication_reconcile_pending_hint
+                            },
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Row(
                         modifier = Modifier
                             .horizontalScroll(rememberScrollState())

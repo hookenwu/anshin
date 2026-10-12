@@ -255,6 +255,12 @@ private fun MedLogNavHost(
                 onOpen = { navController.navigate(Route.MedDetail(it)) },
                 onCatalog = if (catalogEnabled) ({ navController.navigate(Route.Drugs) }) else null,
                 onSettings = { navController.navigate(Route.Settings) },
+                onReconcile = { navController.navigate(Route.MedicationDailyReconcile) },
+            )
+        }
+        composable<Route.MedicationDailyReconcile>(enterTransition = { navFadeIn }, exitTransition = { navFadeOut }) {
+            com.driezy.medlog.feature.medications.reconcile.MedicationDailyReconcileScreen(
+                onBack = { navController.popBackStack() },
             )
         }
         composable<Route.Drugs>(

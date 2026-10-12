@@ -29,6 +29,13 @@ class FakeMedicationStatusRepository : MedicationStatusRepository {
 
     override suspend fun getEventsForRecipientOnce(recipientId: Long): List<MedicationStatusEvent> = eventsState.value
 
+    /** 测试用：当前事件集的快照 / 回滚（模拟 Room 事务回滚，供事务测试用）。 */
+    fun snapshot(): List<MedicationStatusEvent> = eventsState.value
+
+    fun restore(snapshot: List<MedicationStatusEvent>) {
+        eventsState.value = snapshot
+    }
+
     override suspend fun insertEvent(event: MedicationStatusEvent): Long {
         val supersedes = event.supersedesId
         if (supersedes != null) {
