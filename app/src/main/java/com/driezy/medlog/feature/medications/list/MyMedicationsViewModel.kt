@@ -76,7 +76,8 @@ class MyMedicationsViewModel @Inject constructor(
                 combine(
                     refresh,
                     statusRepository.observeAllEvents(),
-                ) { _, _ -> recipientId }
+                    statusPreferences.userCheckedDateFlow(recipientId),
+                ) { _, _, _ -> recipientId }
             }
             .map { checkedInNow(it) }
             .catch { emit(false) }
