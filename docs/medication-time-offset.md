@@ -343,13 +343,13 @@ reconcileReminders.all(ROUTINE_CHANGED)            // 提交之后，不在事�
 
 ### 3.6 启动重算：被拒 / 被杀时的持久收敛点
 
-`MedLogApplication.onCreate` 已经无条件入队一次全量 reconcile（`:23-30`，源码注释写明"Application startup is the final recovery net"）；在同一处加一次"用**当前成员的已存作息**跑 `ResyncRemindersUseCase`"。它只读 DataStore + Room，写路径与用户手改作息完全相同（同一个用例、同一个 `changedAt` 取法），因此：
+`MedLogApplication.onCreate` 已经无条件入队一次全量 reconcile（`:23-30`，源码注释写明"Application startup is the final recovery net"）；在同一处**发起**一次"用**当前成员的已存作息**跑 `ResyncRemindersUseCase`"的重算。**只发起、不等待**：跑在 application 作用域协程里，启动路径不得 `runBlocking`、不得 `await`，`onCreate` 不因这次重算而被拖住，也不因它失败而被拖垮（Q3 定稿）。它只读 DataStore + Room，写路径与用户手改作息完全相同（同一个用例、同一个 `changedAt` 取法），因此：
 
 - **幂等**：未变的药在偏移感知的过滤（§5.0.1 的 `storedTimesEqual`）就被跳过 ⇒ 0 次 `updatePlan` ⇒ 0 条修订、边界不动（§8 第 7 条已钉住这条性质）；
 - 它补上"作息已写、resync 被拒/被杀"的窗口（§3.7 W1/W3/W4/W5），**不需要新增任何持久化状态**（没有"dirty 标志"表、没有新迁移）；
 - 只覆盖**当前成员**——与 resync 本身的取数范围一致（`:44-50` 用 `activeRecipient.current()`），不存在"漏了别人的成员"；
 - 与 §3.2 的拒绝规则不冲突：拒绝时它同样会被拒（时钟仍没越过边界），但那是有明确报错的失败，不是静默态；时钟一恢复，下一次启动即收敛。
-- **它必须 catch 两种拒绝**（`PlanBoundaryNotAdvancedException` / `RoutineResyncConflictException`），否则每次启动都会崩在 `onCreate`。这是 §9① "禁止在 resync 外层 `runCatching`" 的**唯一**例外，成立的前提正是：这里没有用户在等一个结果，而失败**可见**——§5.6 的派生横幅不依赖这次重算是否跑过。日志要带上冲突清单（药名/时段/偏移/结果钟点），便于事后定位。
+- **它必须在这条协程内 catch 两种拒绝**（`PlanBoundaryNotAdvancedException` / `RoutineResyncConflictException`），并用自己的 handler 记日志：拒绝是这次后台重算的**正常失败**，既不能让异常逃出协程，也不是 `onCreate` 要等、要处理的结果（`onCreate` 早在协程跑完前就已返回）。**整批原子性一字未改**：这里的 catch 只吞掉"这次重算没成"，不吞事务——抛 `RoutineResyncConflictException` 之前整批已回滚（§3.5），零部分写入，且失败**可观测**（日志带冲突清单）**可重试**（每次启动重跑、下一次 resync 重跑）。这是 §9① "禁止在 resync 外层 `runCatching`" 的**唯一**例外，成立的前提正是：这里没有用户在等一个结果，而失败**可见**——§5.6 的派生横幅不依赖这次重算是否跑过。日志要带上冲突清单（药名/时段/偏移/结果钟点），便于事后定位。
 
 ### 3.7 作息变更：先**阻断**、再写、最后重算（跨存储顺序与失败窗口）
 
@@ -810,7 +810,7 @@ fun Medication.materializedFor(
 - 四语言 = `values/`(zh 默认)、`values-en/`、`values-ja/`、`values-ko/` **同时**落地；缺一即视为未完成。
 - 免责声明**常驻**步进器正下方（不是 tooltip、不是首次引导），并在详情页的计算时间旁复述一次短句。
 - 禁用档位的说明必须**渲染在屏幕上**（不是 tooltip、不是点击后 toast）：用户要能看见"为什么不给选"。
-- 本轮新增 8 个 key（`routine_resync_conflict_*`、`time_offset_conflict_banner`、`resume_illegal_offset_body`、`import_retimed_*`、`import_rejected_offset`），四语言同样缺一即未完成。两组冲突文案**不得混用**：`routine_conflict_*` 说的是"**没写**"（§3.7 写前阻断），`routine_resync_conflict_*` 说的是"**写了作息、没写钟点**"（W4）——混用会直接骗人。
+- 本轮新增 9 个 key（`routine_resync_conflict_*`、`routine_conflict_reset_offset`、`time_offset_conflict_banner`、`resume_illegal_offset_body`、`import_retimed_*`、`import_rejected_offset`，以及保存期被数据层拒绝的专属文案 `editor_save_offset_rejected_*`——Q5 定稿：不复用 `medication_save_failed`），四语言同样缺一即未完成。两组冲突文案**不得混用**：`routine_conflict_*` 说的是"**没写**"（§3.7 写前阻断），`routine_resync_conflict_*` 说的是"**写了作息、没写钟点**"（W4）——混用会直接骗人。
 - `resume_illegal_offset_body` **复用** `unarchive_illegal_offset_title` 作标题（"无法恢复：提醒时间会跨过零点"——取消归档与恢复在 zh 里都是"恢复"，标题无需二分）；动作只用 `routine_conflict_cancel` / `routine_conflict_open_medication`，不新增 key。
 - `import_retimed_*` 只陈述"换算"，不得暗示"可以按你的作息改服药时间"（与 `time_offset_disclaimer` 同一条底线）。
 
@@ -945,3 +945,21 @@ fun Medication.materializedFor(
 4. **与 Phase 1 实现的一致性（据实核对）**：`core/model/.../TimeOffset.kt` 已按「回绕先于跨零点」求值（`WRAPPED_ANCHOR` 分支在 `CROSS_MIDNIGHT` 分支之前），其 E10 ⑤ 测试也已用 `bed = 23:50 ⇒ BEDTIME 1430, +15 = 1445`。因此本节是把**文本**校正到已实现且已测的语义，**不触发任何代码或测试改动**。
 
 审核日期：2026-10-28。触发来源：Phase 1 验收时对 §2.2 / §2.3 / E10 的交叉核对；三处同属**同一谓词集合的表述不一致**，不是设计分歧，故按勘误处理而非改稿。
+
+## M3 勘误（仅这两处）
+
+状态：**勘误，非第 5 稿**。冻结基线仍是 `2932aa3`（第 4 轮稿），`4170382` 的冻结提交与 M2 勘误节**逐字保留**；§9 一致性检查、§10 风险清单与「本轮提交范围与回写状态」等全部审计记录**一字未改**。本节只登记 Phase 2 八项决策定稿（`docs/offset-phase2-plan.md` §11.1）核对出的**两处文本冲突**，两处都只是让正文与**已批准的决策**一致：**功能规则未变**，**E 段测试的意图未变**。
+
+| # | 位置 | 冲突 | 修正 | 规则是否变 |
+|---|---|---|---|---|
+| ① | §3.6 启动重算（首段 + 最后一条） | 首段「在同一处**加**一次…跑 `ResyncRemindersUseCase`」与末条「它必须 catch 两种拒绝，否则每次启动都会**崩在 `onCreate`**」都暗示这次重算跑在 `onCreate` 的调用点上、其结果会被启动路径等待；若照字面实现（`runBlocking` / `await`）就与 Q3 定稿「启动重算**不得阻塞启动**」直接冲突 | 首段改为「在同一处**发起**一次…**只发起、不等待**：application 作用域协程，不得 `runBlocking`、不得 `await`」；末条改为「在**这条协程内** catch 两种拒绝并用自己的 handler 记日志」，删除「否则每次启动都会崩在 `onCreate`」这一**等待语义**的推论。**原子性保持冻结原样**：抛出前整批已回滚、零部分写入，失败可观测（日志带冲突清单）、可重试（每次启动 / 下一次 resync） | 否（只把「谁等结果、谁 catch」写对；§3.5 的整批回滚、`RoutineResyncConflictException` 的「收集后抛出」、§9① 的「§3.6 是唯一允许 catch 处」全部不动） |
+| ② | §7 文案表末条 | 「本轮新增 **8** 个 key」与 Q5 定稿冲突：Q5 要求保存期被数据层拒绝（`IllegalTimeOffsetException`，只可能来自 W4′ 的过期草稿）用**专用**文案、不复用 `medication_save_failed`，即本轮实际是 **9** 个 key；旧清单还漏列了同轮新增的 `routine_conflict_reset_offset` | 计数改为 **9**，并在清单里补齐 `routine_conflict_reset_offset` 与第 9 个 key 的名字 `editor_save_offset_rejected_*`（四语言；具体译文由 B11 落地，本勘误只钉计数与 key 名） | 否（Q5 是已批准的文案决策；本节只让计数与清单不再与它矛盾） |
+
+**不变项（显式声明）**
+
+1. **功能规则不变**：`validateTimeOffset` 的谓词集合与求值次序、`Reason` 枚举、`resolveUnwrapped` 的整数公式、「0 偏移祖父条款」、多时段取交集、`requireAllowed` 的抛错与「不钳位」、§3.5 的「拒绝是整批不落而不是跳过这一味」、§3.2 的计划修订边界规则、`reconcile` 在提交之后——全部与 `2932aa3` / M2 状态相同。
+2. **测试意图不变**：E1–E14 与 §8 第 1–29 条、§8.1 I1–I9 的判定对象与期望值不变；本节没有新增、删除或放宽任何断言。①只是说明启动重算跑在自有协程里（失败不外抛、不阻塞），其**事务**行为仍由 §3.5 / §8.1 I3 钉住。
+3. **冻结基线与历史不变**：`2932aa3` 仍是第 4 轮冻结基线，`4170382` 与 M2 勘误提交（`9000cfb`）均保留；本次以**追加一节 + 独立 M3 勘误提交**落盘，未 amend、未 rebase、未改写任何既有提交。
+4. **适用范围**：本节只有文本改动，不触发任何代码或测试改动；Phase 2 的 B2（resync 走单一物化点）与 B3（启动重算的发起方式）按定稿实现，实现不得超出本节与 §11.1 已批准的语义。
+
+审核日期：2026-10-29。触发来源：Phase 2 八项决策定稿（Q3 / Q5）对 §3.6 与 §7 的只读核对（`docs/offset-phase2-plan.md` §11.2 两行「需一句勘误」/「文本冲突」）；两处同属**正文与已批准决策不一致**，不是设计分歧，故按勘误处理而非改稿。
