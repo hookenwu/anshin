@@ -55,13 +55,42 @@ fun TimePeriod.toAnchorOrNull(): RoutineAnchor? = if (this == TimePeriod.EXACT) 
  *
  * 幂等：同一 `(作息, 时段, 偏移)` 连算两次结果逐字相同；非法偏移抛
  * `IllegalTimeOffsetException`（绝不钳位）。
+ *
+ * @param offsetOverride 仅「将偏移归零并继续 / 并恢复」这两个用户显式动作使用；其余写入口传 `null`
+ *   （= 库里已校验的值）。生效值会写回 `offsetMinutes`，否则下一次重算又按旧偏移冲突。
+ *
+ * **它本身不是写入口的闸门**：函数开头的两处早退发生在 `requireAllowed` **之前**，所以 PRN / 间隔给药 /
+ * 精确时间行上的非 0 偏移会原样穿过去。写入口必须调 [gatedFor]。
  */
-fun Medication.materializedFor(schedule: RoutineSchedule): Medication {
+fun Medication.materializedFor(schedule: RoutineSchedule, offsetOverride: Int? = null): Medication {
     if (isPRN || intervalHours > 0) return this
     val anchors = TimePeriods.parse(timePeriod).mapNotNull { period -> period.toAnchorOrNull() }
     if (anchors.isEmpty()) return this
-    val offset = requireAllowed(validateTimeOffset(offsetMinutes, schedule, anchors, applicable = true))
+    val offset = requireAllowed(
+        validateTimeOffset(offsetOverride ?: offsetMinutes, schedule, anchors, applicable = true),
+    )
     return withResolvedRoutineTimes(anchors.map { anchor -> schedule.resolveWithOffset(anchor, offset) })
+        .copy(offsetMinutes = offset)
+}
+
+/**
+ * 写入口的**统一闸门**（PLAN §4.2 / INV-4）：把「适格性判定」与「合法性判定」合成一次调用，
+ * 适格行再委托 [materializedFor] 物化，两者刻意放在同一文件里成对存在。
+ *
+ * 为什么不能只调 [materializedFor]：它在 `isPRN || intervalHours > 0` 与 `anchors.isEmpty()` 两处
+ * **先早退、后校验**，所以非适格行上的 `offsetMinutes = 15` 会一字不改地落库。这里的
+ * `validateTimeOffset(..., applicable = false)`（非适格行）是**唯一**会拒掉它的地方，而且发生在任何写入之前
+ * （抛 [IllegalTimeOffsetException]，不钳位、不归零，事务整体回滚）。
+ *
+ * 本批不接任何业务入口：编辑器、resync、取消归档、恢复、导入各自在自己的批次里改调它。
+ */
+fun Medication.gatedFor(schedule: RoutineSchedule, offsetOverride: Int? = null): Medication {
+    val anchors = TimePeriods.parse(timePeriod).mapNotNull { period -> period.toAnchorOrNull() }
+    val applicable = !isPRN && intervalHours <= 0 && anchors.isNotEmpty()
+    val offset = offsetOverride ?: offsetMinutes
+    requireAllowed(validateTimeOffset(offset, schedule, anchors, applicable))
+    // 非适格行不物化，但「归零」这类覆盖仍要落到行上，否则库里会留下永久非 0 的非法值。
+    return if (applicable) materializedFor(schedule, offsetOverride) else copy(offsetMinutes = offset)
 }
 
 /** Converts a typed routine result back to the legacy Room columns in one persistence adapter. */
