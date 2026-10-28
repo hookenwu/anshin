@@ -1,6 +1,6 @@
 # 单药提醒时间偏移（per-medication time offset）— SDD 规格
 
-状态：待实施（docs-only；本文件不含实现。第 3 轮外部评审收尾三项：**W4 并发窗口**改为「在 resync 事务内、逐药物化时判定 + 具名冲突 + 整批回滚」（§3.5、§3.7）、**二维码导入**改为「偏移是真相、钟点按接收方作息重算、非法即整包拒绝」（§5.5）、**恢复（resume）**纳入范围并与取消归档共用同一物化点（§3.9）。同时删掉两处已被推翻的旧结论——「导入原样写钟点」「恢复不在范围内」——并同步 §6/§8/§9/§10）。
+状态：**已完成实施前对齐，等待冻结确认**（docs-only；本文件不含实现。第 4 轮只做两件收尾：把 `docs/medication-status-spec.md` 的**唯一授权修订 M1**（恢复改了钟点 ⇒ 恰 1 条计划修订、纯状态翻转 ⇒ 0 条）同步过来，并把**R-7b**（自动核对把缓存纠正为「在服」后不 reconcile）按真实代码审出最小触发 —— 新增 §3.11 / E14 / §8 第 26–29 条，风险表关闭 R-7b。第 3 轮的三项收尾**保留**：W4 并发窗口（§3.5、§3.7）、二维码导入按接收方作息重算（§5.5）、恢复纳入范围并与取消归档共用同一物化点（§3.9）。）
 范围：为**每一味药**单独设置一个相对成员作息（起床/三餐/就寝）的时间偏移，范围 **-60 … +60 分钟、步长 15、默认 0**；作息被修改时自动重算；**导入**按接收方作息重算；**取消归档与恢复**按当前作息重算；提醒、今日计划、今日用药核对、排程、统计保持一致；老数据在 0 偏移下完全等价；迁移 **v26 → v27**（纯新增一列）。
 不改动：处方剂量与剂次口径、依从率定义、库存扣减、状态事件**本身**（暂停/恢复仍只 append 事件、append-only、不删不改）、照护事项、`medication_logs`。
 关联：`docs/medication-daily-flow.md`（今日计划/打卡）、`docs/medication-daily-reconcile.md`（今日用药核对 = 药品级确认，非剂次级）、`docs/medication-status-spec.md`（暂停/恢复 + dose 级谓词）。
@@ -27,6 +27,7 @@
 | R14 | 二维码导入：**偏移是真相**，钟点按**接收方**作息重算；重算非法 ⇒ **整包拒绝**；载荷钟点与本地重算不一致 ⇒ **具名提示差异**，绝不把不一致的数据当成合法计划写入 | §5.5、E12 |
 | R15 | **恢复（resume）按最新作息重算**，走与取消归档**同一个**物化点；钟点确实变化时恰 1 条修订、未变则 0 条；状态事件与依从语义不变；重算非法 ⇒ 拒绝恢复、保持暂停、偏移不归零 | §3.9、E13 |
 | R16 | 所有写入口（编辑器 / resync / 取消归档 / 恢复 / 导入 / 迁移）都落到**唯一物化点** `materializedFor`，不得有第二条时间算术 | §5.0、§5.0.1 |
+| R17 | **自动核对把缓存纠正为「在服」后必须立即 reconcile 该药**（R-7b）：写入之后、逐药、不新增调度器 / 不轮询 / 不依赖重启或开机；幂等、无重复排期 | §3.11、E14、§8 第 26–29 条 |
 
 ## 1. 现状事实（代码核查，file:line）
 
@@ -112,9 +113,9 @@
 | `unarchiveMedication` = `setArchived(id, false)`：`getMedicationById` → `updatePlan(it.copy(isArchived = false), clock.millis())`，**一个事务、不重算 `reminderTimes`** | `MedicationRepositoryImpl.kt:98,110-115` |
 | `isArchived` **在**修订快照里 ⇒ 归档与取消归档各产生 1 条修订（既有断言 `listOf(false, false, true)`） | `MedicationPlanRevision.kt:37,57`；`MedicationDaoTransactionTest.kt:67-72` |
 | resync 的取数是 `WHERE isArchived = 0` ⇒ **归档期间改作息，该药的时间不会被重算**；取消归档后仍是归档前的钟点 | `MedicationDao.kt:106-110`；`ResyncRemindersUseCase.kt:44-50` |
-| 暂停/恢复走**另一条**路：`setArchivedCache` 直写 `UPDATE medications SET isArchived`，**不建修订**（§3.1 的 0 条规则），三个调用方 | `MedicationRepositoryImpl.kt:100-108`；`SetMedicationStatusUseCase.kt:197`、`ReconcileMedicationStatusUseCase.kt:41`、`CorrectMedicationStatusEventUseCase.kt:86` |
+| 暂停/恢复走**另一条**路：`setArchivedCache` 直写 `UPDATE medications SET isArchived`，**不建修订**（HEAD 现状；§3.9 之后**恢复**在钟点确实变化时改为 1 条，暂停仍 0 条），三个调用方 | `MedicationRepositoryImpl.kt:100-108`；`SetMedicationStatusUseCase.kt:197`、`ReconcileMedicationStatusUseCase.kt:41`、`CorrectMedicationStatusEventUseCase.kt:86` |
 | `setArchivedCache` 是缓存列 `isArchived` **唯一**的翻转点；`archived = false` 方向就是"回到在服"（= 恢复）。三个调用方的**事务语境不同**：状态写入与事件更正**在事务内**（紧随事件插入），自动核对**不在事务内** | `SetMedicationStatusUseCase.kt:161-200`；`CorrectMedicationStatusEventUseCase.kt:75-91`；`ReconcileMedicationStatusUseCase.kt:38-51` |
-| 恢复后**不一定重排**：状态写入与事件更正都在提交后逐药 reconcile；自动核对只在 `derived == true`（暂停）方向 reconcile ⇒ 它把缓存纠正为 false 时不重排，闹钟要等下一次全量 reconcile | `SetMedicationStatusUseCase.kt:212-217`；`CorrectMedicationStatusEventUseCase.kt:92`；`ReconcileMedicationStatusUseCase.kt:40-50` |
+| 恢复后**不一定重排**：状态写入与事件更正都在提交后逐药 reconcile；自动核对只在 `derived == true`（暂停）方向 reconcile ⇒ 它把缓存纠正为 false 时不重排，闹钟要等下一次全量 reconcile（**R-7b**；本轮关闭，见 §3.11） | `SetMedicationStatusUseCase.kt:212-217`；`CorrectMedicationStatusEventUseCase.kt:92`；`ReconcileMedicationStatusUseCase.kt:40-50` |
 | reconcile 的排程闸门读派生 `pausedNow`（`isArchived` **或** 派生暂停），所以取消归档后必须重排，否则不会自己恢复 | `AndroidReminderReconciler.kt:43-59,103-106` |
 
 ## 2. 数据模型与校验
@@ -459,9 +460,12 @@ override suspend fun unarchiveMedication(id: Long) = transactions.withTransactio
 - **重算被判非法时**（`CROSS_MIDNIGHT` / `WRAPPED_ANCHOR`）：**拒绝取消归档**，行保持 `isArchived = true`（无半状态），对话框两个动作：「取消」/「将偏移归零并恢复」。归零必须**显式同意**（0 恒合法），是唯一既能让该药恢复、又不写入不可物化状态的做法；它会写一次 `updatePlan` ⇒ 1 条修订。**不**选"恢复但用旧钟点"：那会存下一对无法物化的 `(作息, 偏移)`，违反 §3.7 的全局不变量。
 - 该分支实际极少触发：§3.7 的冲突扫描**含归档药**，所以"归档期间把它的偏移弄非法"在写作息时就被拦下；这里只是防御并发窗口（W4）与本特性上线前的历史数据。
 - **闹钟**：调用点已 `reconcileReminders.medication(MEDICATION_CHANGED)`（`FocusedSettingsViewModels.kt:210-216`），从 DB 现状重排 ⇒ 新钟点自动生效，**reconcile 零改动**；而 `pausedNow` 读的是 `isArchived` 缓存（`AndroidReminderReconciler.kt:46-59`），恢复后才会真的排期。
-- **恢复（resume）本轮纳入范围**，且与取消归档共用上面这一个 `materializedFor`：它不再"只翻缓存列"。见 §3.9——那里同时说明为什么"钟点没变时仍保持 0 修订"，以免与 `docs/medication-status-spec.md` 的"状态写入 0 修订"正面冲突。
+- **恢复（resume）本轮纳入范围**，且与取消归档共用上面这一个 `materializedFor`：它不再"只翻缓存列"。见 §3.9——那里同时说明为什么"钟点没变时仍保持 0 修订"；status-spec 第 7 稿的 **M1**（其 §0.5）已把同一句话写进那份文件，两处不再有偏离（§9 ⑥）。
 
 ### 3.9 恢复（resume）：与取消归档**同一个**物化点（本轮纳入范围，取代 R-7 的"不修"）
+
+> **规则（与 `docs/medication-status-spec.md` §0.5 的 M1 是同一句话，逐字相同）**：**恢复（resume）若确实改变了提醒时间 ⇒ 恰写 1 条 `MedicationPlanRevision`；纯状态变更（钟点未变）⇒ 写 0 条。**
+> 边界同时相同：**非法重算 ⇒ 拒绝恢复**（事务回滚、保持暂停、偏移不归零）；**状态事件与依从语义不变**。
 
 **逐环 audit（这条链以前被整段排除在范围外，所以要逐环摆事实）**：
 
@@ -493,15 +497,87 @@ override suspend fun setArchivedCache(id: Long, archived: Boolean) {
 - **依从语义不变**：`doseActiveAt`、`FuturePlanCalculator`、`MedicationAdherence` **零改动**；期望剂次仍由共享的 dose 级谓词决定。唯一效果是"计划段在 `changedAt` 处切一刀"，与任何单药改时间（§5.4 变更日）**逐字同构**：`changedAt` 之前的历史段照旧（过去日期的应服集合逐条不变），之后按新钟点；变更日可能多出一条待服——那是 §5.4 的同一条规则，不是新语义（E13 用"过去 90 天逐条相等 + 变更日等于同参数编辑器改时间"两个断言钉住）。
 - **重算非法时（`CROSS_MIDNIGHT` / `WRAPPED_ANCHOR`）**：`materializedFor` 抛 `IllegalTimeOffsetException`，`setArchivedCache` 包成具名的 `ResumeBlockedByOffsetException(medicationId, check)`。因为它跑在状态事务内 ⇒ **事件不落、缓存不翻、计划不写** ⇒ 该药**仍然暂停**（等价于"零写入"），偏移**不归零、不钳位**（归零等于替用户改一处计划字段、还伪造一条没人做过的改动）。UI 弹 `resume_illegal_offset_*`（§7），动作只有「取消」/「打开该药」：偏移是**计划**字段，必须走编辑器（§5.1 的预览 + 校验 + 一条 `updatePlan`），不在状态对话框里做二次写入。用户改好偏移后再点一次恢复即可（那时钟点通常已一致 ⇒ 0 条额外修订）。
 - **自动核对那一支（`ReconcileMedicationStatusUseCase`，事务外）**：它是自愈路径、没有 UI 上下文。`setArchivedCache(false)` 抛 `ResumeBlockedByOffsetException` 时**记日志并跳过该药**（缓存保持 `true` ⇒ `pausedNow` 仍判暂停 ⇒ **不会**按算不出的钟点排期），继续处理后面的药；该药由横幅（§5.6）与编辑器暴露。这里接受一个**有界**偏离：`isArchived != deriveCurrentStatus` 会短暂成立，方向是"少排期"而不是"错排期"（status-spec §2.A 的不变量以"下一次算得出时收敛"为界，与"自动核对本身可能失败"同性质）。
-- **恢复后是否重排**：用户路径**不需要改**——`SetMedicationStatusUseCase.kt:213-217` 对每个 `EventRecorded` 在提交后 reconcile，读的是 DB 现状 ⇒ 新钟点立即生效；`pausedNow`（`AndroidReminderReconciler.kt:46-52`）也已随缓存翻转为 false。自动核对的 false 方向**不** reconcile（既有缺口 R-7b，由启动全量 reconcile 兜住），本轮不扩面。
+- **恢复后是否重排**：用户路径**不需要改**——`SetMedicationStatusUseCase.kt:213-217` 对每个 `EventRecorded` 在提交后 reconcile，读的是 DB 现状 ⇒ 新钟点立即生效；`pausedNow`（`AndroidReminderReconciler.kt:46-52`）也已随缓存翻转为 false。**自动核对**的 false 方向原先**不** reconcile（既有缺口 R-7b）——本轮按 §3.11 补上：写入之后立即 reconcile **该药**（与交互路径同一处调用、同一个 reason），不再依赖启动 / 开机全量。
 - **谁写、谁判（本节的覆盖矩阵）**：恢复走 `setArchivedCache(false)` ⇒ `materializedFor` ⇒ `updatePlan`，与取消归档、导入、编辑器、resync **同一个**判定函数；本特性不得出现第二处 `+ offsetMinutes`。
 
 ### 3.10 明确**不改**的东西
 
-- requestCode 方案（`id*100+slot` / `+50_000` / `+100_000`）与 `FLAG_UPDATE_CURRENT` 覆盖语义。
-- reconcile 触发点与 reason 取值（`ROUTINE_CHANGED` / `MEDICATION_CHANGED` / `SYSTEM_EVENT`），启动与开机兜底。
-- 暂停/恢复的**状态语义**：事件表 append-only、按 `scheduledAt` 的 `doseActiveAt` 判定、日期级生效边界、reconcile 前的 `pausedNow` 守卫（`AndroidReminderReconciler.kt:46-52`、`:103-106`）。**恢复的钟点重算**本轮纳入（§3.9）——它只写 `medications` 的钟点与缓存列，不碰事件、不改谓词；自动核对 false 方向未 reconcile 的缺口仍留给启动兜底（R-7b）。
+- requestCode 方案（`id*100+slot` / `+50_000` / `+100_000`）与 `FLAG_UPDATE_CURRENT` 覆盖语义（§3.11 的幂等证明**依赖**它，故更不该改）。
+- reconcile 触发点与 reason 取值（`ROUTINE_CHANGED` / `MEDICATION_CHANGED` / `SYSTEM_EVENT`），启动与开机兜底。**唯一新增**：自动核对在**恢复方向**上写入之后逐药触发一次（§3.11）——同一个 `ReconcileRemindersUseCase.medication`、同一个 `MEDICATION_CHANGED`，不新增队列与调度器。
+- 暂停/恢复的**状态语义**：事件表 append-only、按 `scheduledAt` 的 `doseActiveAt` 判定、日期级生效边界、reconcile 前的 `pausedNow` 守卫（`AndroidReminderReconciler.kt:46-52`、`:103-106`）。**恢复的钟点重算**本轮纳入（§3.9）——它只写 `medications` 的钟点与缓存列，不碰事件、不改谓词；自动核对 false 方向原先未 reconcile 的缺口（R-7b）由 §3.11 关闭，本节与上面的谓词**一条不改**。
 - `handled` 槽集合的语义（全部日志、按精确时刻抑制），只在 `lastTaken` 上用 `planEffectiveFromMs` 裁剪。
+
+### 3.11 自动核对的反向（恢复）方向：写入后**立即** reconcile 该药（R-7b 关闭）
+
+**逐环 audit（真实 file:line，不是推测）**：
+
+| 环 | 事实 | 位置 |
+|---|---|---|
+| 自动核对用例 | 逐药 `derived = deriveCurrentStatus(events, now)`；`derived != cache` ⇒ 写缓存列；**只有 `derived == true` 才 reconcile**（这就是缺口）；收尾写 `lastAutoReconciledAtMs` | `ReconcileMedicationStatusUseCase.kt:32-53`（判据 `:39-40`、写 `:41`、**方向闸门 `:42`**、reconcile `:43-49`、收尾 `:52`） |
+| 事务语境 | 整段**没有** `withTransaction`：写缓存列是单次写（`true` = 一行 SQL；`false` 在 §3.9 之后可能是**一次 `updatePlan` 事务**）。故这里的「post-commit」= **写入调用返回且成功**，没有可回滚的第二半 | `ReconcileMedicationStatusUseCase.kt:38-51`；`MedicationRepositoryImpl.kt:100-108` |
+| 恢复/改钟点的写点 | `setArchivedCache(id, false)` ⇒ `materializedFor` ⇒ 钟点变了 **1 次 `updatePlan`（1 条修订）** / 没变 **一行 SQL（0 条）** | §3.9；`MedicationRepositoryImpl.kt:100-108` |
+| 交互路径的对照（要照抄的那一行） | 每个 `EventRecorded` 在**提交后**逐药 reconcile，读 DB 现状 | `SetMedicationStatusUseCase.kt:212-217` |
+| reconcile 入口 | 先立即 `reconcileMedication`，**再无条件** `retryQueue.enqueue(reason)` | `ReminderReconciliation.kt:14-21` |
+| 队列 | `enqueueUniqueWork(UNIQUE_WORK_NAME, REPLACE)`；Worker = `reconcileAll` + 失败 `Result.retry()` | `ReminderReconciliationWorker.kt:26-34,46-55` |
+| 排程器 | 先 `cancelAllAlarms` + `cancelAllReminderNotifications`，再过 `pausedNow` 闸门排期 | `AndroidReminderReconciler.kt:34-49`；`AlarmScheduler.kt:237-254` |
+
+**为什么必须修（不是"等启动也行"）**：§3.9 之后 `setArchivedCache(false)` **会改钟点**。自动核对把缓存翻回「在服」时，DB 里的钟点是**新**的，系统中武装的闹钟仍是暂停前的**旧**钟点 ⇒ 在这段窗口里提醒会在**旧时刻**响，而今日计划说**新时刻**。这不是「少排一条」，是**排错时刻**——比修复前更糟（修复前自动核对不改钟点，不会出现这个方向的分歧）。
+
+**最小触发（去掉一个方向闸门 + 一行调用，其余一字不改）**：
+
+```kotlin
+// ReconcileMedicationStatusUseCase.reconcile() 的逐药循环内
+if (derived != medication.isArchived) {
+    val cacheWrite = runCatching { medications.setArchivedCache(medication.id, derived) }
+    if (cacheWrite.isSuccess) {
+        // 与交互路径同一处调用、同一个 reason：两个方向都重排
+        runCatching {
+            reconcileReminders.medication(MedicationId(medication.id), MEDICATION_CHANGED)
+        }.onFailure { Log.w(TAG, "自动核对后重排失败（状态已写，等队列/启动兜底）", it) }
+    } else {
+        Log.w(TAG, "缓存纠正被拒（偏移非法），跳过该药的重排", cacheWrite.exceptionOrNull())
+    }
+}
+```
+
+即：删掉 `ReconcileMedicationStatusUseCase.kt:42` 的 `if (derived)` 守卫（原 `:43-49` 的 `runCatching` 保留其语义：**逐药失败隔离**）。
+
+**为什么是「该药、写入之后」，而不是别的排法**：
+
+1. **不新增调度器 / 闹钟 / 轮询**：用的是既有 `ReconcileRemindersUseCase`（本身就是「立即 + 持久重试」的唯一入口）；没有新的唯一作业、没有新的 `AlarmManager` 用法、没有周期任务。
+2. **不依赖重启 / 开机**：原来这一条只能等 `MedLogApplication.kt:28` 或 `MedLogBootReceiver.kt:34` 的全量 reconcile 才排上。
+3. **只对「这次真的翻转了」的药**：`derived != cache` 才进来 ⇒ 不碰其它药。明确**不做**「每次自动核对把所有在服药的闹钟重建一遍」——那会每 15 分钟取消并重排所有精确闹钟，纯 churn，且毫无必要。
+4. **与交互路径同构、且必须按 id 重读**：reconciler 在 `:35` 重新 `getMedicationById` ⇒ 拿到**刚写入的**新钟点与 `isArchived=false`；`pausedNow` 在 `:54-57` 重新读事件，`RESUME` 已在表内 ⇒ 闸门放行。**不能**把循环里那份旧 `medication` 快照直接喂给 `alarmScheduler.scheduleAllReminders(...)`——那会按暂停前的钟点排期。这是"必须走 `reconcileReminders.medication(id, …)`"的硬理由。
+5. **它不是第七个写点**：自动核对只是 §3.9 那个「恢复」写点（`setArchivedCache(false)`）的**第三个调用方** ⇒ §2.1 的「写点恰有六个」与 §5.0.1 的调用方表**都不变**，也不会出现第二处 `+ offsetMinutes`。
+
+**顺序（写死的三步，不许换序）**：
+
+| # | 动作 | 失败时 |
+|---|---|---|
+| 1 | `setArchivedCache(id, derived)`（一行 SQL 或一次 `updatePlan` 事务） | `ResumeBlockedByOffsetException` ⇒ 记日志、**跳过该药**、**不**重排（缓存仍 `true` ⇒ `pausedNow` 仍判暂停 ⇒ 不会按算不出的钟点排期，§3.9）；其它异常同样只跳过该药，不影响循环 |
+| 2 | 写入**成功后** `reconcileReminders.medication(id, MEDICATION_CHANGED)` | **绝不回滚步骤 1**（它已落库；状态事实来自事件表，与提醒是否排上无关）；失败只记日志 |
+| 3 | 循环结束后写 `lastAutoReconciledAtMs` | 与 1/2 **独立**：它记录「系统何时自检过」，不是「每药成功」的凭据（status-spec §8.1 原样） |
+
+- **为什么必须 post-write**：先 reconcile 再写，会读到 `pausedNow == true`（缓存仍是 `true`）⇒ 只取消、不排期，随后缓存才翻转 ⇒ 一条都没武装，白做。
+- **为什么必须 per-medication**：失败隔离，与交互路径「每个 `EventRecorded` 各自独立失败」一致（`SetMedicationStatusUseCase.kt:213-217`）。
+- **为什么不能进事务**：`AlarmManager` / `NotificationManager` 不参与 Room 事务（§3.5 同一条理由）；而且自动核对**没有**事务可进。
+
+**失败处理（谁兜底、谁不兜底 —— 如实写）**：
+
+- **不欠账的部分**：`ReconcileRemindersUseCase.medication` 自己 `runCatching` 并**无条件** `enqueue`（`ReminderReconciliation.kt:15-20`）⇒ 只要这一行被调用过，后排就有一个唯一作业（`REPLACE`），Worker 失败 `Result.retry()`。所以「reconcile 抛错」不会静默。
+- **会欠账的窗口（明确承认）**：进程在**步骤 1 返回之后、步骤 2 被调用之前**被杀 ⇒ 缓存已翻、闹钟仍是旧时刻、**且没有任何队列项**（`enqueue` 在 `medication()` 内部，还没执行到）。收敛点 = **下一次全量 reconcile**：启动（`MedLogApplication.kt:28`）、开机 / 改时（`MedLogBootReceiver.kt:34`）、或任何其它写入口留下的唯一作业。这与交互路径两步之间被杀（`SetMedicationStatusUseCase.kt:200` → `:217`）是**同一类窗口**（E5 / R-11），本轮**不**新增机制关闭它：要关就得持久化「待重排」标记（新表 / 新迁移）或每 15 分钟全量重排，两者都超出「最小触发」的授权。**不假装它不存在**（E14 ③ 把它测成"下次全量 reconcile 收敛且无重复"）。
+- **状态变更永不被回滚**：步骤 2 在一切事务之外，失败不影响 `medications` 行与事件表——「提醒没排上」不能反过来把「药已恢复」抹掉。
+
+**无重复排期的证明（逐机制，可直接对着代码读）**：
+
+1. **先撤后建，且撤在判定之前**：`reconcileMedication` 先 `cancelAllAlarms(id, recipientId)`（`AndroidReminderReconciler.kt:37`）再 `cancelAllReminderNotifications`（`:42`），二者都在 `pausedNow` 闸门（`:46`）**之前**、且不读缓存 / 派生 ⇒ 第二次运行时第一次武装的闹钟先被撤掉，不可能叠加。
+2. **每个槽一个 PendingIntent**：requestCode = `medId*100 + slotIndex`（`AlarmScheduler.kt:180`）+ `FLAG_UPDATE_CURRENT`（`:193`）⇒ `getBroadcast` 对同码返回**同一个** PendingIntent；`setExactAndAllowWhileIdle`（`:502-510`）按 PendingIntent 身份**替换**已排闹钟 ⇒ 同一槽位在系统里只有一条待发。
+3. **提前预告 / 漏服再提醒同段同撤**：`cancelAllAlarms` 一并撤 `+50_000` / `+100_000` 段（`:250`、`:252`），重排只从同一个 `mainTriggerMs` 派生（`:439-470`、`:477-500`）。
+4. **登记表是集合**：`AlarmProjectionRegistry.register` 对已存在项**原样返回**（`AlarmProjectionRegistry.kt:27-28`），键 = `<recipientId>:<id>`（三段式）；`registerProjection` 在 `updated == current` 时**不写** `SharedPreferences`（`AlarmScheduler.kt:406-413`）⇒ 重复触发既不产生重复条目、也不放大写入。
+5. **队列唯一**：`enqueueUniqueWork(UNIQUE_WORK_NAME, REPLACE)`（`ReminderReconciliationWorker.kt:50-54`）⇒ N 次触发最多一个作业。
+6. **结论**：对同一药重跑同一次 reconcile，终态**逐字相同**（登记集合、每个 `requestCode → triggerAtMs` 映射、修订数都不变）。§8.1 的 I5/I6/I8 已用同一手法钉住；本节只是把它们**扩展到「自动核对的触发」这一个新入口**。
+
+**已知边界（不改，记录）**：`MAX_REMINDER_SLOTS = 20`（`AlarmScheduler.kt:28`）⇒ 槽位 ≥ 20 的残留码不会被 `cancelAllAlarms` 撤到；单药时段数远小于 20，既有边界，本轮不动。
 
 ## 4. 迁移 v26 → v27（纯新增、零搬运）
 
@@ -567,7 +643,7 @@ fun Medication.materializedFor(
 | 编辑器保存 | `AddMedicationViewModel.kt:525-580`（`:552-554` 写三列） | 抛给 VM ⇒ 草稿保留、`isSaving=false`、错误文案 | 1（内容必变） |
 | 作息 resync | `MedicationRepository.planForRoutine`（§3.5 事务内逐药） | 收集 ⇒ `RoutineResyncConflictException` ⇒ **整批回滚** | 每味"确实变了"的药 1 条 |
 | 取消归档 | `MedicationRepositoryImpl.unarchiveMedication`（§3.8） | 拒绝恢复 + 对话框 | 1 |
-| **恢复（resume）** | `MedicationRepositoryImpl.setArchivedCache(false)`（§3.9） | 拒绝恢复、保持暂停 | 钟点变了 1 条；没变 0 条 |
+| **恢复（resume）** | `MedicationRepositoryImpl.setArchivedCache(false)`（§3.9；**三个调用方**都经它：交互 / 自动核对 / 事件更正） | 拒绝恢复、保持暂停 | 钟点变了 1 条；没变 0 条 |
 | 二维码导入 | `ImportPlanUseCase`（§5.5） | 整包零写入 | 0（导入不是"改计划"而是"建计划"） |
 | 迁移后的老数据 | 无（`offset = 0` 构造上合法，§4） | — | 0 |
 
@@ -681,6 +757,25 @@ fun Medication.materializedFor(
 **E13 恢复（resume）按最新作息重算** — 规则见 §3.9（`setArchivedCache(false)` ⇒ `materializedFor` ⇒ 一次 `updatePlan` 或一行 SQL）。
 测试：① **改作息后恢复**：`bed=22:00`、`BEDTIME +60`（23:00）→ 暂停 → 改 `bed=22:30`（`+60 = 23:30` 合法 ⇒ §3.7 不阻断；该药暂停中、被 resync 排除，钟点停在 23:00）→ 恢复 ⇒ 断言 `isArchived=false`、`reminderTimes="23:30"`（**按新作息**，不是暂停前的 23:00）、修订 **+1**、该修订旧段 `reminderTimes="23:00"`、边界前进到 `changedAt`；② **钟点未变 ⇒ 0 修订**：不动作息，暂停→恢复 ⇒ 行 `isArchived=false`、钟点逐字不变、修订计数**不变**（守住 §3.9 的分支判断），且 `isArchived == deriveCurrentStatus(events, now)`（status-spec §2.A 不变量）；③ **重算非法 ⇒ 拒绝恢复**：`bed=23:30` + `BEDTIME +60` → 恢复 ⇒ 抛 `ResumeBlockedByOffsetException`、**事务回滚** ⇒ 无新事件、`isArchived` 仍 `true`、`reminderTimes / offsetMinutes / planEffectiveFromMs` 逐字不变（**没有**归零、没有钳位、没有半写）、修订计数不变；编辑器显示错误态；改选 +15 保存（1 条修订）后再恢复 ⇒ 成功；④ **状态事件链不变**：①②③ 各自断言 `medication_status_events` 的行数、id、`kind`、`effectiveAtMs`、`recordedAtMs`、`supersedesId` **逐行相等**；暂停→恢复→暂停→恢复 四次后事件数恰 4、`liveStatusKind` 沿链正确；⑤ **依从语义不变**：同一 `now` 下过去 90 天每日 `(expected, taken, missed)` 三元组与恢复前逐条相等；变更日投影等于"用同等参数在编辑器里改时间"的投影（§5.4 规则）⇒ 没有第二套语义；⑥ 恢复后 `reconcileMedication` 被调用且按**新**钟点排三条闹钟（`SetMedicationStatusUseCase.kt:213-217` 未改，读 DB 现状）。
 
+**E14 自动核对把缓存纠正为「在服」后立即排上闹钟（R-7b）** — 规则见 §3.11。造 `bed=22:00`、某药 `BEDTIME +60`（23:00）并武装了三条闹钟 → 暂停（缓存 `true`）→ 把 `bed` 改成 `22:30`（`+60 = 23:30` 合法；该药暂停中、被 resync 排除 ⇒ 钟点仍 23:00）→ 直接 append 一条 `RESUME` 事件（**不经** `SetMedicationStatusUseCase`，模拟"事件已存在但缓存没翻"的自动核对场景）→ 调 `ReconcileMedicationStatusUseCase.reconcile()` 一次。
+规则：① 缓存翻为 `false`；② 钟点按**当前**作息重算为 `23:30`，`medication_plan_revisions` **恰 +1**（与 §3.9/E13 同一规则，不是新语义）；③ **同一轮内** `reconcileReminders.medication(id, MEDICATION_CHANGED)` 被调用一次，三条闹钟（正点 / 预告 / 再提醒）都排在**新**钟点；④ 事件表与 `medication_logs` 逐行不变。
+测试（`ReconcileMedicationStatusUseCaseTest` + `AndroidReminderReconciler` 影子 `AlarmManager`，`Map<requestCode, triggerAtMs>` 断言）：
+- ① **立即武装**：按上面复现 ⇒ 断言 `history.inOrder { setArchivedCache; reconcileMedication }`、正点 `triggerAtMs` = 23:30 的 epoch、`+50_000` = 23:30 − `earlyReminderMinutes`、`+100_000` = 23:30 + `followUpDelayMinutes`，**不等启动 / 开机**。
+- ② **重复运行不新增任何东西**：紧接着再调一次 ⇒ 第二次 `derived == cache` ⇒ **0 次** `setArchivedCache`、**0 次** `reconcileMedication`、修订数不变、登记集合与 `requestCode → triggerAtMs` 映射**逐字相同**、每个槽**仍只有一条**待发闹钟。
+- ③ **写入与 reconcile 之间被杀 ⇒ 下次全量收敛**：在 `setArchivedCache` 返回后立刻中止（不调 reconcile），断言此刻三条闹钟仍是**旧**钟点 23:00（缺口真实存在）；随后触发一次**全量** reconcile（`MedLogApplication.kt:28` 的启动路径）⇒ 收敛到 ① 的终态，且每个槽仍只一条、修订数**不再增加**（reconcile 从不写计划）。
+- ④ **交互路径不受影响**：同一场景改走 `SetMedicationStatusUseCase.apply(RESUME)` ⇒ 仍是「一个提交事务 + 每个 `EventRecorded` 提交后 reconcile 一次」（`SetMedicationStatusUseCase.kt:212-217`），事件数 +1、`lastUserCheckedDate` 不变、恢复后三条闹钟按新钟点；断言自动核对**没有**被额外调用（没有双触发）。
+- ⑤ **偏移非法时只跳过该药**：同一批两味药，其中一味恢复后 `materializedFor` 抛 `ResumeBlockedByOffsetException` ⇒ 该药缓存仍 `true`、**0 次** reconcile、无闹钟；另一味正常翻转并及时排上；`lastAutoReconciledAtMs` 照写；横幅（§5.6）与编辑器错误态按 §3.9 生效。
+
+**每条测试钉的是哪条设计决定（可追溯）**：
+
+| 测试 | 依据的设计决定 |
+|---|---|
+| ① | §3.11 的触发（去方向闸门）+ 顺序表第 2 步 + §3.9 的物化点 |
+| ② | §3.11 的幂等证明 1–5（先撤后建 / 同码 `FLAG_UPDATE_CURRENT` / 集合语义登记 / 唯一作业） |
+| ③ | §3.11 的「会欠账窗口」——收敛点明确写成**全量 reconcile**，不假装是下一 tick |
+| ④ | §3.9 的「交互路径不需要改」与 status-spec §8.1 的两事实分离 |
+| ⑤ | §3.9 的 `ResumeBlockedByOffsetException` 处理（跳过、保持暂停） |
+
 ## 7. 文案（医嘱优先；四语言）
 
 **must**：只描述"提醒/排期时间调整"，**不得**出现"可以推迟/提前服药""灵活服药""弹性时间""医嘱允许"等表述。
@@ -745,6 +840,10 @@ fun Medication.materializedFor(
 23. **恢复非法 ⇒ 拒绝且不归零**：§6 E13 ③（事务回滚、无事件、行逐字不变、编辑器错误态、修好后恢复成功）。
 24. **恢复不改事件与依从**：§6 E13 ④⑤⑥（事件逐行相等、过去 90 天三元组相等、变更日与编辑器改时间同构、恢复后按新钟点排三条闹钟）。
 25. **唯一时间算术（结构断言）**：`grep -rn "resolveWithOffset(" --include=*.kt` 恰 2 处（定义 + `materializedFor` 内调用）；`ReminderTimeUtils.timePeriodToReminderTime` 签名**不含** offset；`offsetMinutes` 的读取点只有 `materializedFor`、导出编码、编辑器态、横幅校验——**没有任何读路径参与时间计算**（§2.1 第 2 点）。本轮的动机很具体：新增了**两条**写入口（导入、恢复），不加这条断言，下一个人很容易在其中一条里再写一遍算术。
+26. **自动核对恢复方向：立即排上闹钟（R-7b）**：§6 E14 ①——写入缓存**之后**同一轮 reconcile，三条闹钟按**新**钟点武装；`history.inOrder { setArchivedCache; reconcileMedication }`（钉住 post-write 顺序）。
+27. **同一触发重复运行不新增（无重复排期）**：§6 E14 ②——第二次 0 次 `setArchivedCache`、0 次 reconcile、登记集合与 `requestCode → triggerAtMs` 映射逐字相同、每槽仍只一条待发、修订数不变。
+28. **写入与 reconcile 之间被杀的收敛**：§6 E14 ③——**先断言缺口真的存在**（闹钟仍是旧钟点），再一次**全量** reconcile 收敛且不重复、不新增修订。这条把「收敛点是下一次全量 reconcile」写死，防止有人把它读成"下一 tick 就够"。
+29. **交互路径不双触发**：§6 E14 ④——走 `SetMedicationStatusUseCase` 时仍是每事件一次 Post-commit reconcile，自动核对的触发不叠加；事件数 / `lastUserCheckedDate` / 依从三元组均不变。
 
 ### 8.1 幂等回归（重新核对中断 / 进程重启 / 重复执行）
 
@@ -760,11 +859,12 @@ fun Medication.materializedFor(
 | I6 | **登记/撤销路径幂等**：`registerProjection` 同目标两次、`cancelAllAlarms` 两次、`cancelAlarmsFor` 对空登记表一次、`unregister` 不存在的目标 | 集合不变（`register` 返回原集合 ⇒ `SharedPreferences.edit` 不写，`:406-413`）；第二次 `cancelAllAlarms` 因 `FLAG_NO_CREATE` 拿到 null 直接 `continue`（`:240-245`），**不抛、不误删他人** | `AlarmProjectionRegistry` 纯集合语义（已有 `AlarmProjectionRegistryTest`，扩展 4 例） |
 | I7 | **WorkManager 队列幂等**：连续 3 次 `enqueue(ROUTINE_CHANGED / SYSTEM_EVENT / MEDICATION_CHANGED)` | `getWorkInfosForUniqueWork(UNIQUE_WORK_NAME)` 只有 1 条（`REPLACE`），最终执行的是最后一次 reason；执行完 `reconcileAll` 一次即够 | `enqueueUniqueWork(REPLACE)`（`:50-54`） |
 | I8 | **恢复重算可重复**：同一药连续恢复两次（第二次 `live == desired` ⇒ `UserChecked`）；恢复后再跑 resync（内容已同 ⇒ `:57` 过滤）；恢复与 replay 交替各 3 次 | 第二次恢复：0 事件、0 行写、0 修订；resync：`updatePlan` 未调用、修订数不变、闹钟集合逐字相同；交替 3 轮后事件数恰 3、修订数等于"钟点真的变了"的次数 | `SetMedicationStatusUseCase.kt:180-199` 的 `live == desired` 分支；`materializedFor` 幂等（§2.1 第 3 点、§8 第 2 条） |
+| I9 | **自动核对的触发连跑两次**（§3.11 的新入口）：第一次翻转缓存并排期，第二次 `derived == cache` | 第二次：0 次 `setArchivedCache`、0 次 `reconcileMedication`；登记集合与 `requestCode → triggerAtMs` 映射与第一次**逐字相同**；每槽仍只有一条待发；修订数不变。若把两次之间塞进一次全量 reconcile，终态同样逐字相同 | §3.11 幂等证明 1–5；`AlarmProjectionRegistry.kt:27-28`；`AlarmScheduler.kt:178-196`；`ReminderReconciliationWorker.kt:50-54` |
 
 - 这些用例都不引入新机制：它们钉的是**已有**的三层兜底（立即重排 + 唯一作业重试 + 启动/开机全量）在"偏移让每次写都改变钟点"之后仍然成立——本特性只改**写什么钟点**，不改**怎么写/怎么重排**；I1-I7 就是这条断言的回归形式。
 - 断言方式：`AlarmScheduler` 侧用可注入的 `AlarmManager` 影子（现有 `AlarmScheduler`/`AndroidReminderReconciler` 测试同款），把 `(requestCode, triggerAtMs)` 收成 `Map<Int, Long>` 后比较，避免依赖真实系统闹钟。
 
-## 9. 一致性检查（第 3 轮重跑：六处交叉冲突 + 两处附带；本轮新增 ⑤⑥⑦，改写 ①②③ 与"附"）
+## 9. 一致性检查（第 4 轮重跑：跨文件两处——M1 与 R-7b；⑥ 改写为「已回写」，新增 ⑧⑨）
 
 | 冲突点 | 结论 |
 |---|---|
@@ -773,8 +873,10 @@ fun Medication.materializedFor(
 | **③ §3.8 的取消归档 vs §3.2 的修订规则** | 一致：一次 `updatePlan`、内容必变、边界必前进 ⇒ 只走分支 2，不会撞分支 3（分支 3 要 `changedAt <= 边界`）。**唯一例外**是时钟回拨：那时取消归档被拒、行仍归档，与 §3.2"宁可报错"同向，由 W5 覆盖。与"暂停/恢复 0 修订"的关系本轮改写：**纯状态翻转仍然 0 修订**（今天的一行 SQL 保留），只有"恢复顺带把钟点改了"才写 1 条——因为那确实是计划内容变化，而"暂停起点"的权威记录在事件表里，没有被复制进修订链（§3.1 已改成"至多 1 条"）。 |
 | **④ §2.3 的解析瞬时校验 vs §8.1 的幂等** | 一致且互补：回绕判定是**纯函数**（`resolveUnwrapped` + 整数区间），不读时钟、不读 DB ⇒ 同一输入永远同一结论 ⇒ 重跑 resync/reconcile 不会"这次合法、那次非法"地抖动（若校验依赖 `LocalTime` 的回绕结果或 `clock`，I3/I4 就会红）。0 偏移的祖父条款让"未变的药"仍走 `:57` 过滤 ⇒ 启动重算对老数据零写。 |
 | **⑤ §5.5 导入 vs §2.1 不变量** | 一致，且本轮把破例关掉：落库的适格药品钟点 = `materializedFor(接收方作息)`，载荷 `rt` 只进差异清单。与 §3.7 的阻断不重叠：阻断管"用户在本机改作息"，导入管"外来计划"；两者都不允许把不可物化的 `(作息, 偏移)` 写进库。 |
-| **⑥ §3.9 恢复 vs `docs/medication-status-spec.md`** | **有意的、必须回写的一处偏离**：status-spec 说状态层"不改计划链"且状态写入 0 修订。本轮不改 `updatePlan` 签名、不改事件语义、纯状态翻转仍 0 修订；**唯一例外**是"恢复时钟点确实陈旧"——不改钟点就是错误提醒，改钟点就必须留痕。这条例外要在 status-spec 的 §2.A/§3 补一句（**本 commit 不含**：本分支只改本文件，见 §10 末的待办）。 |
+| **⑥ §3.9 恢复 vs `docs/medication-status-spec.md`（第 4 轮：**已回写**）** | **偏离已关闭**：status-spec 第 7 稿按用户**唯一授权**落了修订 **M1**（§0.5），并在 §1.4 / §2.A.3 / §2.B / §3 D3、D6 / §13 / §15 / §9.9 / §16.21 逐处对齐。「恢复改了钟点 ⇒ 恰 1 条修订、纯状态翻转 ⇒ 0 条、非法 ⇒ 拒绝恢复」两句现在**逐字同构**（status-spec §18 行 32 与本表互为对账）；分工不变：**怎么算钟点**只在本文件（`materializedFor`），**谁写修订**的判定在 status-spec，两处不重复实现。 |
 | **⑦ §5.0.1 vs §5.5/§3.9** | 新增两个写入口后，"只有一处算术"必须是**可执行**的成立，不能靠口头：§8 第 25 条用结构断言（`resolveWithOffset` 只有一个调用方、委托签名无 offset），E12/E13 的落库值断言都对着 `materializedFor` 的期望值写。 |
+| **⑧ §3.11 的自动核对触发 vs status-spec §8.1（R-7b）** | **相容，不是覆盖也不矛盾**：status-spec §8.1 只**强制**暂停方向的 reconcile、**未禁止**相反方向；第 7 稿在 §8.1 加了一行**指针**（不改该节规则，见其 §0.5 第 6 条），把恢复方向指向本节 §3.11。触发沿用同一个 `ReconcileRemindersUseCase.medication` + 同一个 `MEDICATION_CHANGED`，不新增调度器 / 队列 / 轮询；两文件对「写缓存在事务外、reconcile 在写入之后」的事实描述一致（status-spec §0.4 情形①、本文件 §3.11 审计表）。 |
+| **⑨ §3.11 的「排错时刻」论证 vs §3.9 的「会改钟点」** | **有依赖，且写死在 §3.11 第一段**：§3.9 之前恢复只翻缓存、不改钟点 ⇒ R-7b 只是「少排期（漏排）」；§3.9 之后恢复会重算钟点 ⇒ 同一个缺口变成「按旧时刻提醒（排错）」。所以两者**必须同轮**：撤掉 §3.9 则 §3.11 降级为可选优化（仍无害），撤掉 §3.11 则 §3.9 在每个自动核对翻转上留一个「旧时刻窗口」。这条依赖写在 §3.11 的"为什么必须修"里，并有 E14 ③ 钉住。 |
 | 附：§5.5 导入 vs §2.3 | **不再重叠**（原稿的 `rt − off` 反推基线本轮删除）：导入侧现在直接用**本地**作息判 `(off, anchors)`，`rt` 只用于差异比较。比旧稿强：旧稿只能验"发送方的码自洽"，验不出"本地不可物化"——那正是 R-13 的由来。 |
 | 附二：§3.7 预检 vs §3.5 写侧判定 | 不是重复，是两层：预检用 `legalNow ∧ legalAfter` 只拦"由这次变更造成"的非法（避免死锁），写侧判定对**任何**非法都拒（因为它只关心"能不能物化这一行"）。因此"预检过了、写侧仍拒"的唯一来源是预检与写之间的新增行（W4）——两层都在，各管一段。 |
 
@@ -805,19 +907,21 @@ fun Medication.materializedFor(
 | R-5 | 回绕锚点（`breakfast=00:10`）绕过偏移校验 | **设计关闭**（仅"不被偏移放大"这一半） | §2.3 `resolveUnwrapped` + `WRAPPED_ANCHOR`；E10 |
 | R-6 | reconcile 中断 / 重启 / 重复执行 ⇒ 重复或缺失闹钟、重复修订 | **机制已存在 + 本轮补测试**（不新增机制） | §8.1 I1-I8 |
 | R-7 | **暂停/恢复期间改作息，恢复后钟点陈旧**：`setArchivedCache`（`MedicationRepositoryImpl.kt:100-108`）只翻 `isArchived`，且 resync 取数 `WHERE isArchived = 0` ⇒ 暂停期间改的作息从未进入这味药 | **设计关闭（本轮纳入）** | §3.9：`setArchivedCache(false)` ⇒ `materializedFor`（与取消归档**同一个**物化点）；钟点变了 1 条修订、未变 0 条；事件与依从语义不动；E13 ①-⑥ |
-| R-7b | **自动核对把缓存纠正为"在服"时不 reconcile** ⇒ 闹钟要等下一次全量 reconcile 才排 | **仍存在（既有缺口，本轮不扩面）** | `ReconcileMedicationStatusUseCase.kt:40-50` 只在 `derived == true` 方向重排；由启动/开机全量 reconcile 兜住（`MedLogApplication.kt:28`、`MedLogBootReceiver.kt:34`）。那里没有 UI 上下文，改它会牵动 status-spec 的排程策略 |
+| R-7b | **自动核对把缓存纠正为"在服"时不 reconcile** ⇒ 闹钟要等下一次全量 reconcile 才排；§3.9 之后更糟（DB 已是**新**钟点，闹钟仍是**旧**钟点 ⇒ 按错时刻提醒） | **设计关闭（本轮纳入）** | §3.11：写入之后、逐药、去掉 `if (derived)` 方向闸门（`ReconcileMedicationStatusUseCase.kt:42`），复用 `ReconcileRemindersUseCase.medication`（不新增调度器 / 队列 / 轮询）；post-write 顺序 + 逐药失败隔离 + 唯一作业兜底；幂等由「先撤后建 / 同码 `FLAG_UPDATE_CURRENT` / 集合语义登记 / 唯一作业」逐条证明；E14 ①-⑤、§8 第 26–29 条、§8.1 I9。**残留（如实）**：写 → reconcile 之间被杀仍要等下一次**全量** reconcile（E14 ③），与交互路径同类窗口（R-11），本轮不新增机制关闭 |
 | R-8 | **时钟回拨时该药的计划改动被持续拒绝**（保存 / 重算 / **恢复**都抛 `PlanBoundaryNotAdvancedException`） | **仍存在（有意的取舍）** | §3.2：有明确报错，不改历史；恢复被拒时整笔回滚（事件不落、仍暂停），与"保存被拒"同向；手段是校正系统时间（不做单调时钟/序列） |
 | R-9 | **W1/W3 窗口内"新作息 + 旧钟点"**：启动前提醒仍按旧钟点响（合法但过期） | **仍存在（有恢复路径）** | §3.7 第 5 步失败分支的提示 + 启动重算收敛；不是静默态 |
 | R-10 | **无全局提示**：偏移非法的药只有它自己的编辑器拦保存；今日计划/设置页不弹横幅 | **设计关闭（范围限定）** | §5.6 的派生横幅覆盖"偏移非法"（E8/W4/W4′）：纯派生、零持久化、进程重启仍在、一步跳到编辑器。**不覆盖**其它失败类别 → R-15 |
-| R-11 | **提交→reconcile 窗口**：已武装闹钟在窗口内仍是旧时刻，发送前守卫只校验状态不校验时刻 | **仍存在** | E5；本特性不新增该窗口（与今天的单药编辑同路径） |
+| R-11 | **提交→reconcile 窗口**：已武装闹钟在窗口内仍是旧时刻，发送前守卫只校验状态不校验时刻 | **仍存在** | E5；本特性不新增该窗口（与今天的单药编辑同路径）。§3.11 为自动核对多开了一个**入口**，但窗口长度不变：写 → reconcile 之间被杀 ⇒ 下一次全量 reconcile 收敛（E14 ③、R-7b 残留） |
 | R-12 | **回绕基线本身的日错位**（`breakfast=00:10` 的 `BEFORE_BREAKFAST` 落在同一天 23:55，比早餐晚约 24h） | **仍存在（既有缺陷）** | §2.3 保留祖父行为（R4/E6 逐字不变）；修它要改 anchor 日语义与 occurrence 生成，超出本期。本轮保证的是"偏移不能让这种锚点变得更错" |
 | R-13 | **导入的 `off` 在接收方作息不同时可能已非法**（发送方合法） | **设计关闭** | §5.5：以偏移为真相、按**接收方**作息重算；重算非法 ⇒ 整包拒绝、零写入（先于 `REPLACE` 的删除）；E12 ③。原稿"导入不重算"的立论被推翻，故本条不再落地为 E8 状态 |
 | R-14 | **W4′：插入落在 resync 事务读之后**（或写入方读到旧作息）⇒ 库里短暂存在"新作息 + 非法偏移" | **仍存在（可见 + 有恢复路径）** | Room 的读视图在事务首读时固定，看不见其后提交的行；**不做**跨存储事务/分布式锁（DataStore 不参与 Room 事务，硬做只会多一个会失败的第二写）。检测不依赖 resync：§5.6 横幅；收敛：启动重算（§3.6）+ 编辑器修复；E11 ⑤ |
 | R-15 | **其它失败类别仍无全局提示**：时钟回拨被拒、reconcile 队列失败、导入被拒、自动核对跳过某药 | **仍存在** | §5.6 只覆盖偏移非法；各有局部提示与日志；统一错误中心是另一个产品决定（§10 非目标明确不做） |
 | R-16 | **导入不再保留发送方钟点**（行为变更）⇒ 用户可能觉得"时间被改了" | **已界定（有意变更）** | §5.5 的差异清单逐行列出 `载荷 → 本地`；老码（无 `off`）尤其明显——每条作息锚点药都会移动；文案只陈述"换算"，不暗示可改服药时间（§7） |
-| R-17 | **修订链 `isArchived` 快照不对称**：暂停 0 修订、恢复（钟点变了时）1 条 | **仍存在（已知且已被降级）** | status-spec §2.A 已把该列降级为兼容缓存，暂停链的权威在事件表；§3.9 说明为何不给暂停补修订——那会在链里伪造"从上一段起一直暂停"的区间 |
+| R-17 | **修订链 `isArchived` 快照不对称**：暂停 0 修订、恢复（钟点变了时）1 条 | **已界定（两条规则的分工，不再是缺陷）** | status-spec 第 7 稿的 **M1**（其 §0.5）已把这条写成明文规则：暂停 0 条（状态权威只在事件表，给暂停补修订会伪造"从上一段起一直暂停"的区间）、恢复 1 条（计划内容**确实**变了：钟点不同）。不是遗漏，也不需要 UI 额外说明 |
 
-**本 commit 未包含、必须回写的两处（据实列出）**
+**本轮提交范围与回写状态（据实列出）**
 
-1. `docs/medication-status-spec.md` 需补一句"恢复若顺带改变钟点，会写 1 条计划修订"（§9 ⑥）。该文件已冻结、且本分支只允许改本文件，故本轮**不**动它——两份规格暂时存在这一处已知偏离，实现前必须先补。
-2. 实现顺序建议（每一步都能独立编译并通过自己的 E 段测试）：§5.0.1 物化点 → §3.5 事务内判定 → §5.5 导入 → §3.9 恢复。导入与恢复都依赖物化点先落地。
+1. **status-spec 的 M1 已回写（同 commit）**：`docs/medication-status-spec.md` 第 7 稿的 §0.5 + §1.4 / §2.A.3 / §2.B / §3 D3、D6 / §13 / §15 / §9.9 / §16.21 / §18 行 31–32 已把「恢复改了钟点 ⇒ 恰 1 条；纯状态翻转 ⇒ 0 条」写成本文同一句话，并明确状态事件与依从语义零改动。**本轮两份规格因此不再有已知偏离**（§9 ⑥）。
+2. **本轮的 R-7b 设计只覆盖"自动核对 → 恢复"这一个入口**：`CorrectMedicationStatusEventUseCase`（事件更正）本来就逐药 reconcile（`:92`），不动；`SetMedicationStatusUseCase`（交互）本来就逐 `EventRecorded` reconcile（`:212-217`），不动。三者现在**同构**：写完之后、逐药、同一个 `ReconcileRemindersUseCase.medication`。
+3. **实现顺序建议（每一步都能独立编译并通过自己的 E 段测试）**：§5.0.1 物化点 → §3.5 事务内判定 → §5.5 导入 → §3.9 恢复（含 M1 的 1/0 条） → §3.11 自动核对的反向触发。§3.11 必须在 §3.9 之后落地（它的"排错时刻"论证以 §3.9 会改钟点为前提，§9 ⑨）；先把 `AndroidReminderReconciler.pausedNow`（`:56`）与自动核对改成**注入 `Clock`**，否则 E14 的可控时钟断言写不出来。
+4. **未跑测试**：本文件仍是 docs-only；E14 / §8 第 26–29 条 / I9 / status-spec §9.9 都只是**规格**，实现轮才可执行。
