@@ -42,6 +42,28 @@ fun Medication.toDomainSchedule(): MedicationSchedule {
     return MedicationSchedule.ExactTimes(times = times.distinct(), recurrence = recurrence)
 }
 
+/** `TimePeriod` → 语义锚点：除 `EXACT` 外与 [RoutineAnchor] **同名 1:1**（`key` 只用于持久化）。 */
+fun TimePeriod.toAnchorOrNull(): RoutineAnchor? = if (this == TimePeriod.EXACT) null else RoutineAnchor.valueOf(name)
+
+/**
+ * 写路径的**唯一物化点**（docs/medication-time-offset.md §5.0.1）：
+ * 校验（`requireAllowed`）→ 逐锚点 `resolveWithOffset`（**全仓唯一**把偏移与基线相加的地方）
+ * → 升序去重写回 `reminderTimes / reminderHour / reminderMinute`。
+ *
+ * 非适格药品（PRN / 间隔给药）与没有可解析基线的药品（精确时间）**原样返回**：它们的钟点是用户
+ * 指定的绝对值，偏移恒 0（非 0 会被 `validateTimeOffset` 判 `NOT_APPLICABLE` 并拒绝）。
+ *
+ * 幂等：同一 `(作息, 时段, 偏移)` 连算两次结果逐字相同；非法偏移抛
+ * `IllegalTimeOffsetException`（绝不钳位）。
+ */
+fun Medication.materializedFor(schedule: RoutineSchedule): Medication {
+    if (isPRN || intervalHours > 0) return this
+    val anchors = TimePeriods.parse(timePeriod).mapNotNull { period -> period.toAnchorOrNull() }
+    if (anchors.isEmpty()) return this
+    val offset = requireAllowed(validateTimeOffset(offsetMinutes, schedule, anchors, applicable = true))
+    return withResolvedRoutineTimes(anchors.map { anchor -> schedule.resolveWithOffset(anchor, offset) })
+}
+
 /** Converts a typed routine result back to the legacy Room columns in one persistence adapter. */
 fun Medication.withResolvedRoutineTime(time: LocalTime): Medication {
     val encoded = time.format(STORED_TIME_FORMATTER)

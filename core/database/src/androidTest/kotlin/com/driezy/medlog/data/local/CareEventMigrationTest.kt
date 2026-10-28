@@ -45,6 +45,7 @@ class CareEventMigrationTest {
             true,
             MedLogDatabase.MIGRATION_24_25,
             MedLogDatabase.MIGRATION_25_26,
+            MedLogDatabase.MIGRATION_26_27,
         ).use { db ->
             // (a) 既有行零丢失、内容逐项不变
             assertEquals(2, db.count("SELECT COUNT(*) FROM care_recipients"))
@@ -108,6 +109,7 @@ class CareEventMigrationTest {
             true,
             MedLogDatabase.MIGRATION_24_25,
             MedLogDatabase.MIGRATION_25_26,
+            MedLogDatabase.MIGRATION_26_27,
         ).use { db ->
             assertEquals(0, db.count("SELECT COUNT(*) FROM care_event_logs"))
             assertTrue("index_care_event_logs_careRecipientId_kind_occurredAtMs" in db.indexNames("care_event_logs"))

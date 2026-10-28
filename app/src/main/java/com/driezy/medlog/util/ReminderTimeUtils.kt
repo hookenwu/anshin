@@ -2,6 +2,8 @@ package com.driezy.medlog.util
 
 import com.driezy.medlog.data.model.RoutineSchedule
 import com.driezy.medlog.data.model.TimePeriod
+import com.driezy.medlog.data.model.resolve
+import com.driezy.medlog.data.model.toAnchorOrNull
 import com.driezy.medlog.data.repository.SettingsPreferences
 import com.driezy.medlog.data.repository.routineSchedule
 
@@ -10,6 +12,12 @@ import com.driezy.medlog.data.repository.routineSchedule
  *
  * 提取自 AddMedicationViewModel，便于在 ResyncRemindersUseCase、
  * BootReceiver 等场景中复用，无需依赖 ViewModel 实例。
+ *
+ * **薄委托**：时段 → 钟点的权威只有 `RoutineSchedule.resolve`（＝
+ * `floorMod(resolveUnwrapped(anchor), 1440)`）。本类不再自带第二套算术
+ * （旧的 `adjustTime` 已删除），也**不接收偏移参数**——药品侧的偏移由写路径的唯一物化点
+ * `Medication.materializedFor` 负责，因此这里结构上不可能二次加偏移
+ * （docs/medication-time-offset.md §5.0、§8 第 25 条）。
  */
 object ReminderTimeUtils {
 
@@ -21,27 +29,10 @@ object ReminderTimeUtils {
     fun timePeriodToReminderTime(period: TimePeriod, prefs: SettingsPreferences): String =
         timePeriodToReminderTime(period, prefs.routineSchedule())
 
-    fun timePeriodToReminderTime(period: TimePeriod, schedule: RoutineSchedule): String = when (period) {
-        TimePeriod.EXACT -> "" // Exact 时间由用户手动指定，调用方保持原值
-        TimePeriod.MORNING -> schedule.wake.format()
-        TimePeriod.BEFORE_BREAKFAST -> adjustTime(schedule.breakfast.hour, schedule.breakfast.minute, -15)
-        TimePeriod.AFTER_BREAKFAST -> adjustTime(schedule.breakfast.hour, schedule.breakfast.minute, +15)
-        TimePeriod.BEFORE_LUNCH -> adjustTime(schedule.lunch.hour, schedule.lunch.minute, -15)
-        TimePeriod.AFTER_LUNCH -> adjustTime(schedule.lunch.hour, schedule.lunch.minute, +15)
-        TimePeriod.BEFORE_DINNER -> adjustTime(schedule.dinner.hour, schedule.dinner.minute, -15)
-        TimePeriod.AFTER_DINNER -> adjustTime(schedule.dinner.hour, schedule.dinner.minute, +15)
-        TimePeriod.EVENING -> adjustTime(schedule.bed.hour, schedule.bed.minute, -60)
-        TimePeriod.BEDTIME -> schedule.bed.format()
-        TimePeriod.AFTERNOON -> "15:00"
-    }
-
-    /** 按分钟偏移时间，正确处理小时进退位，返回 HH:mm */
-    fun adjustTime(hour: Int, minute: Int, deltaMinutes: Int): String {
-        val total = hour * 60 + minute + deltaMinutes
-        val h = ((total / 60) % 24 + 24) % 24
-        val m = ((total % 60) + 60) % 60
-        return "%02d:%02d".format(h, m)
+    /** 与 [RoutineSchedule.resolve] 逐字等价；`EXACT` 没有作息锚点 ⇒ 空串。 */
+    fun timePeriodToReminderTime(period: TimePeriod, schedule: RoutineSchedule): String {
+        val anchor = period.toAnchorOrNull() ?: return ""
+        val time = schedule.resolve(anchor)
+        return "%02d:%02d".format(time.hour, time.minute)
     }
 }
-
-private fun com.driezy.medlog.data.model.RoutineTime.format(): String = "%02d:%02d".format(hour, minute)

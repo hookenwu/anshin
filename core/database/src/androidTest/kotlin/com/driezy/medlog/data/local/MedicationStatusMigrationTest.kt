@@ -46,6 +46,7 @@ class MedicationStatusMigrationTest {
             DatabaseSchema.VERSION,
             true,
             MedLogDatabase.MIGRATION_25_26,
+            MedLogDatabase.MIGRATION_26_27,
         ).use { db ->
             // (a) 既有行零丢失、内容逐项不变
             assertEquals(1, db.count("SELECT COUNT(*) FROM care_recipients"))
@@ -123,6 +124,7 @@ class MedicationStatusMigrationTest {
             DatabaseSchema.VERSION,
             true,
             MedLogDatabase.MIGRATION_25_26,
+            MedLogDatabase.MIGRATION_26_27,
         ).use { db ->
             assertEquals(0, db.count("SELECT COUNT(*) FROM medication_status_events"))
             assertTrue("index_medication_status_events_medicationId" in db.indexNames("medication_status_events"))

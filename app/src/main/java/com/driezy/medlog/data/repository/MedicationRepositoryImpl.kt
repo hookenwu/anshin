@@ -77,8 +77,9 @@ class MedicationRepositoryImpl @Inject constructor(
     override suspend fun addMedication(medication: Medication): Long =
         medicationDao.insertMedication(medication.stamped())
 
-    override suspend fun updateMedication(medication: Medication) =
+    override suspend fun updateMedication(medication: Medication) {
         medicationDao.updatePlan(medication.stamped(), clock.millis())
+    }
 
     override suspend fun updateMedications(medications: List<Medication>) = transactions.withTransaction {
         val changedAt = clock.millis()

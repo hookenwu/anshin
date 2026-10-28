@@ -3,6 +3,8 @@ package com.driezy.medlog.data.local
 import androidx.room.*
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationPlanRevision
+import com.driezy.medlog.data.model.PlanBoundaryNotAdvancedException
+import com.driezy.medlog.data.model.PlanWriteResult
 import com.driezy.medlog.data.model.planRevision
 import kotlinx.coroutines.flow.Flow
 
@@ -70,24 +72,41 @@ interface MedicationDao {
     @Insert
     suspend fun insertPlanRevision(revision: MedicationPlanRevision)
 
-    /** Store the old schedule and replace the current one atomically. Stock-only writes use updateStock. */
+    /**
+     * 计划写入的**唯一**入口（docs/medication-time-offset.md §3.2 三分支）：
+     *
+     * 1. 计划字段逐字相同 ⇒ 原地写整行（非计划列照常落库）、返回 [PlanWriteResult.NoOp]、
+     *    **不建修订、边界不动** —— 只有这种原地替换是合法的；
+     * 2. 内容变化且 `changedAt` **严格越过**当前边界 ⇒ 插旧计划（`until = changedAt`）+ 边界前移到
+     *    `changedAt`、返回 [PlanWriteResult.Advanced]；
+     * 3. 其余（同毫秒重复写、时钟回拨）⇒ 抛 [PlanBoundaryNotAdvancedException]，**零写入**。
+     *
+     * 旧实现在分支 3 里"跳过插入但把边界改写成 `changedAt`"，会让上一条修订的 `until` 大于新边界
+     * （区间重叠 ⇒ 投影/依从重复计数），或让前一段变成零长度（历史被吃掉）。现在两者都不可能发生。
+     *
+     * 修订行**只插不改**（本 DAO 没有 UPDATE/DELETE 修订的语句），边界只增不减 ⇒
+     * 修订区间是 `[first.from, ∞)` 的一个划分（I1–I3）。
+     * 只有库存变化走 [updateStock]，不经过这里（§3.1）。
+     */
     @Transaction
-    suspend fun updatePlan(medication: Medication, changedAt: Long) {
-        val previous = getMedicationById(medication.id) ?: return
+    suspend fun updatePlan(medication: Medication, changedAt: Long): PlanWriteResult {
+        val previous = getMedicationById(medication.id) ?: return PlanWriteResult.NoOp
         val previousPlan = previous.planRevision(changedAt)
         val nextPlan = medication.planRevision(changedAt).copy(effectiveFromMs = previous.planEffectiveFromMs)
-        if (previousPlan != nextPlan) {
-            if (changedAt > previous.planEffectiveFromMs) insertPlanRevision(previousPlan)
-            updateMedication(medication.copy(planEffectiveFromMs = changedAt))
-        } else {
+        if (previousPlan == nextPlan) {
             updateMedication(medication.copy(planEffectiveFromMs = previous.planEffectiveFromMs))
+            return PlanWriteResult.NoOp
         }
-    }
-
-    /** Rebuilds a group of derived medication plans as one Room transaction. */
-    @Transaction
-    suspend fun updateMedications(medications: List<Medication>) {
-        medications.forEach { updateMedication(it) }
+        if (changedAt <= previous.planEffectiveFromMs) {
+            throw PlanBoundaryNotAdvancedException(
+                medicationId = medication.id,
+                boundaryMs = previous.planEffectiveFromMs,
+                requestedMs = changedAt,
+            )
+        }
+        insertPlanRevision(previousPlan)
+        updateMedication(medication.copy(planEffectiveFromMs = changedAt))
+        return PlanWriteResult.Advanced
     }
 
     @Delete

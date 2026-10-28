@@ -1,5 +1,6 @@
 package com.driezy.medlog.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -53,6 +54,17 @@ data class Medication(
     val reminderTimes: String = "08:00", // 逗号分隔的 HH:mm 列表，exact 类型用
     val reminderHour: Int = 8, // 主提醒小时（向后兼容通知调度）
     val reminderMinute: Int = 0,
+
+    /**
+     * 相对作息的提醒时间偏移（分钟，v27）：∈ {-60,-45,-30,-15,0,15,30,45,60}。
+     *
+     * 只是**输入**：绝对钟点由 `(作息, 时段, 偏移)` 物化后写回 `reminderTimes/hour/minute`，
+     * 读路径永不消费这一列（docs/medication-time-offset.md §2.1）。
+     * `DEFAULT 0` 让 v26 老数据在构造上合法；`defaultValue` 必须与迁移 SQL 一致，
+     * 否则 Room 的 `TableInfo` 比对会在**打开数据库时**失败。
+     */
+    @ColumnInfo(defaultValue = "0")
+    val offsetMinutes: Int = 0,
 
     // ── 剂量 ─────────────────────────────────────────────────────────────────
     val doseQuantity: Double = 1.0, // 每次几片 / 粒

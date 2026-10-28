@@ -370,6 +370,21 @@ abstract class MedLogDatabase : RoomDatabase() {
         }
 
         /**
+         * v26 → v27：`medications` 新增 `offsetMinutes`（单药提醒时间偏移）。
+         * （docs/medication-time-offset.md §4）
+         *
+         * **纯新增、零搬运**：只 `ALTER TABLE ADD COLUMN`，不重建表、不触碰索引与既有列、
+         * 无 UPDATE 回填（`DEFAULT 0` 即回填）、老二进制/老备份照旧。
+         * `DEFAULT 0` 与实体上的 `@ColumnInfo(defaultValue = "0")` 必须逐字一致，否则 Room 的
+         * `TableInfo` 比对会在**打开数据库时**抛 `IllegalStateException`。
+         */
+        val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `medications` ADD COLUMN `offsetMinutes` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
          * v19 → v20：新增照护事项两张表（CareTask / CareTaskLog）。
          *
          * 纯新增，不改任何既有列：两表分别挂 CareRecipient / CareTask 外键（CASCADE），

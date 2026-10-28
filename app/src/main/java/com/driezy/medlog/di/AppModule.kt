@@ -122,6 +122,7 @@ object DatabaseModule {
             MedLogDatabase.MIGRATION_23_24,
             MedLogDatabase.MIGRATION_24_25,
             MedLogDatabase.MIGRATION_25_26,
+            MedLogDatabase.MIGRATION_26_27,
         )
         .build()
 
