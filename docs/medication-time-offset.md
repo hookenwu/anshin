@@ -169,7 +169,7 @@ fun validateTimeOffset(
 ): TimeOffsetCheck
 ```
 
-判定顺序：① 非 15 的倍数 ⇒ `NOT_MULTIPLE_OF_15`；② `|minutes| > 60` ⇒ `OUT_OF_RANGE`；③ `!applicable || periods.isEmpty()` 且 `minutes != 0` ⇒ `NOT_APPLICABLE`；④ 逐锚点取**未回绕基线** `baseUnwrapped = resolveUnwrapped(anchor)`（整数，可 <0 或 ≥1440，见 §2.3），任一段满足 `baseUnwrapped + minutes ∉ 0..1439` ⇒ `CROSS_MIDNIGHT`（**多时段取交集**：任一段越界，该档位整体不可用，`Rejected` 指明是哪一段、并带上 `resolvedMinuteOfDay` 供文案直接用）；⑤ `minutes != 0` 且 `baseUnwrapped ∉ 0..1439` ⇒ `WRAPPED_ANCHOR`（基线本身已回绕，见 §2.3）。
+判定顺序（**回绕判定先于数值区间判定**，见 M2 勘误 ②）：① 非 15 的倍数 ⇒ `NOT_MULTIPLE_OF_15`；② `|minutes| > 60` ⇒ `OUT_OF_RANGE`；③ `!applicable || periods.isEmpty()` 且 `minutes != 0` ⇒ `NOT_APPLICABLE`；④ 逐锚点取**未回绕基线** `baseUnwrapped = resolveUnwrapped(anchor)`（整数，可 <0 或 ≥1440，见 §2.3），`minutes != 0` 且 `baseUnwrapped ∉ 0..1439` ⇒ `WRAPPED_ANCHOR`（基线本身已回绕，见 §2.3；**必须先判**，否则 `-15` 这类"数值上落回区间"的档位会被误放行）；⑤ 任一锚点满足 `baseUnwrapped + minutes ∉ 0..1439` ⇒ `CROSS_MIDNIGHT`（**多时段取交集**：任一段越界，该档位整体不可用，`Rejected` 指明是哪一段、并带上 `resolvedMinuteOfDay` 供文案直接用）。
 
 - 写侧（编辑器保存、导入、任何直接调用的数据层入口）用 `requireAllowed(...)`；不合规抛**已定义**的 `class IllegalTimeOffsetException(val check: TimeOffsetCheck.Rejected) : IllegalArgumentException`。**不**截断、**不**取整、**不**按方向交换。
 - 抛出点在任何写入之前 ⇒ 事务整体回滚，无半行数据（§3.5）。
@@ -207,7 +207,7 @@ fun RoutineSchedule.resolveWithOffset(anchor, offset): LocalTime {
 - 合法性的唯一判据是 `resolveUnwrapped(anchor) + offset ∈ 0..1439`，即**解析后的瞬时落在这个锚点自己的那一天之内**。对回绕基线（`-5`）来说：`+15 ⇒ 10` 落在 `0..1439` 内 **但并不合法**（它把"前一天 23:55"变成"当天 00:10"，跨了日）；因此 `minutes != 0` 时直接判 `WRAPPED_ANCHOR`，**不看**数值和是否在区间内——这正是"钉死边界"的含义：不许用数值区间把跨日问题伪装成合法。
 - 多时段取交集（沿用 E1/E3）：只要该药有一个锚点回绕，**该药**就不能设非 0 偏移（否则同一味药一部分时段同日、一部分跨日）。
 - 文案：`time_offset_wrapped_anchor_hint`（§7），置灰整条步进器而不是置灰单档——数值上"看起来能选"的档位在这里全是陷阱。
-- 测试（§6 E10）：`breakfast = 00:10` ⇒ `resolveUnwrapped(BEFORE_BREAKFAST) == -5`、`resolve(BEFORE_BREAKFAST) == 23:55`（祖父不变）；`validateTimeOffset(+15)` 与 `validateTimeOffset(-15)` 均为 `Rejected(WRAPPED_ANCHOR)`；`validateTimeOffset(0) == Allowed`；且 `AFTER_BREAKFAST`（+15 基底 25 ⇒ 00:25）同样被拒——防止"只要落在区间内就放行"的实现混过去。
+- 测试（§6 E10）：`breakfast = 00:10` ⇒ `resolveUnwrapped(BEFORE_BREAKFAST) == -5`、`resolve(BEFORE_BREAKFAST) == 23:55`（祖父不变）；`validateTimeOffset(+15)` 与 `validateTimeOffset(-15)` 均为 `Rejected(WRAPPED_ANCHOR)`；`validateTimeOffset(0) == Allowed`。被拒的**只有**回绕的那个锚点：`AFTER_BREAKFAST` 的未回绕基线 `25` 本身没有回绕 ⇒ 单时段 `+15` 得 `40`（00:40）是 **Allowed**，不得被连带拒绝（与 E10 ③ 一致，见 M2 勘误 ①）。防止"只要落在区间内就放行"的实现混过去的断言，是 `BEFORE_BREAKFAST` 的 `-15`——它数值上算出 `23:40`、落在 `0..1439` 内，却必须被拒；`AFTER_BREAKFAST` 反过来正是"不该连带误杀"的那一半。
 
 ## 3. 版本生成（与 `updatePlan` 的关系）
 
@@ -746,7 +746,7 @@ fun Medication.materializedFor(
 
 **E10 回绕锚点不能绕过校验** — `breakfast = 00:10` ⇒ `BEFORE_BREAKFAST` 未回绕基线 `-5`、渲染 `23:55`（§2.3）。
 规则：某锚点的未回绕基线 `∉ 0..1439` 且 `minutes != 0` ⇒ 该锚点 `Rejected(WRAPPED_ANCHOR)`；多时段取交集 ⇒ 该药不能设非 0 偏移（整条步进器置灰，`time_offset_wrapped_anchor_hint`）。`minutes == 0` 仍是 `Allowed`（祖父，R4/E6 逐字不变）。注意**只**拒回绕的那些锚点：`AFTER_BREAKFAST` 基线 `25` 未回绕 ⇒ 它自己 `+15 → 00:40` 是**合法**的，不该被连带拒绝。
-测试：①`resolveUnwrapped(BEFORE_BREAKFAST) == -5` 且 `resolve(BEFORE_BREAKFAST) == LocalTime.of(23,55)`；②`validateTimeOffset(+15, …, [BEFORE_BREAKFAST])` 与 `(-15, …)` 均 `Rejected(WRAPPED_ANCHOR)`（`-15` 若只做数值区间会算出 23:40 而"通过"——这条正是防它）；③单时段 `AFTER_BREAKFAST +15 == Allowed`（基线 25 → 40），而同一味药若**同时**带 `BEFORE_BREAKFAST` ⇒ 整药 `Rejected` 且 `Rejected.anchor == BEFORE_BREAKFAST`（交集规则，既不放过、也不连带误杀）；④断言 `IllegalTimeOffsetException` 抛出且库内 `offsetMinutes` 仍为 0；⑤`bed = 00:30` 时 `EVENING` 基线 `-30` ⇒ 同样被拒（覆盖 `minusHours` 的回绕），而 `BEDTIME`（1430）`+15 = 1445` ⇒ 走 `CROSS_MIDNIGHT`（两条不同的 `Reason` 各自可辨）。
+测试：①`resolveUnwrapped(BEFORE_BREAKFAST) == -5` 且 `resolve(BEFORE_BREAKFAST) == LocalTime.of(23,55)`；②`validateTimeOffset(+15, …, [BEFORE_BREAKFAST])` 与 `(-15, …)` 均 `Rejected(WRAPPED_ANCHOR)`（`-15` 若只做数值区间会算出 23:40 而"通过"——这条正是防它）；③单时段 `AFTER_BREAKFAST +15 == Allowed`（基线 25 → 40），而同一味药若**同时**带 `BEFORE_BREAKFAST` ⇒ 整药 `Rejected` 且 `Rejected.anchor == BEFORE_BREAKFAST`（交集规则，既不放过、也不连带误杀）；④断言 `IllegalTimeOffsetException` 抛出且库内 `offsetMinutes` 仍为 0；⑤`bed = 00:30` 时 `EVENING` 未回绕基线 `-30`（渲染 23:30）⇒ `Rejected(WRAPPED_ANCHOR)`（覆盖 `minusHours` 的回绕）；另取 `bed = 23:50` ⇒ `BEDTIME` 未回绕基线 `1430`（23:50）、`+15 = 1445` ⇒ `Rejected(CROSS_MIDNIGHT)`（两条不同的 `Reason` 各自可辨）。
 
 **E11 预检与重算之间插入的冲突药（W4）** — 复现：`bed=22:00`、库里只有 A=`BEDTIME +30`（22:30，合法）⇒ 预检返回空；在"改 bed"与"重算"之间，另一条路径插入 B=`BEDTIME +60`（旧作息下 23:00 合法，新 `bed=23:30` 下 00:30 非法）。
 规则：判定发生在 resync 事务内、写 B 的那一刻（§3.5），不是预检里 ⇒ B **不可能**被漏判；冲突使整批（含 A 的合法重算）回滚并抛 `RoutineResyncConflictException`；作息已保存且不回滚；用户看到具名对话框（第二张表）与横幅。
@@ -926,3 +926,22 @@ fun Medication.materializedFor(
 2. **本轮的 R-7b 设计只覆盖"自动核对 → 恢复"这一个入口**：`CorrectMedicationStatusEventUseCase`（事件更正）本来就逐药 reconcile（`:92`），不动；`SetMedicationStatusUseCase`（交互）本来就逐 `EventRecorded` reconcile（`:212-217`），不动。三者现在**同构**：写完之后、逐药、同一个 `ReconcileRemindersUseCase.medication`。
 3. **实现顺序建议（每一步都能独立编译并通过自己的 E 段测试）**：§5.0.1 物化点 → §3.5 事务内判定 → §5.5 导入 → §3.9 恢复（含 M1 的 1/0 条） → §3.11 自动核对的反向触发。§3.11 必须在 §3.9 之后落地（它的"排错时刻"论证以 §3.9 会改钟点为前提，§9 ⑨）；先把 `AndroidReminderReconciler.pausedNow`（`:56`）与自动核对改成**注入 `Clock`**，否则 E14 的可控时钟断言写不出来。
 4. **未跑测试**：本文件仍是 docs-only；E14 / §8 第 26–29 条 / I9 / status-spec §9.9 都只是**规格**，实现轮才可执行。
+
+## M2 勘误（仅文字/示例，规则不变）
+
+状态：**勘误，非第 5 稿**。冻结基线仍是 `2932aa3`（第 4 轮稿），上文正文与全部审计记录（§9 一致性检查、§10 风险清单与「本轮提交范围与回写状态」）**逐字保留**，不重写历史。本节只登记三处**已确认的文本/示例自相矛盾**的修正：**功能规则一处未变**，**E 段测试的意图一处未变**。
+
+| # | 位置 | 矛盾 | 修正 | 规则是否变 |
+|---|---|---|---|---|
+| ① | §2.3 末条测试要点 | 称 `AFTER_BREAKFAST` 在 `breakfast = 00:10` 下「同样被拒」，与 E10 ③（单时段 `AFTER_BREAKFAST +15 == Allowed`，基线 `25 → 40`）以及 §2.3 自己的公式（只有 `baseUnwrapped ∉ 0..1439` 才判 `WRAPPED_ANCHOR`）矛盾；括号里的算术也不成立——「+15 基底 25 ⇒ 00:25」把基线（25 = 00:25）当成了「+15 之后」的结果，实际 `25 + 15 = 40`（00:40） | 改为：被拒的**只有**回绕的那个锚点（`BEFORE_BREAKFAST`）；`AFTER_BREAKFAST` 单时段 `+15 ⇒ 00:40` 是 `Allowed`，不得被连带误杀。「数值落回区间也必须拒」的举证责任回到 `BEFORE_BREAKFAST` 的 `-15`（算出 23:40、数值合法但语义跨日 ⇒ 必须 `Rejected`） | 否 |
+| ② | §2.2 判定顺序 | ⑤ `WRAPPED_ANCHOR` 排在 ④ `CROSS_MIDNIGHT` 之后，与 §2.3「`minutes != 0` 时**直接**判 `WRAPPED_ANCHOR`，**不看**数值和是否在区间内」以及 E10 ②（`-15` 若只做数值区间会「通过」）矛盾 | 回绕判定提到数值区间判定**之前**：④ `WRAPPED_ANCHOR`、⑤ `CROSS_MIDNIGHT`；①②③ 不变 | 否（同一谓词集合，只固定求值次序；两条 `Reason` 的判定条件文字未改） |
+| ③ | §6 E10 ⑤ 示例 | 「`bed = 00:30` … 而 `BEDTIME`（1430）`+15 = 1445`」自相矛盾：`bed = 00:30` 时 `BEDTIME` 基线是 `30`（00:30）、`+15 = 45`；`1430` 对应的是 `bed = 23:50` | 拆成两个作息：`bed = 00:30` ⇒ `EVENING` 基线 `-30` ⇒ `WRAPPED_ANCHOR`（保留原意：覆盖 `minusHours` 的回绕）；`bed = 23:50` ⇒ `BEDTIME` 基线 `1430`、`+15 = 1445` ⇒ `CROSS_MIDNIGHT`（保留原意：两条 `Reason` 各自可辨） | 否 |
+
+**不变项（显式声明）**
+
+1. **功能规则不变**：`validateTimeOffset` 的谓词集合、`Reason` 枚举、`resolveUnwrapped` 的整数公式、「0 偏移祖父条款」、`CROSS_MIDNIGHT` / `WRAPPED_ANCHOR` 各自的拒绝条件、多时段取交集、`requireAllowed` 的抛错与「不钳位」——全部与 `2932aa3` 相同。
+2. **测试意图不变**：E1–E14 每条断言的判定对象与期望值不变；①②③ 只让**文字**与这些断言一致（`AFTER_BREAKFAST +15 == Allowed`、回绕优先、`1430 + 15 = 1445`），没有新增、删除或放宽任何断言。
+3. **冻结基线与历史不变**：`2932aa3` 仍是第 4 轮冻结基线，`4170382` 的冻结提交保留；§9 / §10 的审计记录未改一字；本次以**追加一节 + 独立 M2 勘误提交**落盘，未 amend、未 rebase、未改写任何既有提交。
+4. **与 Phase 1 实现的一致性（据实核对）**：`core/model/.../TimeOffset.kt` 已按「回绕先于跨零点」求值（`WRAPPED_ANCHOR` 分支在 `CROSS_MIDNIGHT` 分支之前），其 E10 ⑤ 测试也已用 `bed = 23:50 ⇒ BEDTIME 1430, +15 = 1445`。因此本节是把**文本**校正到已实现且已测的语义，**不触发任何代码或测试改动**。
+
+审核日期：2026-10-28。触发来源：Phase 1 验收时对 §2.2 / §2.3 / E10 的交叉核对；三处同属**同一谓词集合的表述不一致**，不是设计分歧，故按勘误处理而非改稿。
