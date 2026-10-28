@@ -1,7 +1,9 @@
 package com.driezy.medlog.data.repository
 
+import com.driezy.medlog.capability.reminders.application.PlanRoutineResult
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationPlanRevision
+import com.driezy.medlog.data.model.RoutineSchedule
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -24,7 +26,17 @@ interface MedicationRepository {
     suspend fun getMedicationById(id: Long): Medication?
     suspend fun addMedication(medication: Medication): Long
     suspend fun updateMedication(medication: Medication)
-    suspend fun updateMedications(medications: List<Medication>)
+
+    /**
+     * 作息重算的**唯一**批量写入口（docs/medication-time-offset.md §3.5）：读快照、逐药 `gatedFor`、
+     * `updatePlan` 全在**同一个事务**里，一个 `changedAt` 全批共用。
+     *
+     * 任一药的偏移非法 ⇒ 收集齐后抛 `RoutineResyncConflictException`（抛出点在事务内 ⇒ 整批回滚、
+     * 零部分写入）；`PlanBoundaryNotAdvancedException` 与任何其它异常原样穿出，同样回滚。**不吞异常**。
+     *
+     * @param zeroOffsetFor 仅「将偏移归零并继续」这类用户显式动作传入；其余调用方传空集。
+     */
+    suspend fun planForRoutine(schedule: RoutineSchedule, zeroOffsetFor: Set<Long> = emptySet()): PlanRoutineResult
     suspend fun mergeMedicationsByName(medications: List<Medication>)
     suspend fun replaceActiveMedications(medications: List<Medication>)
     suspend fun deleteMedication(medication: Medication)

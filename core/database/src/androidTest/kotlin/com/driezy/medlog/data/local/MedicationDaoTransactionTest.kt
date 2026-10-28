@@ -1,6 +1,7 @@
 package com.driezy.medlog.data.local
 
 import androidx.room.Room
+import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.driezy.medlog.data.model.CareRecipient
@@ -93,6 +94,45 @@ class MedicationDaoTransactionTest {
             )
             assertTrue(dao.observePlanRevisions(recipientId).first().isEmpty())
             assertEquals("08:00", dao.getMedicationById(id)!!.reminderTimes)
+        } finally {
+            database.close()
+        }
+    }
+
+    /**
+     * B2：作息重算整批被拒（冲突收集后抛出）⇒ 已经写过的行、它们的修订、边界**一并回滚**。
+     *
+     * 这里用与 `RoutineResyncConflictException` 同形的事务内抛出（app 模块的类型 core 不可见），
+     * 钉的是同一件事：抛出点在同一事务里，Room 只可能整批提交或整批不落。
+     */
+    @Test
+    fun batchWritesAndRevisionsRollBackTogetherWhenTheResyncIsRejected() = runBlocking {
+        val database = inMemoryDatabase()
+        try {
+            val dao = database.medicationDao()
+            val recipientId = newRecipient(database, "爷爷")
+            val first = dao.insertMedication(medication(recipientId, "first"))
+            val second = dao.insertMedication(medication(recipientId, "second"))
+            val boundaryBefore = dao.getMedicationById(first)!!.planEffectiveFromMs
+
+            val rejected = runCatching {
+                database.withTransaction {
+                    dao.updatePlan(dao.getMedicationById(first)!!.copy(reminderTimes = "09:15"), 1000)
+                    dao.updatePlan(dao.getMedicationById(second)!!.copy(reminderTimes = "19:15"), 1000)
+                    // 冲突收集完毕后的抛出点（§3.5）：仍在事务内 ⇒ 上面两次写必须一起消失
+                    throw IllegalStateException("routine resync rejected the whole batch")
+                }
+            }
+
+            assertTrue(rejected.isFailure)
+            assertEquals("08:00", dao.getMedicationById(first)!!.reminderTimes)
+            assertEquals("08:00", dao.getMedicationById(second)!!.reminderTimes)
+            assertEquals(boundaryBefore, dao.getMedicationById(first)!!.planEffectiveFromMs)
+            assertEquals(boundaryBefore, dao.getMedicationById(second)!!.planEffectiveFromMs)
+            assertTrue(
+                "整批回滚：一条修订都不许留下",
+                dao.observePlanRevisions(recipientId).first().isEmpty(),
+            )
         } finally {
             database.close()
         }

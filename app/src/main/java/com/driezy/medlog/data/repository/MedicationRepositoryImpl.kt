@@ -1,9 +1,12 @@
 package com.driezy.medlog.data.repository
 
+import com.driezy.medlog.capability.reminders.application.PlanRoutineResult
+import com.driezy.medlog.capability.reminders.application.planRoutineBatch
 import com.driezy.medlog.data.local.MedicationDao
 import com.driezy.medlog.data.local.TransactionRunner
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationPlanRevision
+import com.driezy.medlog.data.model.RoutineSchedule
 import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -81,10 +84,26 @@ class MedicationRepositoryImpl @Inject constructor(
         medicationDao.updatePlan(medication.stamped(), clock.millis())
     }
 
-    override suspend fun updateMedications(medications: List<Medication>) = transactions.withTransaction {
-        val changedAt = clock.millis()
-        medications.forEach { medicationDao.updatePlan(it.stamped(), changedAt) }
-    }
+    /**
+     * 作息重算的唯一批量入口：快照、逐药物化 + 判定、`updatePlan` 全在**同一个事务**里，
+     * `changedAt` 只取一次 ⇒ N 味药同一个边界、N 条修订，或一行不写（§3.5）。
+     *
+     * 这里没有 `runCatching`：冲突由 [planRoutineBatch] 收集后整批抛出，其它异常原样穿出，
+     * 让 Room 回滚整个批次并把失败交给调用方（设置页 / B3 的启动重算）。
+     */
+    override suspend fun planForRoutine(schedule: RoutineSchedule, zeroOffsetFor: Set<Long>): PlanRoutineResult =
+        transactions.withTransaction {
+            val recipientId = activeRecipient.current()
+            val snapshot = if (recipientId == ActiveRecipientStore.NO_RECIPIENT) {
+                emptyList()
+            } else {
+                medicationDao.getAllMedicationsOnce(recipientId)
+            }
+            val changedAt = clock.millis()
+            planRoutineBatch(snapshot, schedule, changedAt, zeroOffsetFor) { materialized ->
+                medicationDao.updatePlan(materialized, changedAt)
+            }
+        }
 
     override suspend fun mergeMedicationsByName(medications: List<Medication>) =
         medicationDao.mergeMedicationsByName(requireRecipientId(), medications)

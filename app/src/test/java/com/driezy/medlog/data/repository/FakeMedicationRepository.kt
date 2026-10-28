@@ -1,7 +1,11 @@
 package com.driezy.medlog.data.repository
 
+import com.driezy.medlog.capability.reminders.application.PlanRoutineResult
+import com.driezy.medlog.capability.reminders.application.planRoutineBatch
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationPlanRevision
+import com.driezy.medlog.data.model.PlanWriteResult
+import com.driezy.medlog.data.model.RoutineSchedule
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -14,6 +18,9 @@ class FakeMedicationRepository : MedicationRepository {
 
     private val medicationsState = MutableStateFlow<List<Medication>>(emptyList())
     private var nextId = 1L
+
+    /** 假实现里的批次边界：真实仓库取一次 `clock.millis()`，这里固定 0（无修订链）。 */
+    var changedAtMs: Long = 0L
 
     override fun getActiveMedications(): Flow<List<Medication>> =
         medicationsState.map { list -> list.filter { !it.isArchived } }
@@ -53,10 +60,21 @@ class FakeMedicationRepository : MedicationRepository {
         }
     }
 
-    override suspend fun updateMedications(medications: List<Medication>) {
-        val replacements = medications.associateBy(Medication::id)
-        medicationsState.value = medicationsState.value.map { replacements[it.id] ?: it }
-    }
+    /**
+     * 内存版作息重算：**复用生产侧的同一个 [planRoutineBatch]**，所以"哪些药要改/是否被拒/
+     * 一次一个 `changedAt`"的判定与真实仓库逐字一致；只有事务与修订链是假的（边界规则由
+     * core/database 的 `MedicationPlanBoundaryTest` / `MedicationDaoTransactionTest` 钉住）。
+     */
+    override suspend fun planForRoutine(schedule: RoutineSchedule, zeroOffsetFor: Set<Long>): PlanRoutineResult =
+        planRoutineBatch(
+            snapshot = medicationsState.value.filter { !it.isArchived },
+            schedule = schedule,
+            changedAt = changedAtMs,
+            zeroOffsetFor = zeroOffsetFor,
+        ) { materialized ->
+            updateMedication(materialized)
+            PlanWriteResult.Advanced
+        }
 
     override suspend fun mergeMedicationsByName(medications: List<Medication>) {
         val current = medicationsState.value
