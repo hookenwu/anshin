@@ -70,10 +70,28 @@ tests), (d) B4's spec-diff is empty, (e) `git status --short` is clean.
 
 ---
 
+## 1A. 决策定稿（八项）· 2026-10-29
+
+PLAN §11.1 的定稿表在本文件里的落点。**本节优先于各批次的默认写法**；两者不一致时按本节改。八项决策都
+不修改两份冻结规格，核对结论（含两处需要勘误的条款）见 PLAN §11.2。
+
+| # | 定稿 | 影响批次 |
+|---|---|---|
+| Q1 | 正确性优先：B1–B10 全部落地后才做 B11/B12 | B1 的交付切片、B11、B12 |
+| Q2 | 二维码导入拆两批，B8 / B9 各自一个 PASS，不合并 | B8、B9 |
+| Q3 | 启动重算不阻塞启动；保留整批原子性；失败可观测、可重试 | B3 |
+| Q4 | 整库恢复：原样恢复，再校验收敛 | B12 |
+| Q5 | 保存期被数据层拒绝用专用文案，不复用通用"保存失败" | B4、B11 |
+| Q6 | 归档/暂停药参与预检，状态在提示中显示，永不静默排除 | B10、B11 |
+| Q7 | 不扩展恢复引擎 | B12 |
+| Q8 | 预检范围包含归档药 | B10 |
+
+---
+
 ## 2. Dependency graph
 
 ```
-B1  primitives (materializedFor override, storedTimesEqual, gatedFor, exception types)
+B1  primitives (materializedFor override + gatedFor; storedTimesEqual / OffsetConflict land in B2)
 │
 ├──> B2  resync through the single point (planRoutineBatch + planForRoutine) ──> B3  startup convergence ──> B12 restore policy
 │     │
@@ -111,12 +129,18 @@ Consequence: B1–B10 can be reverted individually without a data fix-up.
 
 ### B1 — materialization primitives (no production caller yet)
 
+**交付切片（Q1，2026-10-29）** 本批已分两步走，第一步落地于 `impl/offset-b1` @ `809f08f`：
+`gatedFor(schedule, offsetOverride)` + `materializedFor(schedule, offsetOverride)` 这一对（gate + 单点物化，
+同文件成对），21 条 JVM 测试（含负向对照：把 gate 换成裸的 `materializedFor` 调用后有 5 条转红）。
+`storedTimesEqual` 与 `OffsetConflict` **没有独立调用方**（前者是 B2 的"未变则跳过"比较，后者是 B2/B10 的
+报错面），随 B2 同一提交落地——提前加只是一段没人执行的代码，与本批"wiring nothing"的验收相冲突。
+
 **Files**
 
 - `app/src/main/java/com/driezy/medlog/data/model/MedicationScheduleMapper.kt`
 - `app/src/test/java/com/driezy/medlog/data/model/MedicationMaterializationTest.kt`
 - new `app/src/main/java/com/driezy/medlog/data/model/OffsetConflicts.kt` (`OffsetConflict`,
-  `IllegalTimeOffsetException.toConflict(medication)`)
+  `IllegalTimeOffsetException.toConflict(medication)`) **（随 B2，见交付切片）**
 
 **Changes**
 
@@ -126,12 +150,12 @@ Consequence: B1–B10 can be reverted individually without a data fix-up.
    is not persisted and the next pass conflicts again).
 2. `storedTimesEqual(other)`: parse/normalise both `reminderTimes` (split, trim, `LocalTime.parse`,
    `distinct`, `sorted`) and compare with `reminderHour`/`reminderMinute`. Semantics identical to
-   `ResyncRemindersUseCase.kt:57,65-67` today, but callable on the **materialized** row.
-3. `gatedFor(schedule, override: Int? = null)` as in PLAN §4.3 — the write-entry gate, delegates to
+   `ResyncRemindersUseCase.kt:57,65-67` today, but callable on the **materialized** row. **（随 B2）**
+3. `gatedFor(schedule, offsetOverride: Int? = null)` as in PLAN §4.3 — the write-entry gate, delegates to
    `materializedFor` for applicable rows, and is the **only** place that rejects a non-zero offset on
    PRN / interval / exact-time rows.
 4. `OffsetConflict(id, name, anchor, offsetMinutes, base, resolvedMinuteOfDay, reason)` +
-   `toConflict` mapping from `TimeOffsetCheck.Rejected`.
+   `toConflict` mapping from `TimeOffsetCheck.Rejected`. **（随 B2）**
 
 **Invariants** INV-1 (unchanged), INV-6; `offsetOverride` is inert when `null`; `materializedFor` keeps
 its early returns (Phase 1 contract, pinned by the existing test).
@@ -147,15 +171,15 @@ nothing, so there is nothing to roll back.
   `offsetMinutes == 0`.
 - `materializedFor` with `offsetOverride = null` on the same row ⇒ unchanged Phase 1 behaviour.
 - `storedTimesEqual`: reordered/duplicated stored string ("08:30,08:15,08:30") equals ("08:15,08:30");
-  differing `reminderHour` ⇒ false.
+  differing `reminderHour` ⇒ false. **（随 B2：本批切片不含它）**
 - `gatedFor`: exact +15 ⇒ `IllegalTimeOffsetException(NOT_APPLICABLE)`; PRN +15; interval +15;
   anchored +15 on 08:00 ⇒ 08:15 and `offsetMinutes == 15`; anchored +0 ⇒ identical row.
-- `OffsetConflict` carries anchor/base/resulting minute for a `CROSS_MIDNIGHT` rejection.
+- `OffsetConflict` carries anchor/base/resulting minute for a `CROSS_MIDNIGHT` rejection. **（随 B2）**
 
 **Acceptance**
 
 ```sh
-git checkout -b impl/offset-phase2-B1 79b2a68   # or continue on the phase-2 impl branch
+git checkout -b impl/offset-b1 79b2a68            # 已按此落地（809f08f）
 timeout 1200 ~/agw.sh :app:testDebugUnitTest --tests '*MedicationMaterializationTest*' \
                                              --tests '*TimeOffsetArithmeticLocalityTest*'
 timeout 600  ~/agw.sh :core:model:test --tests '*TimeOffset*'
@@ -194,6 +218,9 @@ timeout 600  ~/agw.sh :core:model:test --tests '*TimeOffset*'
    spec §3.3 item 2). Do **not** add a second batch entry point.
 5. `MedicationDao.updateMedications` does not exist in this tree (already removed in Phase 1) — verify,
    do not re-add.
+6. 承接 B1 的剩余两件（Q1 的交付切片）：`storedTimesEqual(other)`（第 1 条的偏移感知跳过）与
+   `OffsetConflict` + `IllegalTimeOffsetException.toConflict(med)`（第 1 条的收集与报错面）。它们在
+   本批第一次有调用方，所以测试也随本批，不提前放在 B1。
 
 **Invariants** R1–R7 (PLAN §4.3); INV-1/2/5/6; I8 (batch atomicity) via the DAO test.
 
@@ -253,6 +280,13 @@ timeout 1200 ~/agw.sh :app:testDebugUnitTest --tests '*PlanRoutineBatchTest*' --
    application-scope launch of the use case. Ordering is safe either way because the resync performs its
    own `all(ROUTINE_CHANGED)` after commit; the enqueue is the net for a failed resync.
 
+**决策（Q3）** **不阻塞启动**：`onCreate` 只 `applicationScope.launch(Dispatchers.IO) { converge() }`，禁止
+`runBlocking` / `await` / `join`；`converge()` 内部 catch 两种拒绝并记录冲突清单（§3.6 的唯一例外）。
+**整批原子性不变**：一次冲突 ⇒ 该成员本次零写，不是"跳过这一味"；其余药等下一次启动或下一次 resync。
+可观测 = 日志 + §5.6 派生横幅（横幅不依赖本次重算是否跑过）；可重试 = 每次启动、每次 resync 各自重跑。
+验收加两条：`onCreate` 同步返回（用 fake 挂起不完成的 `planForRoutine` 证明启动不被等待），以及冲突时
+零写 + 日志含药名/时段/偏移/结果钟点。
+
 **Invariants** R5/I N-6 (idempotent: 0 writes when the stored times already equal the materialization);
 no new persisted state (no dirty flag, no migration).
 
@@ -301,6 +335,11 @@ existing tests (run `--tests '*Reminder*'` too).
 4. Read the routine **before** entering the VM's `withTransaction` if measurement shows the DataStore
    read holds the transaction too long; otherwise follow §3.8 and read inside. Record which was chosen in
    the commit message.
+
+**决策（Q5）** 保存期被数据层拒绝（`IllegalTimeOffsetException`，只可能来自 W4′ 的过期草稿）用**专用文案**，
+不复用 `medication_save_failed`：通用文案暗示"再点一次就好"，而这里要用户改偏移。新增
+`editor_save_offset_rejected_*`（四语言，带 `%1$s` 时段 / `%2$s` 偏移 / `%3$s` 结果钟点），由
+`TimeOffsetCheck.Rejected` 直接映射；VM 保留草稿、`isSaving=false`、不自动重试。
 
 **Invariants** INV-2/4/5 for both editor paths; INV-1 (the repository adds no arithmetic); the editor
 still saves exactly the user's plan for exact-time rows.
@@ -512,6 +551,9 @@ negative assertion (it must fail if someone calls reconcile before the write).
 4. Add a KDoc/inline contract on `MedicationDao.replaceActiveMedications` stating that callers must have
    validated before invoking it (the DAO's `@Transaction` rollback is a second layer, not the first).
 
+**决策（Q2）** 本批与 B9 **分开发布**：B8 只做"校验先于删除"，payload **不加** `off`，PASS 独立成立。
+把 `off` 解码并进本批 = 把一次安全修复和一次行为变更（R-16：老码也会被 retime）捆在一起，回滚面变大。
+
 **Invariants** "no `off` value reaches storage unvalidated"; "validation precedes the delete"; REPLACE's
 existing rows survive a rejected import byte-identically.
 
@@ -556,6 +598,9 @@ timeout 1200 ~/agw.sh :app:testDebugUnitTest --tests '*ImportPlanUseCaseTest*' -
 3. `retimed` = entries where the materialized string differs from the payload `rt`; the UI appends the
    list after success, silently omitting an empty list.
 
+**决策（Q2）** 与 B8 分开：`off` 的解码、写入与 retimed 报告都在本批，B8 的 `never()` 顺序证明保留为回归；
+不得把两批压成一个提交或一个 PASS。
+
 **Invariants** INV-2 now holds for imported rows (E12 ⑦); the payload clock never becomes a stored value
 for applicable rows.
 
@@ -598,6 +643,12 @@ on the report).
 3. "Reset offsets and continue" calls `planForRoutine(schedule, zeroOffsetFor = conflictIds)` — one
    transaction, one `changedAt` (requires B2's parameter).
 
+**决策（Q6/Q8）** 预检范围 = `getAllMedicationsFor`（**含归档/暂停**），与写侧 `planForRoutine`
+（`isArchived = 0`）**故意不同**：预检要"早阻断"，写侧只"重算在册药"。归档/暂停药**参与**
+`legalNow ∧ legalAfter` 判定，且**状态在对话框中显示**（"已归档" / "已暂停"），**永不静默排除**。
+实现上让 UI 按 `OffsetConflict.id` 与预检快照 join 出状态，**不要**给 `OffsetConflict` 加字段——那会改
+冻结规格 §3.7 的七字段契约；确需加字段必须先做规格勘误（PLAN §11.2）。
+
 **Invariants** no write before step 4; blocked change leaves DataStore and Room untouched; the
 "already-illegal" med never blocks (deadlock avoidance) but lights the banner warning.
 
@@ -634,6 +685,9 @@ DataStore assertion.
   `_conflict_banner`
 - tests: `AddMedicationViewModelTest`, list VM test, `MedicationMaterializationTest` (preview == stored)
 
+**决策（Q1）** 本批**不得**在 B1–B10 全部 PASS 之前开始：它是唯一让真实数据出现非 0 偏移的入口，先于收敛
+路径发布等于给用户一个"能写入、还不能修"的开关。开工前在 commit message 里写清 B2–B10 的 PASS 依据。
+
 **Changes**
 
 1. Stepper: all 9 slots rendered; a slot whose `validateTimeOffset` is `Rejected` is `enabled = false`
@@ -643,6 +697,11 @@ DataStore assertion.
 3. Banner: pure derivation, no persistence, no "reset" action (the editor is the only place to change an
    offset).
 4. Disclaimer always visible under the stepper and repeated once on the detail screen.
+
+**决策（Q5/Q6）** Q5：保存被数据层拒绝的**专用文案**在本批落地（`editor_save_offset_rejected_*`，四语言），
+与 `time_offset_illegal_stored`（存储值本身非法）分开——前者是"刚被拒的保存"，后者是"库里已有的非法值"。
+Q6：冲突对话框每行补状态（"已归档" / "已暂停"），只读展示，不新增动作；状态来自 `OffsetConflict.id` 与
+预检快照的 join，不在冻结的 `OffsetConflict` 上新增字段。
 
 **Invariants** INV-5 (the UI cannot offer a value the data layer would clamp — it does not clamp at all);
 no new navigation surface; copy never implies "you may take the medicine later".
@@ -681,6 +740,10 @@ the reason string, not just the absence of a crash.
 **Changes** no behaviour change. The policy is: a restored file is **trusted as-is**; it is not validated
 before the copy; convergence is the B3 startup recompute after the mandatory process restart, visibility
 is the B11 banner, and repair is the editor (never an automatic reset).
+
+**决策（Q4/Q7）** 恢复**原样信任**：不预检、不拒收、不改备份文件，也不给恢复流程加选项；收敛 = B3，
+可见性 = B11 横幅，修复 = 编辑器。**不扩展恢复引擎**（没有预拷贝扫描、没有只读校验库、没有"仍然恢复"
+之外的新路径）。
 
 **Invariants** the restore path never claims INV-2; nothing in the offset feature runs during restore.
 

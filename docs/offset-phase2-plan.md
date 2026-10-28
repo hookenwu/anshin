@@ -1,6 +1,8 @@
 # Phase 2 — per-medication time offset: implementation plan (PLAN)
 
-Status: **planning only**. No business code in this commit; no frozen spec touched; nothing merged.
+Status: **planning + batch B1 implemented** (2026-10-29). Q1–Q8 are finalised in §11.1 and checked against
+both frozen specs in §11.2; batch B1 (the gate + single materialization pair) is on `impl/offset-b1` @ `809f08f`.
+No business code beyond B1; no frozen spec touched; nothing merged.
 Companion document: [`offset-phase2-tasks.md`](offset-phase2-tasks.md) (batches, graph, commands, PASS conditions).
 
 Base: `impl/time-offset-phase1` @ `79b2a68` (Phase 1 code + both frozen specs present).
@@ -120,7 +122,8 @@ interval row survives `materializedFor` untouched. Every P1 entry therefore need
 - **#9 is not gated and cannot be**: it copies a foreign SQLite file over `medlog.db`
   (`BackupRestoreUseCase.kt:91-100`). No row-level code in the offset feature runs. The `offsetMinutes`
   values that arrive were validated against *another* device's routine (or none). It is therefore a
-  **convergence point**, not a write entry — see §6 and Q4.
+  **convergence point**, not a write entry — see §6 and Q4. **定稿（Q4/Q7）**：原样恢复 + 校验收敛，恢复
+  路径不预检、不改备份文件，恢复引擎不扩展。
 - **#11 goes through `updatePlan` and still needs no gate**: `setArchived(id, true)` copies only
   `isArchived`; `reminderTimes` is carried through untouched and `offsetMinutes` is re-written with its
   already-validated stored value. Gating here would reject nothing new and would make archive start
@@ -254,11 +257,14 @@ suspend operator fun invoke(schedule: RoutineSchedule) {
 `materializedFor` deliberately is not:
 
 ```kotlin
-fun Medication.gatedFor(schedule: RoutineSchedule, override: Int? = null): Medication {
+// 已落地（impl/offset-b1 @ 809f08f）——与下面三条说明逐字对应
+fun Medication.gatedFor(schedule: RoutineSchedule, offsetOverride: Int? = null): Medication {
     val anchors = TimePeriods.parse(timePeriod).mapNotNull { it.toAnchorOrNull() }
     val applicable = !isPRN && intervalHours <= 0 && anchors.isNotEmpty()
-    requireAllowed(validateTimeOffset(override ?: offsetMinutes, schedule, anchors, applicable))
-    return if (applicable) materializedFor(schedule, override) else this
+    val offset = offsetOverride ?: offsetMinutes
+    requireAllowed(validateTimeOffset(offset, schedule, anchors, applicable))
+    // 非适格行不物化；但"归零"这类覆盖仍要落到行上，否则库里留下永久非 0 的非法值
+    return if (applicable) materializedFor(schedule, offsetOverride) else copy(offsetMinutes = offset)
 }
 ```
 
@@ -267,6 +273,9 @@ fun Medication.gatedFor(schedule: RoutineSchedule, override: Int? = null): Medic
   `phase2-entry-gates.md` finding without touching `materializedFor`'s early returns, which the
   existing `MedicationMaterializationTest` pins).
 - `materializedFor` stays the only place that **adds** the offset ⇒ INV-1 holds.
+- **Q3 定稿落在本节的调用方**：§4.2 的 `planForRoutine` 仍是"收集后整批抛出"（`continue` 只用于收集，
+  不是"跳过这一味"）；启动重算（B3）复用它但**不等待**——`onCreate` 只发起 application-scope 协程，
+  `runBlocking`/`await` 都不允许，失败由用例内 catch 记日志（可观测）并在下次启动重跑（可重试）。
 
 ---
 
@@ -286,7 +295,7 @@ convergence.
 | **W4′** that insert lands *after* the resync transaction's first read (fixed read view) | routine = new; the inserted row keeps whatever its own writer computed — possibly "new routine + illegal offset" | derived banner (§5.6), survives restart | startup recompute + editor error state |
 | **W5** clock rollback ⇒ `PlanBoundaryNotAdvancedException` | routine = new; times = old (legal) | explicit save/resync failure message | stops when the clock passes the boundary (deliberate) |
 | **W6** (new, import) routine re-read between import validation and the DAO write | times materialized under the routine read at validation time | possibly "legal but stale" | next resync / startup recompute |
-| **W7** (new, restore) foreign DB copied in | times/offsets belong to another device or an older routine | banner counts illegal offsets | startup recompute + editor; see Q4 |
+| **W7** (new, restore) foreign DB copied in | times/offsets belong to another device or an older routine | banner counts illegal offsets | startup recompute + editor; **Q4 定稿：原样恢复，不预检、不拒收、不扩展恢复引擎** |
 | **W8** (new, editor) draft opened before a routine change, saved after | times materialized with **today's** routine (repository re-reads it) | correct by construction — this is why the gate lives at the repository, not in the ViewModel | — |
 
 Reverse order (Room first, DataStore second) is rejected for the same reason as the spec (§3.7): the
@@ -301,13 +310,13 @@ Rejected, never clamped, never silently dropped. Per entry:
 
 | Entry | Rejection type | Nothing written | User sees |
 |---|---|---|---|
-| editor save | `IllegalTimeOffsetException` | draft kept, `isSaving=false`, row unchanged | error state on the stepper; save blocked (UI also disables the slot) |
+| editor save | `IllegalTimeOffsetException` | draft kept, `isSaving=false`, row unchanged | **专用文案（Q5）** + stepper error state; save blocked (UI also disables the slot). 不复用 `medication_save_failed` |
 | resync | collected ⇒ `RoutineResyncConflictException` | **whole batch** rolled back; routine stays saved | `routine_resync_conflict_*` dialog (named med / anchor / offset / resulting time) + banner |
 | unarchive | `IllegalTimeOffsetException` from `materializedFor` | row stays `isArchived = true` | `unarchive_illegal_offset_title` + "reset offset and restore" |
 | resume | `ResumeBlockedByOffsetException` | status txn rolls back: no event, cache still paused, plan untouched | `resume_illegal_offset_body` (open the med, no in-dialog offset editing) |
 | auto-reconcile (resume direction) | `ResumeBlockedByOffsetException` | cache stays `true` ⇒ not scheduled | log + banner + editor; bounded deviation `isArchived != derived` in the "less scheduled" direction |
 | import | `ImportOffsetRejected(name, check)` | **whole package**, before the `REPLACE` delete | `import_rejected_offset` |
-| restore | n/a (no code path) | — | banner |
+| restore | n/a (no code path) | — | banner（**Q4 定稿：原样恢复 + 校验收敛；不扩展恢复引擎**） |
 | migration | n/a (`DEFAULT 0` is constructively legal) | — | — |
 
 Stored-illegal rows (W4′/restore/direct DB write) are **not repaired automatically**: `resync` refuses
@@ -421,18 +430,61 @@ layer, never `DatabaseSchema.NAME`.
 
 ---
 
-## 11. Decisions needed (do not invent scope — these are for the user)
+## 11. Decisions — the questions as asked, answered on 2026-10-29 (§11.1)
 
-| # | Question | Why it is a real decision | Recommendation |
-|---|---|---|---|
-| **Q1** | Batch order/priority: correctness-first (resync → editor gate → unarchive/resume → import → UI), or UI-visible-first (stepper + banner early so the feature is demoable)? | the correctness-first order has no user-visible change until B10; UI-first ships a UI that can create offsets before resync can preserve them | correctness-first (B1→B11 as listed); UI-first is only acceptable if B2 lands in the same release |
-| **Q2** | Does the QR payload change (`off` field + "retimed" report) ship **in the same batch** as the import validation-before-delete fix? | the validation fix is a safety fix that can ship alone; the payload change is a **behaviour change** (R-16: old codes now get retimed) with its own UX | split: B8a = validate-before-delete (no payload change, shippable alone), B8b = `off` + retimed report |
-| **Q3** | When a routine change conflicts, the batch rolls back — including for the **startup** recompute. One stored-illegal row (W4′/restore) therefore blocks convergence for *every other* med on that member, on every launch. Accept, or make the startup pass per-medication (skip + log)? | §3.6 says startup reuses the same write path; per-medication skipping there would be a second semantic (the batch-atomic rule of §3.5) — but the current form makes one bad row freeze the whole member | accept for Phase 2 (banner + editor are the fix path), revisit only if a real user hits it |
-| **Q4** | Whole-DB restore: **(a)** trust the restored file as-is and converge (startup recompute + banner), or **(b)** validate the backup before copying (open read-only, scan `offsetMinutes`, refuse the restore with a named error)? | the spec is silent on restore; (b) needs the current routine + a cross-recipient scan and can refuse a restore the user explicitly asked for; (a) can leave illegal rows visible until edited | (a), documented, with the banner as the visibility guarantee; (b) only if restore must be provably invariant-preserving |
-| **Q5** | Editor save-time rejection copy: when the data layer throws `IllegalTimeOffsetException` on save (reachable only via a stale draft after W4′), do we add a new string, or reuse `medication_save_failed` + the existing `time_offset_illegal_stored` hint? | §7 of the spec has no "save was rejected by the data layer" string; adding one is a copy decision (4 languages) | reuse `medication_save_failed` and put the reason from `TimeOffsetCheck.Rejected` in the error state of the stepper; no new key |
-| **Q6** | Should a routine change be blocked (as §3.7 requires) by a conflict on a med that is **archived/paused** and therefore not in the resync set at all? | blocking is correct for "unarchive later would be refused", but it is a deadlock surface: a long-archived med with an offset can veto every future bedtime edit until the user edits *that* med | follow §3.7 (block, the scan includes archived) **but** the dialog must say the med is archived/paused; if the user wants otherwise, the alternative is "block only active + warn for archived" |
-| **Q7** | Does Phase 2 cover the "restore" batch at all, or is it docs-only (a documented decision + the existing startup convergence)? | it is the one entry that can never be gated; a code change there would be a new feature (pre-copy scanning) | docs-only + one unit test that `gatedFor` still classifies a hand-written illegal row (that is what the banner reads) |
-| **Q8** | `getAllMedicationsFor` (the pre-check) also returns **archived** rows; `planForRoutine` only touches active ones. Confirm that the pre-check's scope stays "all, including archived" (spec §3.7) rather than "same set as the resync"? | it is the difference between "block early" and "let the resync roll back", and it directly changes how often users get blocked | keep "all, including archived" (spec) — but see Q6 |
+| # | Question | Why it is a real decision | Recommendation | Final (2026-10-29) |
+|---|---|---|---|---|
+| **Q1** | Batch order/priority: correctness-first (resync → editor gate → unarchive/resume → import → UI), or UI-visible-first (stepper + banner early so the feature is demoable)? | the correctness-first order has no user-visible change until B10; UI-first ships a UI that can create offsets before resync can preserve them | correctness-first (B1→B11 as listed); UI-first is only acceptable if B2 lands in the same release | **as recommended** (§11.1) |
+| **Q2** | Does the QR payload change (`off` field + "retimed" report) ship **in the same batch** as the import validation-before-delete fix? | the validation fix is a safety fix that can ship alone; the payload change is a **behaviour change** (R-16: old codes now get retimed) with its own UX | split: B8a = validate-before-delete (no payload change, shippable alone), B8b = `off` + retimed report | **split, renamed B8 / B9** — two PASSes (§11.1) |
+| **Q3** | When a routine change conflicts, the batch rolls back — including for the **startup** recompute. One stored-illegal row (W4′/restore) therefore blocks convergence for *every other* med on that member, on every launch. Accept, or make the startup pass per-medication (skip + log)? | §3.6 says startup reuses the same write path; per-medication skipping there would be a second semantic (the batch-atomic rule of §3.5) — but the current form makes one bad row freeze the whole member | accept for Phase 2 (banner + editor are the fix path), revisit only if a real user hits it | **atomicity kept, launch not awaited** (§11.1 Q3) |
+| **Q4** | Whole-DB restore: **(a)** trust the restored file as-is and converge (startup recompute + banner), or **(b)** validate the backup before copying (open read-only, scan `offsetMinutes`, refuse the restore with a named error)? | the spec is silent on restore; (b) needs the current routine + a cross-recipient scan and can refuse a restore the user explicitly asked for; (a) can leave illegal rows visible until edited | (a), documented, with the banner as the visibility guarantee; (b) only if restore must be provably invariant-preserving | **as recommended, no engine extension** (§11.1 Q4/Q7) |
+| **Q5** | Editor save-time rejection copy: when the data layer throws `IllegalTimeOffsetException` on save (reachable only via a stale draft after W4′), do we add a new string, or reuse `medication_save_failed` + the existing `time_offset_illegal_stored` hint? | §7 of the spec has no "save was rejected by the data layer" string; adding one is a copy decision (4 languages) | reuse `medication_save_failed` and put the reason from `TimeOffsetCheck.Rejected` in the error state of the stepper; no new key | **overruled — dedicated key** (§11.1 Q5); the reuse option would read as a transient failure |
+| **Q6** | Should a routine change be blocked (as §3.7 requires) by a conflict on a med that is **archived/paused** and therefore not in the resync set at all? | blocking is correct for "unarchive later would be refused", but it is a deadlock surface: a long-archived med with an offset can veto every future bedtime edit until the user edits *that* med | follow §3.7 (block, the scan includes archived) **but** the dialog must say the med is archived/paused; if the user wants otherwise, the alternative is "block only active + warn for archived" | **as recommended, status shown in the prompt** (§11.1 Q6) |
+| **Q7** | Does Phase 2 cover the "restore" batch at all, or is it docs-only (a documented decision + the existing startup convergence)? | it is the one entry that can never be gated; a code change there would be a new feature (pre-copy scanning) | docs-only + one unit test that `gatedFor` still classifies a hand-written illegal row (that is what the banner reads) | **as recommended, engine not extended** (§11.1 Q7) |
+| **Q8** | `getAllMedicationsFor` (the pre-check) also returns **archived** rows; `planForRoutine` only touches active ones. Confirm that the pre-check's scope stays "all, including archived" (spec §3.7) rather than "same set as the resync"? | it is the difference between "block early" and "let the resync roll back", and it directly changes how often users get blocked | keep "all, including archived" (spec) — but see Q6 | **as recommended** (§11.1 Q8) |
+
+### 11.1 决策定稿（八项）· 2026-10-29
+
+八项决策已由用户批准，§11 的 Q1–Q8 自此**不再是开放问题**。本节的「定稿」列是唯一有效答案；实现若与「落到」
+不一致，以本节为准。八项决策都**不修改**两份冻结规格（核对见 §11.2）。
+
+| # | 定稿（2026-10-29） | 落到 |
+|---|---|---|
+| **Q1** | **正确性优先**：B1–B10 全部落地后才做 B11（编辑器步进器 + 横幅）/ B12（恢复策略文档）。理由：B11 是唯一能让真实数据出现非 0 偏移的入口，先有它等于先有"能写入、还不能收敛"的入口。 | TASKS §2 的推荐顺序与 B11/B12 的 `blocked by`；B1 的交付切片 |
+| **Q2** | 二维码导入**拆两批**：B8 = 校验先于删除（payload 不变，可单独发布）；B9 = `off` 字段 + retimed 报告。两批各自一个 PASS，**不得合并**。 | TASKS B8/B9 的标题与 PASS |
+| **Q3** | 启动重算**不得阻塞启动**：`onCreate` 只**发起**、不等待（无 `runBlocking`、无 `await`）；失败必须**可观测**（日志带冲突清单 + §5.6 派生横幅）且**可重试**（每次启动重跑、下一次 resync 重跑）。**保留 §3.5 的整批原子性**，不改写成"逐药跳过"：跳过会让一部分药前进、一部分停在旧钟点，且没有任何人知道——那正是 R13 要关掉的静默不一致。 | §4.2（整批抛出）、§5 W1/W4、TASKS B3 |
+| **Q4** | 整库恢复：**原样恢复，再校验收敛**。恢复路径不预检、不拒收、不改备份文件；收敛点是 B3 启动重算，可见性是 B11 横幅，修复手段是编辑器（绝不自动归零）。 | §2.1 #9、§5 W7、§6 restore 行、TASKS B12 |
+| **Q5** | 保存期被数据层拒绝（`IllegalTimeOffsetException`）使用**专用错误文案**，不复用通用的"保存失败"。理由：通用文案会让用户以为是瞬时故障而反复重试；这里要传达的是"这个偏移在当前作息下不可用，去改偏移"。 | §6 editor 行、TASKS B4/B11（新增 1 个 key × 4 语言） |
+| **Q6** | 归档 / 暂停的药**参与**冲突预检（按 §3.7 的适格条件，`getAllMedicationsFor` 已含归档/暂停），且其状态**在提示中显示**，**永不静默排除**。目的是让"这味药早就归档了，为什么挡住我"在对话框里自解释。 | TASKS B10 的预检与对话框、B11 的文案 |
+| **Q7** | **不扩展**恢复引擎：不做预拷贝扫描、不做只读校验库、不给恢复加选项。B12 保持 docs-only + 一条 `gatedFor` 分类测试。 | §10 非目标、TASKS B12 |
+| **Q8** | 预检范围**包含归档药**（`getAllMedicationsFor`），与写侧 `planForRoutine` 的范围（`isArchived = 0`）**故意不同**：预检要"早阻断"，写侧只"重算在册药"。 | TASKS B10 第 1 条 |
+
+### 11.2 一致性核对：八项决策 vs 冻结规格（只读）
+
+方法：逐项把定稿映射到 `docs/medication-time-offset.md` 的条款原文，记录「一致 / 规格沉默 / 文本冲突」。
+核对过程**没有修改任何冻结文件**：
+
+```sh
+git diff --stat 79b2a68 -- docs/medication-time-offset.md docs/medication-status-spec.md   # 空
+```
+
+| 决策 | 冻结条款 | 结论 |
+|---|---|---|
+| Q1 | §9 实现顺序建议、§3.3 D2 清单 | **一致**（顺序只决定落地先后，不改任何规则） |
+| Q2 | §5.5（导入校验 + 按接收方作息重算）、§8 E12 | **一致**（规格未要求同一提交；B8 不改变 payload 行为） |
+| Q3 | §3.5「拒绝是整批不落而不是跳过这一味」 | **一致**：定稿明确保留整批原子性，不引入逐药跳过这第二个语义 |
+| Q3 | §3.6 启动重算的最后一条 | **需一句勘误**：原文「它必须 catch 两种拒绝，否则每次启动都会崩在 `onCreate`」暗示重算异常会到达 `onCreate` 的调用点，即被等待；若照字面实现（`runBlocking`/`await`）就与「不得阻塞启动」直接冲突。定稿采用「发起不等待 + 用例内 catch」，规格的原子性与可见性要求都不变。**冻结文本未改**，勘误留给下一次规格修订 |
+| Q4 | §2.1 #9、§3.8/§3.9、§10 非目标 | **规格沉默**（restore 不在六个写点里，也没有恢复策略条款）⇒ 定稿不与其冲突 |
+| Q5 | §7 文案表（「本轮新增 8 个 key」+ 四语言缺一即未完成） | **文本冲突**：新增第 9 个 key 会让该处计数与清单过期。定稿优先（用户已批准），但 §7 需要一次勘误；在此之前 B11 落地时必须同步更新该计数，不能只加 key 不改文档 |
+| Q6 | §3.7「`meds = getAllMedicationsFor(recipient)` ← 含归档/暂停」 | 参与预检：**一致**。但「在提示中显示状态」在 §3.7 两张对话框表里**没有对应元素**，`OffsetConflict` 的七个字段里也没有状态 ⇒ 属于在冻结契约上追加展示层信息。**不改类型的做法**：UI 按 `id` 与预检快照 join 出状态；若要给 `OffsetConflict` 加字段，需先勘误 |
+| Q7 | §10 非目标、§5.0.1 的六个写点 | **一致**（restore 从未被列为写入口） |
+| Q8 | §3.7 预检范围 | **一致**（写侧 `planForRoutine` 仍 `isArchived = 0`，两个集合本就不同） |
+
+**八项之外的附带观察（不影响 B1，但会影响 B11，必须记下来）：**
+
+| 观察 | 条款 | 事实 |
+|---|---|---|
+| 回绕锚点的"同处方一并拒绝"没有实现 | §2.3「`AFTER_BREAKFAST`（+15 基底 25 ⇒ 00:25）同样被拒——防止'只要落在区间内就放行'的实现混过去」 | Phase 1 的 `validateTimeOffset` 只检查**该锚点自己**的未回绕基线是否越界；`breakfast = 00:10` 时 `AFTER_BREAKFAST` 的基线是 25，在 `0..1439` 内 ⇒ 返回 `Allowed`。所以 B11 若按 §2.3 把整条步进器置灰，数据层却会接受这味药的 `+15`（导入/调试写库可到达）。二者择一必须由一次规格勘误决定：或者把校验改成"同处方的任一锚点回绕即整药拒绝"，或者把 §2.3 那句话改掉。B1 **未改**这条规则（`gatedFor` 沿用同一校验函数），也不应在本阶段擅自扩大校验面 |
 
 Not a question, recorded for the reviewer: imported rows start at `planEffectiveFromMs = 0L`, so the
 first later edit writes a revision `[0, changedAt)`. `FuturePlanCalculator` clamps `lower` to
