@@ -1,6 +1,8 @@
-# 药品停用 / 恢复（状态事件 + 生效日期）—— SDD 规格（第 5 稿·§0.2 同步修订）
+# 药品停用 / 恢复（状态事件 + 生效日期）—— SDD 规格（第 7 稿 · 实施前对齐 · 已冻结）
 
-状态：**已冻结（第 6 稿）；实现按 §14 的 T1–T10 推进。** 第 5 稿把正文 / 迁移 / 测试 / 验收统一到 §0.2（§0.3）；第 6 稿只做一次**定向复核**：以真实代码裁决「`isArchived` 兼容缓存与权威状态事件不一致时，能否产生错误用药提醒」，并把**发送前派生校验**从 Phase 2 计划**提升为首期交付**（更正 N，见 §0.4、§7、§13、§14 T10、§16.20）。本稿**只改本文件、不改业务代码**；冻结即提交并推送（§19）。
+状态：**已冻结（第 7 稿 · 唯一一次授权修订 M1，§0.5）；实现按 §14 的 T1–T10 推进。**
+冻结基线：`2932aa368cf6b172778d0329dbcd0a0eed30dfdd`（2026-10-28，`spec/medication-time-offset` 第 7 稿；此后正文不再变更，实现偏差只能另开修订稿）。
+第 5 稿把正文 / 迁移 / 测试 / 验收统一到 §0.2（§0.3）；第 6 稿只做一次**定向复核**：以真实代码裁决「`isArchived` 兼容缓存与权威状态事件不一致时，能否产生错误用药提醒」，并把**发送前派生校验**从 Phase 2 计划**提升为首期交付**（更正 N，见 §0.4、§7、§13、§14 T10、§16.20）。本稿**只改本文件、不改业务代码**；冻结即提交并推送（§19）。第 7 稿在**用户授权**下只落一条修订 **M1**（恢复若确实改变提醒时间 ⇒ 恰 1 条计划修订；纯状态变更 ⇒ 0 条，§0.5），并把状态改为「已冻结」——**本稿已冻结**。
 范围：`我的药品`（`MyMedicationsScreen`）的**批量停用 / 批量恢复**，带**生效日期**与可选**原因/备注**；`medication_status_events` 状态事件表（**append-only、可更正**）；日期感知的计划投影 / 提醒 / 小组件 / 依从率；**两种事实分离**（系统自动核对 vs 用户主动核对）；迁移 **v25 → v26**。
 关联：`docs/medication-daily-flow.md`（今日打卡主流程、`FuturePlanCalculator`/`MedicationAdherenceCalculator` 契约）、`docs/care-tasks.md §11.2`（归档药不得进今日计划的来源与两次修复）、`docs/tracked-events-spec.md`（「纯新增迁移 + 双时间戳（发生 vs 记录）+ **发送前再校验**」的最近先例）。
 
@@ -30,6 +32,7 @@
 | 更正 M | 迁移前未知区间**不编造日期**、**不称暂停**（状态 = `UNKNOWN`）；统计按剂次排除且单列未知计数 | §5 R7、§6.3、§11 E20、§9.8 |
 | 更正 H | 历史/依从率**显示暂停区间**且明示**暂停日不计漏服**；真实剂量记录保持可见不动 | §6、§10、§16 |
 | 更正 N（第 6 稿） | **发送前派生校验提升为首期交付**：三类用药闹钟在真正弹通知前再读一次派生状态，非 `ACTIVE` 即抑制。缓存陈旧与 reconcile 漏跑都不能击穿它——它是缓存不一致的**唯一**兜底，故不能只停在 Phase 2 | §0.4、§1.3、§1.4、§2.A、§3 D7、§7、§11 E5、§13、§14 T10、§15、§16.20、§18 |
+| 修订 M1（第 7 稿，用户授权**唯一一条**） | **恢复若确实改变了提醒时间 ⇒ 恰 1 条计划修订；纯状态变更（钟点未变）⇒ 0 条**；状态事件与依从语义**不变** | §0.5、§1.4、§2.A.3、§2.B、§3 D3/D6、§9.9、§13、§15、§16.21、§18 行 31–32、§19 |
 
 ### 0.1 相对第 2 稿的实质变更（本轮）
 
@@ -76,6 +79,25 @@
 4. **首期「无未来生效日」的约束（D11）不变**；未来生效日仍属 Phase 2，其**发布闸门**仍是该守卫 + 其测试（§7）。
 
 **交接窗（提升前，首期）**：从停用生效（= 记录时刻，D11）到**下一次成功 reconcile**。可用的收口点 = 用户动作内即时 reconcile、持久重试（`WorkManagerReminderReconciliationQueue` 一次性 work，可被 Doze 推迟）、应用启动（`MedLogApplication.kt:27-29` 入队一次性 `ReminderReconciliationWorker` → `reconcileAll`）、`MedLogBootReceiver`（开机 / 改时 / 改时区 / 精确闹钟权限，`:23-29`）、以及 §8.1 新增的 15 分钟自动核对。**最坏情形**（用户动作 reconcile 崩溃 + 未重开 App + 后台 work 被 Doze 推迟）可跨数小时、直至下次启动或开机。**提升后，该窗口对「闹钟 / 通知」面归零**（变更后已上屏的旧通知仍由下一次 reconcile/prune 撤走，见 §7 残余）。
+
+### 0.5 第 7 稿：实施前对齐的**唯一**授权修订（M1）
+
+**授权范围（先划边界）**：用户只授权**一条**修订，故本稿对语义的改动**仅此一条**；其余改动只有三类：① 与它**直接矛盾**的措辞对齐（逐处列在 §19）、② 这条规则的测试（§9.9、§16.21）、③ 变更账本 / 一致性表（§18 行 31–32、§19）。**没有**第二条实质修订。
+
+**修订 M1（唯一实质修订）——恢复的修订条数**：
+
+> **恢复（resume）若确实改变了提醒时间 ⇒ 恰写 1 条 `MedicationPlanRevision`；纯状态变更（钟点未变）⇒ 写 0 条。**
+
+**为什么落在 `setArchivedCache(id, false)`**：它是 `isArchived` 从「暂停」回到「在服」的**唯一**翻转点（三个调用方：用户暂停/恢复 `SetMedicationStatusUseCase.kt:197`、自动核对纠偏 `ReconcileMedicationStatusUseCase.kt:41`、事件更正 `CorrectMedicationStatusEventUseCase.kt:86`），也是 `docs/medication-time-offset.md` §3.9 的物化点。钟点**确实变了** ⇒ 一次 `updatePlan` 在 `changedAt = clock.millis()` 处切一刀 ⇒ **恰 1 条**修订（旧段保留暂停前的钟点，新段是新钟点）；**没变** ⇒ 仍是今天那一行 `UPDATE medications SET isArchived = 0`（`MedicationRepositoryImpl.kt:100-108`）⇒ **0 条**。
+
+**这条修订明确不触碰的东西（逐项，可逐条核对）**：
+
+1. **状态事件语义不变**：`medication_status_events` 仍 append-only；`kind / effectiveAtMs / recordedAtMs / supersedesId` **一行一字不改**；恢复仍 append 一条 `RESUME`，`liveEvents` / `statusAt` / `liveStatusKind` / `doseActiveAt` 的判定规则（§5）不变。M1 只改变 `medication_plan_revisions` 的**行数**，不改变事件表的任何一行、也不改变「事件是状态权威」这条（§2.A、§3 D12）。
+2. **依从语义不变**：`medication_logs` 零触碰（§1.5 仍成立）；`MedicationAdherenceCalculator` 仍只经共享 `doseActiveAt` 逐剂判定；期望剂次与分母口径不变。恢复改变钟点后计划段在 `changedAt` 处切一刀，这与**任何单药改时间**（`docs/medication-time-offset.md` §5.4 变更日）**逐字同构**，不是新语义。
+3. **「0 条」那一半不变**：纯状态翻转（暂停 ⇒ 恢复、钟点未变）**仍然 0 条**。本修订没有把「每次状态写入都留一条修订」放回来——那会伪造「从上一段起一直暂停」的区间（offset-spec §3.9 的理由 ①）。
+4. **写入口与 schema 不变**：`updatePlan` 签名不变、`medication_plan_revisions` 不加列；恢复与重算在**同一次** `updatePlan` 内结算，不存在「先归零再重算」的两次写。
+5. **合法性不新增一套**：重算被判非法（`CROSS_MIDNIGHT` / `WRAPPED_ANCHOR`）时**拒绝恢复**、事务回滚、行保持暂停、偏移**不归零**（offset-spec §3.9 的 `ResumeBlockedByOffsetException`）；本文件不引入第二个校验函数。
+6. **§8.1 的自动核对方向不受本修订约束**：本修订只说「恢复这条写路径留几条修订」，不说「谁必须 reconcile」。自动核对把缓存纠正为「在服」后**立即** reconcile 该药（R-7b）是 `docs/medication-time-offset.md` §3.11 的设计；§8.1 只规定**暂停方向**的强制 reconcile、并未禁止相反方向 ⇒ 二者相容，非矛盾（§18 行 32）。
 
 ---
 
@@ -137,6 +159,7 @@
 | 事务收口 | 状态写入经 `ReconcileRemindersUseCase.medication(id, MEDICATION_CHANGED)` → 立即重排 | `app/.../capability/reminders/application/ReminderReconciliation.kt:14-21` |
 
 **结论**：停用应**立即停闹钟与通知**；恢复应**从恢复日重排**。**任何状态写入（首期 = 生效日 ≤ 今天）都必须触发一次 reconcile，并同步写缓存。** 但状态写入与 `reconcile` 是**两步**，且已登记的闹钟在漏取消后会**自我延续**（`MedLogAlarmReceiver.kt:199/209`），故**发送前派生校验守卫提升为首期交付**（更正 N，§7）——它是「闹钟已排 / 取消漏跑 / 缓存被直写」这一整类的收口，而不仅是为配合未来生效日。
+**恢复的修订条数与钟点（M1，第 7 稿）**：恢复若**确实改变了提醒时间** ⇒ **恰 1 条**计划修订；**纯状态翻转**（钟点未变）⇒ **0 条**（§0.5、§9.9）。前者是「恢复时按当前作息重算钟点」的必然留痕（不重算就是按旧钟点提醒），后者与第 6 稿一致；两者都**不**改事件表、**不**改依从语义。
 
 ### 1.5 剂量日志（要求 5）
 
@@ -158,7 +181,7 @@
 **缓存陈旧 / 与事件不一致时**：
 1. **派生值赢**。任何读者若发现缓存与 `deriveCurrentStatus` 不一致，以派生值为准并由每日核对**重写缓存**（§8 自动通道）。
 2. **提醒的最终兜底**是 §7 的**发送前再校验守卫**，**本轮提升为首期交付**（更正 N）：闹钟真正弹通知前再算一次派生判定、非 `ACTIVE` 即抑制。首期**同样交付**该守卫：写事件时**同步写缓存**并 reconcile 只保证**正常路径**一致；一旦 reconcile 漏跑或缓存被直写（§0.4），唯一防线就是它。
-3. 倒填/首期生效不通过 `updatePlan` 改计划链（§2.B），只 append 事件 + 直写缓存列（`MedicationDao.archiveMedication/unarchiveMedication`，`:96-100`）。
+3. 倒填/首期生效**不**为状态本身新建计划段（§2.B）：只 append 事件 + 直写缓存列（`MedicationDao.archiveMedication/unarchiveMedication`，`:96-100`）。**唯一例外 = M1（§0.5）**：恢复且重算出的钟点**确实变化**时，`setArchivedCache(false)` 内部经**一次** `updatePlan` 写 1 条修订（重算落在 `changedAt`，不是倒填）；钟点未变仍是那一行 SQL、0 条修订。
 
 **测试性**：
 - 不变量测试：每次状态写入后、以及每次自动核对后，断言 `medications.isArchived == deriveCurrentStatus(events, now)`（property/事务测试）。
@@ -190,9 +213,9 @@
 | (i) 有序插入/裁剪计划链 | 需给段加序、改相邻段 `effectiveUntil`、拆/并段、加重叠检测 | **否决**：无入口、无测试、改最热共享读数，回归面大 |
 | (ii) **重算投影：由事件日志派生「状态层」，与计划链正交** | 计划链**照旧**只描述「计划在各时刻投影了哪些槽位」；`pausedAt(t)` 由事件现算；**应服槽位 = 计划投影 ∧ 该时刻未暂停** | **采纳**（见下） |
 
-**采纳 (ii) 的理由**：状态层是**纯函数、与写入顺序无关**——倒填/中段恢复天然正确，**既不改计划链、也不改 `updatePlan` 签名**，回归面最小；且它同时满足决策 2（重算历史应服与依从率）与更正 C（取代事件只改状态层）。实现上：`FuturePlanCalculator` 增加 `statusEvents` 入参，对每个 occurrence 用**共享的** `doseActiveAt(events, occurrence.scheduledAt)` 过滤（见 §5.3）；历史药的归档判定由**状态层**给出：遗留归档药有一条 `LEGACY_BASELINE` 基线行 ⇒ `doseActiveAt=false` ⇒ 排除，与既有「段 `isArchived` 跳过」（`FuturePlanCalculator.kt:50`）**同向**（该段回落保留为兼容，但不再是唯一依据）。`medication_plan_revisions` 的既有 `isArchived` 快照列**保持不变但降级为兼容缓存**。
+**采纳 (ii) 的理由**：状态层是**纯函数、与写入顺序无关**——倒填/中段恢复天然正确，**既不为状态本身改计划链、也不改 `updatePlan` 签名**（唯一例外 = M1：恢复时按当前作息重算钟点，那是**时刻调整**、不是状态层的输出，§0.5），回归面最小；且它同时满足决策 2（重算历史应服与依从率）与更正 C（取代事件只改状态层）。实现上：`FuturePlanCalculator` 增加 `statusEvents` 入参，对每个 occurrence 用**共享的** `doseActiveAt(events, occurrence.scheduledAt)` 过滤（见 §5.3）；历史药的归档判定由**状态层**给出：遗留归档药有一条 `LEGACY_BASELINE` 基线行 ⇒ `doseActiveAt=false` ⇒ 排除，与既有「段 `isArchived` 跳过」（`FuturePlanCalculator.kt:50`）**同向**（该段回落保留为兼容，但不再是唯一依据）。`medication_plan_revisions` 的既有 `isArchived` 快照列**保持不变但降级为兼容缓存**。
 
-**后果（写入路径变更，需写测试钉死）**：pause/resume **不再**经 `updatePlan(copy(isArchived=…))` 新建计划段（`:102`）；改为 **append 事件 + 直写缓存列**（`archiveMedication`/`unarchiveMedication`，`MedicationDao.kt:96-100`）+ reconcile。既有断言「状态改版会新建 revision」的测试用例（`MedicationDaoTransactionTest.kt:67-72`）**随之更新**为「状态改版只 append 事件、计划链不变」。
+**后果（写入路径变更，需写测试钉死）**：pause/resume **不再**经 `updatePlan(copy(isArchived=…))` 新建计划段（`:102`）；改为 **append 事件 + 直写缓存列**（`archiveMedication`/`unarchiveMedication`，`MedicationDao.kt:96-100`）+ reconcile。**唯一例外（M1，第 7 稿）**：恢复（`setArchivedCache(false)`）在重算出的钟点**确实变化**时经一次 `updatePlan` 写 1 条修订；钟点未变 ⇒ 0 条（§0.5）。既有断言「状态改版会新建 revision」的测试用例（`MedicationDaoTransactionTest.kt:67-72`）**随之更新**为「暂停只 append 事件、计划链不变；恢复仅在钟点确实变化时 +1 条」。
 
 ### 2.C 误记更正机制——**追加「取代/更正事件」+ 重算**（不就地编辑）
 
@@ -225,14 +248,14 @@
 读者太多（§1.3 A/B/C 三类），移除会造成大面积回归面。保留一个**由事件派生的**列，语义 = 「**按 §5 派生**的当前是否停用」。派生函数见 §5；**它不再承担任何遗留回落**（遗留归档药由迁移补种的 `LEGACY_BASELINE` 事件行承载，更正 I）。
 
 **D3（替换第 1 稿 D3）— 计划链不变；倒填暂停由「正交状态层」承载，不写版本链。**（更正 B → §2.B）
-pause/resume **不**改 `medication_plan_revisions`、**不**改 `updatePlan` 签名；只 append 事件 + 直写派生缓存列。投影 = 计划段投影 ∧ 该时刻未暂停。现有计划链只继续承担**剂量/时刻调整**（边界=记录时刻，维持现状）。
+pause/resume **不**为状态本身改 `medication_plan_revisions`、**不**改 `updatePlan` 签名；只 append 事件 + 直写派生缓存列。投影 = 计划段投影 ∧ 该时刻未暂停。现有计划链只继续承担**剂量/时刻调整**（边界=记录时刻，维持现状）。**例外（M1，§0.5）**：恢复且按当前作息重算出的钟点**确实变化**时，同一次 `updatePlan` 写 1 条修订（0 条 = 钟点未变）——那是「时刻调整」，不是「状态改版留痕」。
 
 **D4 — 计划段快照不新增「暂停窗口」字段。** 快照 `isArchived` 列保留为**兼容缓存**（非遗留回落）；新增能力全部走事件层。
 
 **D5 — 「归档」与「临时停用」= 同一事件引擎的两个 kind（`DISCONTINUE` / `PAUSE`），不建第二套关闭语义。**（决策 1 → §10）
 
 **D6 — 三条写入路径严格区分：CHANGE（用户变更）、CHECK（用户核对）、RECONCILE（系统自动）。**（更正 E、更正 L → §8、§5.4）
-- **CHANGE**（用户改状态）：比较**活状态 kind**（非暂停布尔）：`desiredKind != liveStatusKind(events, now)` → **append 事件** + 直写缓存 + reconcile（更正 L）。例如 `PAUSE→DISCONTINUE` 是**真实变更**，必须写事件（§5.4 转换矩阵）。
+- **CHANGE**（用户改状态）：比较**活状态 kind**（非暂停布尔）：`desiredKind != liveStatusKind(events, now)` → **append 事件** + 直写缓存 + reconcile（更正 L）。例如 `PAUSE→DISCONTINUE` 是**真实变更**，必须写事件（§5.4 转换矩阵）。恢复方向（`desiredKind = RESUME`）的缓存翻转走 `setArchivedCache(id, false)`：重算钟点**确实变化** ⇒ 同一次 `updatePlan` 写**1 条**修订，**未变** ⇒ **0 条**（M1，§0.5）。
 - **CHECK**（用户主动核对医嘱，`继续服用/继续停用` 的确认）：`desiredKind == liveStatusKind(events, now)`（同 kind 重复）→ **不写事件**；**只**写**用户事实** `lastUserCheckedDate`（§8）。**不写缓存列**、不 reconcile（状态未变）。
 - **RECONCILE**（系统自动，每日/启动/小组件 tick）：**不写事件**；只写缓存列 + **系统事实** `lastAutoReconciledAtMs`（§8）。
 - **三者都绝不写 `medication_logs`**；CHECK/RECONCILE **都不得**被当作服药证据。
@@ -529,6 +552,7 @@ fun liveStatusKind(events, now): Kind? =
 - **动作**：对当前成员逐药：`derived = deriveCurrentStatus(events, now)`（**只读事件、含基线行；不读缓存**）；
   - 若 `derived != cache` → 写缓存列（`MedicationDao.archiveMedication/unarchiveMedication`）；
   - 若 `derived` 由活跃翻为暂停 → `ReconcileRemindersUseCase.medication(id, MEDICATION_CHANGED)` 撤闹钟/通知 + 小组件刷新；
+  - **（第 7 稿·仅指针，不改本节规则）** 恢复方向（`derived` 由暂停翻为活跃）**同样**在该药写入之后立即 reconcile 一次，由 `docs/medication-time-offset.md` §3.11 定义（R-7b）；本节只强制暂停方向、**不禁止**相反方向，二者相容。
   - 收尾写 **`lastAutoReconciledAtMs`**。
   - （**本轮删除**旧「零事件药跳过写缓存」特例，更正 I）真相现由基线**事件行**承载，缓存任何时候都可被派生重写而**不会**丢失迁移前事实 ⇒ 该特例不再需要。
 - **存储**：成员级偏好层 DataStore 键 `medication_status_auto_reconciled_at#<recipientId>`（对齐 `care_event_nudged_day#…` 的做法，`tracked-events-spec.md §4`）。
@@ -620,6 +644,14 @@ fun liveStatusKind(events, now): Kind? =
 - **未知 ≠ 暂停**：断言 `statusAt(t<M)=UNKNOWN`、`statusAt(M)=PAUSED`（迁移时刻起才是已证暂停）；UI 文案断言含「状态未知（早于本次迁移）」且**不含**「暂停」前缀、**不含**任何被算出的 MM/DD 开始日（字符串/资源断言）。
 - **统计排除 + 单列**：`t<M` 的剂次 `counted=false`、不合成 `MISSED`；汇总单列「状态未知 N 剂」且**不计入**「已扣除暂停 N 剂」计数（两者分列、剂量级）。
 - **RESUME 变体**：以 `RESUME@D` 结束的窗口 ⇒ 未知段（`t<M`）与已归档段（`M≤t<D`）**分开**标注，文案分别为「状态未知（早于本次迁移）」与「已归档·自迁移」，二者不合成一段暂停。
+
+### 9.9 恢复的修订条数（M1，第 7 稿 —— `MedicationStatusResumeRevisionTest`）
+
+这三条是 M1 的**可执行定义**，都在同一处写路径（`setArchivedCache(id, false)`）上断言：
+
+1. **钟点确实变化 ⇒ 恰 1 条**：`bed=22:00`、某药 `BEDTIME +60`（23:00）⇒ 暂停 ⇒ 把 `bed` 改成 `22:30`（`+60 = 23:30` 仍合法；该药暂停中、被 resync 排除 ⇒ 钟点仍 23:00）⇒ 恢复 ⇒ 断言 `reminderTimes = "23:30"`、`medication_plan_revisions` **恰 +1**、该修订 `effectiveUntilMs == changedAt`、`isArchived = true` 且 `reminderTimes = "23:00"`（旧段保真）、`planEffectiveFromMs == changedAt`。
+2. **纯状态翻转 ⇒ 0 条**：不动作息，暂停 → 恢复 ⇒ `reminderTimes` 逐字不变、修订计数**不变**、`planEffectiveFromMs` **不动**、`isArchived=false` 且 `isArchived == deriveCurrentStatus(events, now)`。
+3. **事件与依从不变（M1 的边界）**：①② 各自断言 `medication_status_events` 的行数、`id`、`kind`、`effectiveAtMs`、`recordedAtMs`、`supersedesId` **逐行相等**（相对操作前），`medication_logs` 行数与内容不变，且同一 `now` 下过去 90 天每日 `(expected, taken, missed)` 三元组逐条相等——**证明 M1 只动修订行数，没动状态事件与依从语义**。
 
 ---
 
@@ -745,6 +777,7 @@ fun liveStatusKind(events, now): Kind? =
 **修改**
 - `DatabaseSchema.kt`（25→26）、`MedLogDatabase.kt`（注册实体 + `MIGRATION_25_26`）、`AppModule.kt`（DI）
 - `MedicationRepositoryImpl.setArchived`（改为 append 事件 + 直写缓存列，不再 `updatePlan(copy(isArchived=…))`）
+- `MedicationRepositoryImpl.setArchivedCache(id, false)`（pause/resume 的**唯一**翻转点）：钟点确实变化 ⇒ 一次 `updatePlan` ⇒ **1 条**修订；未变 ⇒ 一行 SQL ⇒ **0 条**（§0.5 M1；物化与拒绝规则见 `docs/medication-time-offset.md` §3.9）
 - `AndroidReminderReconciler`（A 类排程判据改**读派生** `deriveCurrentStatus`，不再裸读 `isArchived`）
 - `FuturePlanCalculator`（增加 `statusEvents` 入参 + `doseActiveAt` 过滤；遗留归档药由基线行排除）+ `MedicationAdherenceCalculator`（**逐 occurrence 用同一个 `doseActiveAt`**、不合成 MISSED，§6.2；历史/日历屏加「部分暂停」「状态未知（早于迁移）」标记 §6.1/§6.3）——**共享 `MedicationStatusDerivation.doseActiveAt`，禁止内联 day 级判定**
 - `MedicationDaoTransactionTest`（更新「状态改版不新建计划段」断言）
@@ -781,7 +814,7 @@ fun liveStatusKind(events, now): Kind? =
 - 不新增第 6 个底部 Tab（`NavigationHierarchyTest` 钉死 5 个顶层目的地）。
 - **不做状态事件的就地编辑/物理删除**（append-only 审计链；改错=追加取代事件）。**注：更正能力本身在首期**（§9.2），「不做」的只是「就地编辑/删除」。
 - **不采纳第 1 稿 D3/E8 的「计划段按生效日有序插入/裁剪」**（§2.B 已证不可行）。
-- 不改 `updatePlan` 签名；pause/resume 不写 `medication_plan_revisions`。
+- 不改 `updatePlan` 签名；pause/resume **不为状态本身**写 `medication_plan_revisions`（唯一例外 = M1：恢复且钟点确实变化 ⇒ 1 条；见 §0.5）。
 - **首期不做未来生效日**（D11）。**注：发送前再校验守卫首期交付**（§7，更正 N）——「不做未来生效日」与「做守卫」并不冲突：守卫正是首期无未来生效日时对缓存不一致 / 取消漏跑的兜底。
 - 不做用药医嘱/剂量与状态的联动（医生处方文本解析）。
 - 不做跨设备同步 / 云端状态历史。
@@ -813,6 +846,7 @@ fun liveStatusKind(events, now): Kind? =
 18. **合流（更正 K）**：随机取代图的派生在任意插入顺序下结果一致；多层链 × 重复声称的组合结果唯一（§9.1）。
 19. **零回归**：既有 5 个顶层目的地不变；用药打卡/跳过/撤销、照护事项、提醒时刻与基线一致。
 20. **发送前派生校验（更正 N，首期）**：**强制缓存与事件不一致**——把 `medications.isArchived` 置为 `false`，同时事件表含一条「生效日 ≤ now 的活 `PAUSE`」（或遗留药只有 `LEGACY_BASELINE`，判 `UNKNOWN`）→ **依次投递三类用药闹钟**（`MEDICATION_NORMAL` / `MEDICATION_EARLY` / `MEDICATION_FOLLOW_UP`）到 `MedLogAlarmReceiver.onReceive` ⇒ **三类都不发通知、都不续排下一次闹钟**（无任何错误提醒）；**同时** `ACTION_TAKEN` / `ACTION_SKIP` 仍照常写 `medication_logs`；且 `t < 生效时刻` 的同类闹钟**照常提醒**（守卫只抑制生效后）。此条即「缓存与事件不一致 ⇒ 无错误提醒」在**发送端**的可执行证明（配 §2.A 的派生层对抗测试、§7 的 `MedLogAlarmReceiverTest`）。
+21. **恢复的修订条数（M1，第 7 稿）**：暂停中改作息 → 恢复 ⇒ 钟点按**当前**作息重算、`medication_plan_revisions` 恰 **+1**（该条修订 `isArchived=true` + 旧钟点，边界前进到 `changedAt`）；不动作息时暂停 → 恢复 ⇒ **0 条**、钟点与 `planEffectiveFromMs` 逐字不动；两种情形下 `medication_status_events` 逐行相等、`medication_logs` 不变、同一 `now` 下过去 90 天 `(expected, taken, missed)` 逐条相等（§9.9）。
 
 ---
 
@@ -831,7 +865,7 @@ fun liveStatusKind(events, now): Kind? =
 
 ---
 
-## 18. 终稿一致性检查（逐对核验；第 5 稿同步复检）
+## 18. 终稿一致性检查（逐对核验；第 7 稿增补行 31–32）
 
 | # | 检查的对 | 证据 | 裁决 |
 |---|---|---|---|
@@ -866,23 +900,31 @@ fun liveStatusKind(events, now): Kind? =
 | 28 | **迁移 SQL 精确 schema vs §4 实体 与 §12.2 测试（第 5 稿）** | §12 列全表 / 列 / 可空性 / 索引 / kind 取值 / 写与不写；与 §4 逐列一致；§12.2 测试断言「恰一条 `LEGACY_BASELINE`、其它药不补种」 | **一致** |
 | 29 | **缓存不一致 ⇒ 错误提醒？（第 6 稿定向复核）** | 分歧来源只有两个：`reconcile` 两步之间漏跑（`MedicationDetailViewModel.kt:139-147`）与缓存列被直写（§0.4）；排程端读派生（§1.3 A 类）+ 取消无条件且在判定前（`AndroidReminderReconciler.kt:34/39`）+ **发送端守卫**（§7）三级同谓词；`AlarmScheduler.cancelAllAlarms`（`AlarmScheduler.kt:237-259`）/`cancelAllReminderNotifications`（`NotificationHelper.kt:411-415`）真的撤销闹钟与已上屏通知 | **已修正**（guard 由 Phase 2 提升为首期，更正 N） |
 | 30 | **更正 N（守卫首期）vs 全篇「Phase 2」旧措辞（第 6 稿）** | §0 账本 / §0.4 / §1.3 / §1.4 / §2.A / §3 D7 / §7 标题与裁决 / §11 E5 / §13 / §14 / §15 / §16.20 / §18 行 8/10/11 全部同步；**唯一保留的 Phase 2 项**是「未来生效日的精确定时」与其放行闸门 | **已清理**（无「首期不做守卫」残留） |
+| 31 | **M1「恢复改了钟点 ⇒ 恰 1 条修订」vs 全篇「状态写入 0 修订 / 不改计划链」措辞（第 7 稿，逐处重核）** | 逐处重核并**只**改矛盾处：§1.4（新增 M1 段）、§2.A.3（例外句）、§2.B 后果（例外句 + 测试断言改法）、§3 D3（例外句）、§3 D6 CHANGE（例外句）、§13（新增 `setArchivedCache` 行）、§15（非目标加例外）。**未改**：§1.5（日志零触碰）、§5（派生谓词）、§6（依从口径）、§7（发送前守卫）、§8（两种事实）、§9.1–9.8、§11、§12（迁移）——它们与 M1 无交集 | **一致**（「0 条」的原文全部限定为「纯状态翻转」，没有一处需要把 0 改成 1；其余 0 条陈述与新规则不冲突） |
+| 32 | **M1 的修订数 vs `docs/medication-time-offset.md` §3.9/§9⑥（同一规则的跨文件表述）** | 两份文件现在**逐字同构**：钟点确实变化 ⇒ 恰 1 条；纯状态翻转 ⇒ 0 条；非法 ⇒ 拒绝恢复、事务回滚、保持暂停、偏移不归零；实现细节（`materializedFor` 物化点）只在 offset-spec。本文件 §0.5 第 6 条同时写明：§8.1 只强制暂停方向的 reconcile，未禁止恢复方向 ⇒ offset-spec §3.11 的 R-7b 触发与本节**不相冲突** | **一致**（同一规则、两处同述；详见 offset-spec §9 ⑥/⑧） |
 
 **第 5 稿同步复核结论**：第 4 稿只在 §0.2 落定方向、正文未同步，故表行 21–25 当时的「一致」是**未核验即宣称**（本轮已按 §0.3 逐项落点：① 遗留机制单一化 → 表行 2/12/21/22/26；② dose 级谓词三面一致、清 day 级残留 → 表行 1/9/23；③ 迁移前判 `UNKNOWN` 而非 `PAUSED` → 表行 12/25/27；④ 迁移 SQL / 测试 / 验收对账 → 表行 28 与 §12）。**本轮属「已清理」而非「已证明」**：仍不可证 / 未能解决项见 §19。
 
 **第 6 稿定向复核结论**：表格行 8（提醒路径）、行 10/11（Phase 2 措辞）本轮**逐处重核并修订**，新增行 29/30。裁决 = **缓存不一致会**导致错误提醒（情形 ② 直写缓存列是唯一会**自愈失败**的一类，因为自动核对把缓存收敛成派生、方向相反），**发送前派生校验守卫因此从 Phase 2 提升为首期**（更正 N）；§14 T10 与 §16.20 给出可执行验收。本轮同样**只做静态对账、未跑测试**（本稿只改文档）。
 
+**第 7 稿（实施前对齐）结论**：只加一条规则 **M1**（§0.5），逐处重核后**只有六处**与新规则矛盾并被改到一致（§19 点名），其余「0 修订」原文一律限定「纯状态翻转」，**无需改写**。与 `docs/medication-time-offset.md` 的关系：**同一句话逐字出现**在两份文件里（本 §0.5 ↔ offset-spec §3.9 引用块 / §6 E13 / R-7b 行），并各自留了交叉引用；R-7b 的触发只在 offset-spec §3.11 定义，本文件 §8.1 只加**指针**、不改规则（行 32）。**本轮仍是静态对账：没有编译、没有跑测试、没有改业务代码。**
+
 ---
 
 ## 19. 本轮变更与验证
 
-- **只改本文件**：`git status --short` 仅 `M docs/medication-status-spec.md`（`tools/` 已按 §17 移出；仓库内**无业务代码改动**）。
-- **第 6 稿（本轮）唯一实质修订 = 更正 N**：把§7 的**发送前派生校验守卫**从 Phase 2 计划**提升为首期交付**，理由是真实代码裁决出缓存不一致有两个来源、且其中一个（缓存列被直写）**无法靠 reconcile 自愈**（自动核对把缓存收敛成派生，方向相反），故首期若无该守卫就没有兜底（§0.4）。
+- **第 7 稿（本轮）= 实施前对齐，只有一条实质修订 M1**：授权范围就是「恢复若确实改变钟点 ⇒ **恰 1 条**计划修订；纯状态翻转 ⇒ **0 条**」，落点 §0.5 / §1.4 / §2.A.3 / §2.B / §3 D3、D6 / §13 / §15 / §9.9 / §16.21 / §18 行 31–32。**状态事件表与依从语义零改动**——§9.9 第 3 条把它们（`medication_status_events` 逐行相等、`medication_logs` 不变、过去 90 天三元组相等）变成可执行断言。
+- **与 M1 矛盾、因此只改到一致为止的六处落点、七句（逐处点名）**：① §2.A.3「只 append 事件 + 直写缓存列」→ 加 M1 例外句；② §2.B **两处**：「采纳 (ii) 的理由」里的「既不改计划链」与「后果」段的「不再经 `updatePlan`」→ 各加例外句（后者同时改既有测试断言的措辞）；③ §3 D3「pause/resume 不改 `medication_plan_revisions`」→ 改为「不为**状态本身**改」+ 例外；④ §3 D6 CHANGE「直写缓存」→ 补恢复方向的例外；⑤ §13「修改」→ 补 `setArchivedCache(id, false)` 一行；⑥ §15 非目标「pause/resume 不写 `medication_plan_revisions`」→ 加例外。**其余所有「0 修订」原文都限定在「纯状态翻转」上，与新规则不冲突，未改。**
+- **本轮跨文件**：`docs/medication-time-offset.md` 同步两件事——M1（§9 ⑥ 由「已知偏离」改为「已回写」）与 R-7b（新增 §3.11 触发、E14、§8 第 26–29 条、风险表关闭）。本文件对 R-7b 只留**指针**（§0.5 第 6 条），**不改** §8.1 的任何规则。
+- **状态（重要）**：本文件与 `docs/medication-time-offset.md` 均标「**已完成实施前对齐，等待冻结确认**」——**本轮不冻结**；用户确认后才改回「已冻结」。
+- **第 6 稿（历史）唯一实质修订 = 更正 N**：把§7 的**发送前派生校验守卫**从 Phase 2 计划**提升为首期交付**，理由是真实代码裁决出缓存不一致有两个来源、且其中一个（缓存列被直写）**无法靠 reconcile 自愈**（自动核对把缓存收敛成派生，方向相反），故首期若无该守卫就没有兜底（§0.4）。
 - **第 6 稿同步落点**（逐处，避免「决策块改了、正文没改」）：§0 账本（新增更正 N 行）、§0.4（复核 + 裁决 + 交接窗）、§1.3（两个分歧来源）、§1.4（结论）、§2.A（第 2 点 + 发送端对抗测试）、§3 D7、§7（标题 / 定位 / 裁决 / 残余 / 测试标题）、§11 E5、§13（守卫移入「修改」）、§14（T10 + Phase 1 标题 + Phase 2）、§15、§16.20（验收）、§18（行 8/10/11 修 + 新增 29/30 + 第 6 稿结论）。
-- **行数**：第 4 稿 802 → 第 5 稿 853 → 本稿 **见 `wc -l`**（新增 §0.4、更正 N 相关落点与 §16.20）。
+- **行数**：第 4 稿 802 → 第 5 稿 853 → 第 6 稿 888 → **第 7 稿 928**（新增 §0.5、§9.9、§16.21、§18 行 31–32 与 §19 账本）。
 - **保留的第 5 稿同步清理四点（§0.3）**：① 只留 `LEGACY_BASELINE` 事件机制、删「零事件回落缓存」；② dose 级谓词为投影 / 依从率 / 历史 UI 三面唯一判据、删 day 级残留；③ 迁移前判 `UNKNOWN`（不是 `PAUSED`）；④ 迁移 SQL / 测试 / 验收 / 正文四者对账。**保留的第 4 稿五项修订（§0.2）**：更正 I / J / K / L / M。
-- **冻结与推送**：本稿即**终稿**，状态行已标「已冻结（第 6 稿）」；提交并推送（含早前仅本地的 `2c68f5a`、`8393f97`、`757c7d9`）。
+- **冻结与推送（历史 + 本轮）**：第 6 稿当时标「已冻结（第 6 稿）」并推送；**第 7 稿把状态改回「等待冻结确认」**（用户尚未确认冻结），因此本轮**不**宣称冻结、**不**合并 main，只提交并推送文档。
 - **仍不可证 / 未能解决（诚实清单）**：
   1. 「迁移前该药是否真的在服」**不可知**——本稿只判 `UNKNOWN`，不试图恢复。
   2. `medications.isArchived` 是可变缓存；缓存列被**外部直写**（脚本 / 调试种子 / 未改造的写入者）时，**派生无法识别**——更正 N 的守卫能保证它**不产生错误提醒**（守卫读派生），但**不能**把被抹掉的归档状态找回；这类写入**不在本仓任何正常路径上**，属运维 / 遗留工具的越权写入，仅记录、不设计兜底。
   3. 真机行为（提醒取消时延、小组件刷新窗口、已上屏旧通知的撤走时机）**文档内不可证**，须 §14 T9 实测。
-  4. 本稿的复核是**静态对账**：所有 `file:line` 均已逐处打开源码核对（`MedLogAlarmReceiver.kt`、`AndroidReminderReconciler.kt`、`AlarmScheduler.kt`、`NotificationHelper.kt`、`MedicationDao.kt`、`MedicationRepositoryImpl.kt`、`MedicationDetailViewModel.kt`、`MedLogBootReceiver.kt`、`MedLogApplication.kt`、`ReminderReconciliation.kt`、`ReminderReconciliationWorker.kt`、`WidgetRefreshWorker.kt`、`CareEventReminderEngine.kt`），但**未跑任何测试、未触真机**（本稿只改文档；T1–T10 属实现轮）。
+  4. 本稿的复核是**静态对账**：所有 `file:line` 均已逐处打开源码核对（`MedLogAlarmReceiver.kt`、`AndroidReminderReconciler.kt`、`AlarmScheduler.kt`、`NotificationHelper.kt`、`MedicationDao.kt`、`MedicationRepositoryImpl.kt`、`MedicationDetailViewModel.kt`、`MedLogBootReceiver.kt`、`MedLogApplication.kt`、`ReminderReconciliation.kt`、`ReminderReconciliationWorker.kt`、`WidgetRefreshWorker.kt`、`CareEventReminderEngine.kt`、`SetMedicationStatusUseCase.kt`、`ReconcileMedicationStatusUseCase.kt`、`AlarmProjectionRegistry.kt`），但**未跑任何测试、未触真机**（本稿只改文档；T1–T10 属实现轮）。
+  5. **M1 与 R-7b 都只有静态论证**：`AndroidReminderReconciler.pausedNow` 读的是 `System.currentTimeMillis()`（`:56`）而非注入的 `Clock` ⇒ 任何「拨动时钟」的测试（§9.9 用固定 `now` 的部分、以及 offset-spec §8 第 26–29 条）都必须先把该处改为注入时钟；这是实现轮的第一步，本轮**未验证**。
