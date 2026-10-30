@@ -28,9 +28,14 @@ class ResyncRemindersUseCase @Inject constructor(
     private val medicationRepository: MedicationRepository,
     private val reconcileReminders: ReconcileRemindersUseCase,
 ) {
-    suspend operator fun invoke(schedule: RoutineSchedule) {
-        medicationRepository.planForRoutine(schedule)
+    /**
+     * 返回这次批量的结算计数（`advanced` / `noOp`），供 B3 的启动重算记录到持久标记；
+     * 用户路径忽略返回值即可，语义与顺序一字未改。
+     */
+    suspend operator fun invoke(schedule: RoutineSchedule): PlanRoutineResult {
+        val result = medicationRepository.planForRoutine(schedule)
         // 提交之后、不在事务内：reconcile 自身 runCatching + 入队重试（ReminderReconciliation.kt:14-39）
         reconcileReminders.all(ReminderReconcileReason.ROUTINE_CHANGED)
+        return result
     }
 }

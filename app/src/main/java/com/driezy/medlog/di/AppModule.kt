@@ -9,7 +9,9 @@ import com.driezy.medlog.capability.bpx1.AndroidKeystoreBpx1DeviceStore
 import com.driezy.medlog.capability.bpx1.Bpx1BleClient
 import com.driezy.medlog.capability.bpx1.Bpx1DeviceStore
 import com.driezy.medlog.capability.reminders.AndroidReminderReconciler
+import com.driezy.medlog.capability.reminders.PreferencesStartupRecomputeMarker
 import com.driezy.medlog.capability.reminders.WorkManagerReminderReconciliationQueue
+import com.driezy.medlog.capability.reminders.application.StartupRecomputeMarker
 import com.driezy.medlog.capability.widgets.GlanceWidgetRefresher
 import com.driezy.medlog.capability.widgets.WidgetRefresher
 import com.driezy.medlog.data.local.AiAnalysisCacheDao
@@ -208,6 +210,14 @@ object DatabaseModule {
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
+
+    /**
+     * 启动重算的持久标记（docs/medication-time-offset.md §3.6）：独立 DataStore 文件，
+     * 只供观测与重试可见性，不参与任何收敛判定。
+     */
+    @Binds
+    @Singleton
+    abstract fun bindStartupRecomputeMarker(impl: PreferencesStartupRecomputeMarker): StartupRecomputeMarker
 
     @Binds
     @Singleton
