@@ -39,6 +39,9 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.room.testing)
+    // 只给 androidTest：让批量原子性用例能抛**真实**的 IllegalTimeOffsetException（生产闸门在 :core:model，
+    // app 组合根把两者放同一 classpath）。生产依赖图不变。
+    androidTestImplementation(project(":core:model"))
 }
 
 ktlint {
