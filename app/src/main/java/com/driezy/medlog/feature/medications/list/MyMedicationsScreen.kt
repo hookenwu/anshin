@@ -228,7 +228,10 @@ internal fun MyMedicationsContent(
                         ) {
                             Text(med.name, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "${med.doseDisplayText()} · ${scheduleLabel(med)}",
+                                listOfNotNull(
+                                    "${med.doseDisplayText()} · ${scheduleLabel(med)}",
+                                    med.offsetRowText(),
+                                ).joinToString(" · "),
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             statusBadgeLabel(state.statusKinds[med.id])?.let { badge ->
@@ -385,4 +388,25 @@ private fun Medication.scheduleTimeText(): String {
     val periodLabel = timePeriodsLabel(timePeriod)
     if (periodLabel != null) return periodLabel
     return reminderTimes.replace(",", ", ")
+}
+
+/**
+ * 列表行里的「提醒偏移」片段（B12）：偏移为 0 时返回 null —— 行里**什么都不多出来**。
+ * 符号与单位都写在资源里（`%1$d` 只接收绝对值），四个 locale 各自决定 `+`/`−` 与量词位置，
+ * 代码里不出现硬编码的正负号。
+ */
+@Composable
+private fun Medication.offsetRowText(): String? {
+    if (offsetMinutes == 0) return null
+    return offsetRowSegment(
+        offsetMinutes = offsetMinutes,
+        laterFormat = stringResource(R.string.medication_row_offset_later),
+        earlierFormat = stringResource(R.string.medication_row_offset_earlier),
+    )
+}
+
+internal fun offsetRowSegment(offsetMinutes: Int, laterFormat: String, earlierFormat: String): String? = when {
+    offsetMinutes > 0 -> String.format(Locale.ROOT, laterFormat, offsetMinutes)
+    offsetMinutes < 0 -> String.format(Locale.ROOT, earlierFormat, -offsetMinutes)
+    else -> null
 }

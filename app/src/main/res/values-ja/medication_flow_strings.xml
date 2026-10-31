@@ -97,4 +97,7 @@
     <string name="medication_reconcile_state_checked">チェック済み</string>
     <string name="medication_reconcile_state_unchecked">未チェック</string>
     <string name="medication_reconcile_legacy_unknown_badge">停止中・移行前の状態は不明</string>
+    <!-- マイ薬の行内「リマインダーのずれ」（B12）：符号と単位はここ、%1$d は絶対値 -->
+    <string name="medication_row_offset_later">リマインダー +%1$d 分</string>
+    <string name="medication_row_offset_earlier">リマインダー −%1$d 分</string>
 </resources>

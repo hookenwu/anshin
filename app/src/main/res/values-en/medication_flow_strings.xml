@@ -98,4 +98,7 @@
     <string name="medication_reconcile_state_checked">Checked</string>
     <string name="medication_reconcile_state_unchecked">Not checked</string>
     <string name="medication_reconcile_legacy_unknown_badge">Paused · pre-migration state unknown</string>
+    <!-- Reminder offset inside the 我的药品 row (B12): sign and unit live here, %1$d is the absolute value -->
+    <string name="medication_row_offset_later">reminder +%1$d min</string>
+    <string name="medication_row_offset_earlier">reminder −%1$d min</string>
 </resources>

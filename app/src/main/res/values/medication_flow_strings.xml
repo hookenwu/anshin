@@ -97,4 +97,7 @@
     <string name="medication_reconcile_state_checked">已勾选</string>
     <string name="medication_reconcile_state_unchecked">未勾选</string>
     <string name="medication_reconcile_legacy_unknown_badge">已停用·迁移前状态未知</string>
+    <!-- 我的药品行内「提醒偏移」（B12）：符号与单位在此，%1$d 只接绝对值 -->
+    <string name="medication_row_offset_later">提醒 +%1$d 分钟</string>
+    <string name="medication_row_offset_earlier">提醒 −%1$d 分钟</string>
 </resources>
