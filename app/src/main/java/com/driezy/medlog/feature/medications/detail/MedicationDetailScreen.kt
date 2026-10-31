@@ -15,6 +15,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.driezy.medlog.R
 import com.driezy.medlog.data.model.TimePeriods
+import com.driezy.medlog.data.model.previewOffsetsFor
 import com.driezy.medlog.feature.carenotes.CareNoteQuickAddButton
 import com.driezy.medlog.feature.carenotes.RelatedNotesSection
 import com.driezy.medlog.ui.components.MedLogScreenScaffold
@@ -32,6 +33,7 @@ import com.driezy.medlog.ui.theme.MedLogSpacing
 import com.driezy.medlog.ui.util.displayName
 import com.driezy.medlog.ui.util.doseDisplayText
 import com.driezy.medlog.ui.util.formIcon
+import com.driezy.medlog.ui.util.labelRes
 import com.driezy.medlog.ui.util.perDoseTotalText
 import com.driezy.medlog.ui.util.timePeriodsLabel
 import java.time.Instant
@@ -189,6 +191,12 @@ private fun MedicationDetailContent(
             verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Medium),
         ) {
             if (uiState.isSaving) item(key = "saving") { LinearProgressIndicator(modifier = Modifier.fillMaxWidth()) }
+            // B3 的启动重算失败标记：只展示，不 gate 任何操作（display-only）。
+            if (uiState.startupRecomputeFailed) {
+                item(key = "startup-recompute-banner") {
+                    MedicationMessageCard(stringResource(R.string.time_offset_startup_banner), isError = true)
+                }
+            }
             if (uiState.error) {
                 item {
                     MedicationMessageCard(
@@ -300,6 +308,47 @@ private fun MedicationDetailContent(
                                 timePeriodsLabel(med.timePeriod).orEmpty()
                             }
                             DetailRow(stringResource(R.string.detail_label_period), timeStr)
+                            val detailRoutine = uiState.routine
+                            if (detailRoutine != null &&
+                                med.intervalHours == 0 &&
+                                !TimePeriods.isExact(med.timePeriod)
+                            ) {
+                                val offsetRows = previewOffsetsFor(
+                                    med.timePeriod,
+                                    detailRoutine,
+                                    med.offsetMinutes,
+                                )
+                                if (offsetRows.isNotEmpty()) {
+                                    val offsetLabel = stringResource(R.string.time_offset_stepper_label) +
+                                        if (med.offsetMinutes != 0) {
+                                            "  " +
+                                                if (med.offsetMinutes >
+                                                    0
+                                                ) {
+                                                    "+${med.offsetMinutes}"
+                                                } else {
+                                                    "${med.offsetMinutes}"
+                                                }
+                                        } else {
+                                            ""
+                                        }
+                                    val previewTexts = offsetRows.map { row ->
+                                        stringResource(
+                                            R.string.time_offset_preview_format,
+                                            stringResource(row.period.labelRes),
+                                            row.base.format(DETAIL_TIME_FORMATTER),
+                                            row.resolved.format(DETAIL_TIME_FORMATTER),
+                                        )
+                                    }
+                                    DetailRow(offsetLabel, previewTexts.joinToString("\n"))
+                                }
+                                Text(
+                                    stringResource(R.string.time_offset_disclaimer),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = MedLogSpacing.Tiny),
+                                )
+                            }
                             val freqStr = when (med.frequencyType) {
                                 "daily" -> stringResource(R.string.detail_freq_daily)
                                 "interval" -> pluralStringResource(
@@ -422,3 +471,5 @@ private fun MedicationDetailContent(
         },
     )
 }
+
+private val DETAIL_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")

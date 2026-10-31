@@ -8,19 +8,25 @@ import com.driezy.medlog.R
 import com.driezy.medlog.capability.reminders.application.ReconcileRemindersUseCase
 import com.driezy.medlog.data.local.TransactionRunner
 import com.driezy.medlog.data.model.Drug
+import com.driezy.medlog.data.model.IllegalTimeOffsetException
+import com.driezy.medlog.data.model.MINUTES_PER_DAY
 import com.driezy.medlog.data.model.Medication
+import com.driezy.medlog.data.model.TimeOffsetCheck
 import com.driezy.medlog.data.model.TimePeriod
 import com.driezy.medlog.data.model.TimePeriods
+import com.driezy.medlog.data.model.minuteOfDayToLocalTime
 import com.driezy.medlog.data.repository.DrugRepository
 import com.driezy.medlog.data.repository.MedicationRepository
 import com.driezy.medlog.data.repository.SettingsPreferences
 import com.driezy.medlog.data.repository.UserPreferencesRepository
 import com.driezy.medlog.data.repository.reminderZone
+import com.driezy.medlog.data.repository.routineSchedule
 import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.domain.model.MedicationId
 import com.driezy.medlog.domain.todayStart
 import com.driezy.medlog.ui.BaseViewModel
 import com.driezy.medlog.ui.util.formatDosePrecise
+import com.driezy.medlog.ui.util.labelRes
 import com.driezy.medlog.util.ReminderTimeUtils
 import com.driezy.medlog.voice.VoiceInputController
 import com.driezy.medlog.voice.VoiceInputEvent
@@ -42,6 +48,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import java.time.Clock
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 /** 剂型选项 */
@@ -71,6 +78,13 @@ data class AddMedicationUiState(
     /** 选中的用餐时段集合；空集合表示"精确时间"模式（用户手填钟点）。 */
     val timePeriods: Set<TimePeriod> = setOf(TimePeriod.MORNING),
     val reminderTimes: List<String> = listOf("08:00"), // HH:mm 列表
+    /**
+     * 相对作息基线的提醒偏移（分钟）：-60..+60、步长 15、默认 0（docs/medication-time-offset.md §5.1）。
+     * 只调整提醒/排期时间，不改变医嘱的服药时间。
+     */
+    val offsetMinutes: Int = 0,
+    /** 步进器的派生状态（9 档、可用性、不可用原因、预览）；不随草稿持久化，按当前作息重算。 */
+    @Transient val offsetStepper: OffsetStepperModel? = null,
 
     // ── 频率 ──────────────────────────────────────────────────────
     val frequencyType: String = "daily", // daily / interval / specific_days
@@ -107,6 +121,8 @@ data class AddMedicationUiState(
     @Transient val error: String? = null,
     /** 验证错误资源 ID（优先于 error 文本显示） */
     @Transient @param:StringRes val errorRes: Int? = null,
+    /** [errorRes] 的格式化参数（如保存被拒时的 时段/偏移/结果钟点）。 */
+    @Transient val errorArgs: List<String> = emptyList(),
     @Transient val drugSuggestions: List<Drug> = emptyList(),
     @Transient val showDrugSuggestions: Boolean = false,
     @Transient val voiceInput: VoiceInputUiState = VoiceInputUiState(),
@@ -132,6 +148,9 @@ sealed interface AddMedicationUiAction {
     data class TimePeriodModeChanged(val periodMode: Boolean) : AddMedicationUiAction
     data class AddReminderTime(val value: String) : AddMedicationUiAction
     data class RemoveReminderTime(val value: String) : AddMedicationUiAction
+
+    /** 步进器选档；只接受模型里 `enabled` 的档位（越界档位不会被写入）。 */
+    data class OffsetChanged(val minutes: Int) : AddMedicationUiAction
     data class FrequencyTypeChanged(val value: String) : AddMedicationUiAction
     data class FrequencyIntervalChanged(val value: Int) : AddMedicationUiAction
     data class ToggleFrequencyDay(val day: Int) : AddMedicationUiAction
@@ -273,6 +292,7 @@ class AddMedicationViewModel @Inject constructor(
             is AddMedicationUiAction.TimePeriodModeChanged -> onTimePeriodModeChanged(action.periodMode)
             is AddMedicationUiAction.AddReminderTime -> addReminderTime(action.value)
             is AddMedicationUiAction.RemoveReminderTime -> removeReminderTime(action.value)
+            is AddMedicationUiAction.OffsetChanged -> onOffsetChanged(action.minutes)
             is AddMedicationUiAction.FrequencyTypeChanged -> onFrequencyTypeChange(action.value)
             is AddMedicationUiAction.FrequencyIntervalChanged -> onFrequencyIntervalChange(action.value)
             is AddMedicationUiAction.ToggleFrequencyDay -> toggleFrequencyDay(action.day)
@@ -343,6 +363,7 @@ class AddMedicationViewModel @Inject constructor(
                 timePeriods = TimePeriods.parse(med.timePeriod).toSet(),
                 reminderTimes = med.reminderTimes.split(",").filter { it.isNotBlank() }
                     .ifEmpty { listOf("08:00") },
+                offsetMinutes = med.offsetMinutes,
                 frequencyType = med.frequencyType,
                 frequencyInterval = med.frequencyInterval,
                 frequencyDays = med.frequencyDays,
@@ -361,6 +382,7 @@ class AddMedicationViewModel @Inject constructor(
             _uiState.value = json.decodeFromJsonElement<AddMedicationUiState>(
                 JsonObject((loadedFields - edited) + draftFields.filterKeys { it in edited }),
             ).copy(dateZoneId = latestPrefs.value.reminderZone(clock.zone).id)
+                .withOffsetStepper()
             baselineState = normalizedDraft(loaded)
             _isDirty.value = edited.isNotEmpty()
             savedStateHandle[EDITED_KEY] = _isDirty.value
@@ -467,6 +489,16 @@ class AddMedicationViewModel @Inject constructor(
         copy(reminderTimes = reminderTimes.filterNot { it == hhmm }.ifEmpty { listOf("08:00") })
     }
 
+    /**
+     * 步进器选档。**只接受模型里可用的档位**：跨零点 / 回绕的档位在 UI 上置灰，这里再挡一次，
+     * 保证它们既不会被选中、也不会被钳位到邻近档（INV-5）。
+     */
+    fun onOffsetChanged(minutes: Int) {
+        val option = _uiState.value.offsetStepper?.options?.firstOrNull { it.minutes == minutes }
+        if (option == null || !option.enabled) return
+        update { copy(offsetMinutes = minutes, error = null, errorRes = null, errorArgs = emptyList()) }
+    }
+
     fun onFrequencyTypeChange(v: String) = update { copy(frequencyType = v) }
     fun onFrequencyIntervalChange(v: Int) = update { copy(frequencyInterval = v.coerceIn(1, 90)) }
     fun toggleFrequencyDay(day: Int) {
@@ -512,8 +544,13 @@ class AddMedicationViewModel @Inject constructor(
             update { copy(errorRes = error) }
             return
         }
+        // 库里已有非法偏移（W4′ 并发写 / 调试写库）：错误态 + 阻止保存，**不**静默归零。
+        if (state.offsetStepper?.storedRejected == true) {
+            update { copy(errorRes = R.string.time_offset_illegal_stored, errorArgs = emptyList()) }
+            return
+        }
         stopVoiceInput()
-        update { copy(isSaving = true, error = null, errorRes = null) }
+        update { copy(isSaving = true, error = null, errorRes = null, errorArgs = emptyList()) }
         safeLaunch(onError = { e ->
             update { copy(isSaving = false, error = e.message, errorRes = R.string.medication_save_failed) }
         }) {
@@ -522,61 +559,76 @@ class AddMedicationViewModel @Inject constructor(
             val (h, m) = firstTime.split(":").let {
                 (it.getOrNull(0)?.toIntOrNull() ?: 8) to (it.getOrNull(1)?.toIntOrNull() ?: 0)
             }
-            val savedId = transactions.withTransaction {
-                val latest = existingId?.let { checkNotNull(repository.getMedicationById(it)) }
-                val medication = (
-                    latest
-                        ?: Medication(
-                            name = state.name,
-                            doseUnit = state.doseUnit,
-                            createdAt = clock.millis(),
-                        )
-                    ).copy(
-                    id = existingId ?: 0,
-                    name = state.name.trim(),
-                    category = state.category.trim(),
-                    isTcm = state.isTcm,
-                    fullPath = state.fullPath.trim(),
-                    form = state.form,
-                    isHighPriority = state.isHighPriority,
-                    isCustomDrug = state.isCustomDrug,
-                    doseUnit = state.doseUnit,
-                    doseQuantity = state.doseQuantity,
-                    doseStrength = state.doseStrength.trim().toDoubleOrNull(),
-                    doseStrengthUnit = state.doseStrength.trim().toDoubleOrNull()?.let {
-                        state.doseStrengthUnit.trim().ifBlank { null }
-                    },
-                    isPRN = state.isPRN,
-                    maxDailyDose = state.maxDailyDose.toDoubleOrNull(),
-                    timePeriod = TimePeriods.encode(state.timePeriods),
-                    reminderTimes = state.reminderTimes.joinToString(","),
-                    reminderHour = h,
-                    reminderMinute = m,
-                    frequencyType = state.frequencyType,
-                    frequencyInterval = state.frequencyInterval,
-                    frequencyDays = state.frequencyDays,
-                    startDate = state.startDate,
-                    endDate = state.endDate,
-                    stock = if (latest != null &&
-                        state.stock == baselineState.stock &&
-                        savedStateHandle.get<Boolean>(STOCK_EDITED_KEY) != true
-                    ) {
-                        latest.stock
+            val savedId = try {
+                transactions.withTransaction {
+                    val latest = existingId?.let { checkNotNull(repository.getMedicationById(it)) }
+                    val medication = (
+                        latest
+                            ?: Medication(
+                                name = state.name,
+                                doseUnit = state.doseUnit,
+                                createdAt = clock.millis(),
+                            )
+                        ).copy(
+                        id = existingId ?: 0,
+                        name = state.name.trim(),
+                        category = state.category.trim(),
+                        isTcm = state.isTcm,
+                        fullPath = state.fullPath.trim(),
+                        form = state.form,
+                        isHighPriority = state.isHighPriority,
+                        isCustomDrug = state.isCustomDrug,
+                        doseUnit = state.doseUnit,
+                        doseQuantity = state.doseQuantity,
+                        doseStrength = state.doseStrength.trim().toDoubleOrNull(),
+                        doseStrengthUnit = state.doseStrength.trim().toDoubleOrNull()?.let {
+                            state.doseStrengthUnit.trim().ifBlank { null }
+                        },
+                        isPRN = state.isPRN,
+                        maxDailyDose = state.maxDailyDose.toDoubleOrNull(),
+                        timePeriod = TimePeriods.encode(state.timePeriods),
+                        reminderTimes = state.reminderTimes.joinToString(","),
+                        reminderHour = h,
+                        reminderMinute = m,
+                        offsetMinutes = state.offsetMinutes,
+                        frequencyType = state.frequencyType,
+                        frequencyInterval = state.frequencyInterval,
+                        frequencyDays = state.frequencyDays,
+                        startDate = state.startDate,
+                        endDate = state.endDate,
+                        stock = if (latest != null &&
+                            state.stock == baselineState.stock &&
+                            savedStateHandle.get<Boolean>(STOCK_EDITED_KEY) != true
+                        ) {
+                            latest.stock
+                        } else {
+                            state.stock.toDoubleOrNull()
+                        },
+                        refillThreshold = state.refillThreshold.toDoubleOrNull(),
+                        refillReminderDays = state.refillReminderDays,
+                        notes = state.notes,
+                        intervalHours = state.intervalHours,
+                    )
+                    if (existingId == null) {
+                        val newId = repository.addMedication(medication)
+                        newId
                     } else {
-                        state.stock.toDoubleOrNull()
-                    },
-                    refillThreshold = state.refillThreshold.toDoubleOrNull(),
-                    refillReminderDays = state.refillReminderDays,
-                    notes = state.notes,
-                    intervalHours = state.intervalHours,
-                )
-                if (existingId == null) {
-                    val newId = repository.addMedication(medication)
-                    newId
-                } else {
-                    repository.updateMedication(medication)
-                    existingId
+                        repository.updateMedication(medication)
+                        existingId
+                    }
                 }
+            } catch (rejection: IllegalTimeOffsetException) {
+                // 数据层拒绝（Q5 专用文案）：保留草稿、isSaving=false、不自动重试、不钳位。
+                val args = rejection.check.describeForUser()
+                update {
+                    copy(
+                        isSaving = false,
+                        error = null,
+                        errorRes = R.string.editor_save_offset_rejected,
+                        errorArgs = args,
+                    )
+                }
+                return@safeLaunch
             }
             // Remember a successful insert before retrying a failed reminder projection.
             savedStateHandle[LOADED_KEY] = savedId
@@ -590,7 +642,7 @@ class AddMedicationViewModel @Inject constructor(
 
     private inline fun update(block: AddMedicationUiState.() -> AddMedicationUiState) {
         val previousState = normalizedDraft(_uiState.value)
-        _uiState.value = _uiState.value.block()
+        _uiState.value = _uiState.value.block().withOffsetStepper()
         val nextState = normalizedDraft(_uiState.value)
         if (savedStateHandle.get<Long>(LOADED_KEY) == null && previousState != nextState) {
             val previous = json.encodeToJsonElement(previousState).jsonObject
@@ -623,10 +675,34 @@ class AddMedicationViewModel @Inject constructor(
         dateZoneId = "UTC",
         error = null,
         errorRes = null,
+        errorArgs = emptyList(),
+        offsetStepper = null,
         drugSuggestions = emptyList(),
         showDrugSuggestions = false,
         voiceInput = VoiceInputUiState(),
     )
+
+    /**
+     * 按当前作息重算步进器：档位可用性、不可用原因、预览全部来自 [offsetStepperModel]
+     * （校验 = `validateTimeOffset`，预览 = 同一个 `resolveWithOffset`）。
+     */
+    private fun AddMedicationUiState.withOffsetStepper(): AddMedicationUiState {
+        val offsetsApplicable = enableTimePeriodMode &&
+            !isPRN &&
+            intervalHours == 0 &&
+            timePeriods.any { it != TimePeriod.EXACT }
+        return copy(
+            offsetStepper = if (offsetsApplicable) {
+                offsetStepperModel(
+                    periods = timePeriods,
+                    schedule = latestPrefs.value.routineSchedule(),
+                    storedMinutes = offsetMinutes,
+                )
+            } else {
+                null
+            },
+        )
+    }
 
     private fun isDraftDirty(state: AddMedicationUiState): Boolean =
         normalizedDraft(state) != normalizedDraft(baselineState)
@@ -649,7 +725,21 @@ class AddMedicationViewModel @Inject constructor(
         const val EDITED_KEY = "medication_edited"
         const val STOCK_EDITED_KEY = "medication_stock_edited"
         const val DRAFT_KEY = "add_medication_draft"
+        val OFFSET_CLOCK_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
+
+    /**
+     * Q5 专用文案的三个参数：时段标签 / 带符号档位 / 结果钟点。结果钟点只做**显示归一**
+     * （`floorMod`），不参与任何偏移算术——真正的加法只在 `resolveWithOffset`。
+     */
+    private fun TimeOffsetCheck.Rejected.describeForUser(): List<String> = listOf(
+        anchor?.asTimePeriod()?.let { period -> appContext.getString(period.labelRes) } ?: "",
+        appContext.getString(
+            R.string.time_offset_minutes_format,
+            if (minutes > 0) "+$minutes" else minutes.toString(),
+        ),
+        minuteOfDayToLocalTime(Math.floorMod(resolvedMinuteOfDay, MINUTES_PER_DAY)).format(OFFSET_CLOCK_FORMATTER),
+    )
 
     private fun applyVoiceTranscript(event: VoiceInputEvent.Transcript) {
         val currentNotes = _uiState.value.notes

@@ -240,14 +240,23 @@ class MedicationOffsetGateTest {
             "feature/medications/list",
         )
         val appMain = repoRoot().resolve("app/src/main/java/com/driezy/medlog")
+        // B11 起详情页按 §5.2 显示偏移（中性标记 + 预览）⇒ 展示性读取是允许的；
+        // 但它不得用偏移派生任何计划时间（下面单独断言）。
+        val displayOnlyFiles = setOf("MedicationDetailScreen.kt")
         val offenders = readPathRoots
             .flatMap { root ->
                 appMain.resolve(root).walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
             }
             .flatMap { file -> file.readLines().mapIndexed { index, line -> Triple(file, index + 1, line) } }
             .filter { (_, _, line) -> "offsetMinutes" in line }
+            .filterNot { (file, _, _) -> file.name in displayOnlyFiles }
             .filterNot { (_, _, line) -> line.trimStart().startsWith("*") || line.trimStart().startsWith("//") }
         assertTrue("读路径不得读 offsetMinutes（INV-3）：$offenders", offenders.isEmpty())
+
+        val detail = appMain.resolve("feature/medications/detail/MedicationDetailScreen.kt").readText()
+        listOf("resolveWithOffset", "plusMinutes", "minusMinutes", "+ offsetMinutes").forEach { token ->
+            assertTrue("详情页只能展示偏移，不得用它算时间：$token", token !in detail)
+        }
     }
 
     @Test

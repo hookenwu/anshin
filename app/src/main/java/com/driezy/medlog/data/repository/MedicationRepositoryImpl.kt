@@ -7,6 +7,7 @@ import com.driezy.medlog.data.local.TransactionRunner
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationPlanRevision
 import com.driezy.medlog.data.model.RoutineSchedule
+import com.driezy.medlog.data.model.gatedFor
 import com.driezy.medlog.data.recipient.ActiveRecipientStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -29,6 +30,7 @@ class MedicationRepositoryImpl @Inject constructor(
     private val transactions: TransactionRunner,
     private val activeRecipient: ActiveRecipientStore,
     private val clock: Clock,
+    private val preferences: ReminderPreferences,
 ) : MedicationRepository {
 
     private fun scoped(block: (Long) -> Flow<List<Medication>>): Flow<List<Medication>> =
@@ -77,11 +79,27 @@ class MedicationRepositoryImpl @Inject constructor(
 
     override suspend fun getMedicationById(id: Long): Medication? = medicationDao.getMedicationById(id)
 
-    override suspend fun addMedication(medication: Medication): Long =
-        medicationDao.insertMedication(medication.stamped())
+    /**
+     * 编辑器「新增」的写入口（docs/medication-time-offset.md §5.1 / PLAN §11.1 B4）。
+     *
+     * 闸门**在这里**而不是 ViewModel：任何直接调用 `repository.addMedication(med.copy(offsetMinutes = 15))`
+     * 的代码都会经过同一次 `gatedFor`（非法 ⇒ `IllegalTimeOffsetException`，抛在写入之前 ⇒ 零写入）。
+     * 成员在 gate 之前已绑定，所以读的是**该药所属成员**的作息。
+     */
+    override suspend fun addMedication(medication: Medication): Long {
+        val stamped = medication.stamped()
+        val schedule = preferences.routineScheduleFor(stamped.careRecipientId)
+        return medicationDao.insertMedication(stamped.gatedFor(schedule))
+    }
 
+    /**
+     * 编辑器「编辑」的写入口：gate 之后仍走 `updatePlan` ⇒ 计划真的变了才建**一条**修订
+     * （内容不变的保存由 DAO 判 NoOp，零修订）。
+     */
     override suspend fun updateMedication(medication: Medication) {
-        medicationDao.updatePlan(medication.stamped(), clock.millis())
+        val stamped = medication.stamped()
+        val schedule = preferences.routineScheduleFor(stamped.careRecipientId)
+        medicationDao.updatePlan(stamped.gatedFor(schedule), clock.millis())
     }
 
     /**

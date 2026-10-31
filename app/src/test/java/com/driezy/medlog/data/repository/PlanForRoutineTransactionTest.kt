@@ -157,7 +157,7 @@ class PlanForRoutineTransactionTest {
     ): MedicationRepositoryImpl {
         val activeRecipient: ActiveRecipientStore = mock()
         whenever(activeRecipient.current()).thenReturn(recipientId)
-        return MedicationRepositoryImpl(dao, tx, activeRecipient, clock)
+        return MedicationRepositoryImpl(dao, tx, activeRecipient, clock, mock())
     }
 
     private fun medication(id: Long, timePeriod: String, reminderTimes: String, offsetMinutes: Int = 0) = Medication(

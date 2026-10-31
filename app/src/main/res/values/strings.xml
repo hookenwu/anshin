@@ -983,4 +983,16 @@
     <string name="recipients_switcher_title">切换家庭成员</string>
     <string name="recipients_switcher_action">切换成员</string>
     <string name="recipients_switcher_manage">管理家庭成员</string>
+    <!-- 单药提醒时间偏移（docs/medication-time-offset.md §5.1/§5.2/§7，B11） -->
+    <string name="time_offset_section_title">提醒时间微调</string>
+    <string name="time_offset_stepper_label">相对作息偏移</string>
+    <string name="time_offset_preview_format">%1$s %2$s → %3$s</string>
+    <string name="time_offset_disclaimer">仅调整提醒与排期时间，不改变医嘱的服药时间；请以医嘱为准。</string>
+    <string name="time_offset_cross_midnight_hint_later">%1$s后延 %2$d 分钟将跨过零点，本期不支持</string>
+    <string name="time_offset_cross_midnight_hint_earlier">%1$s提前 %2$d 分钟将跨过零点，本期不支持</string>
+    <string name="time_offset_illegal_stored">已保存的偏移在当前作息下跨过零点，请重新选择</string>
+    <string name="time_offset_wrapped_anchor_hint">%1$s 的时间解析已跨日，本期不能为该药设置偏移</string>
+    <string name="time_offset_minutes_format">%1$s 分钟</string>
+    <string name="editor_save_offset_rejected">无法保存：%1$s 偏移 %2$s 会跨过零点（算得 %3$s）。本期不支持，请改选其他档位。</string>
+    <string name="time_offset_startup_banner">上次启动时提醒时间重算未完成，当前提醒可能尚未按作息更新。如时间不对，请打开药品检查提醒时间。</string>
 </resources>

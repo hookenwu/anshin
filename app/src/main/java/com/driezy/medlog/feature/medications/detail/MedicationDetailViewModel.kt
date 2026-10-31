@@ -2,14 +2,18 @@ package com.driezy.medlog.feature.medications.detail
 
 import androidx.lifecycle.viewModelScope
 import com.driezy.medlog.capability.reminders.application.ReconcileRemindersUseCase
+import com.driezy.medlog.capability.reminders.application.StartupRecomputeMarker
+import com.driezy.medlog.capability.reminders.application.StartupRecomputeStatus
 import com.driezy.medlog.data.local.TransactionRunner
 import com.driezy.medlog.data.model.CareNote
 import com.driezy.medlog.data.model.CareNoteTargetType
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationLog
 import com.driezy.medlog.data.model.MedicationStatusKind
+import com.driezy.medlog.data.model.RoutineSchedule
 import com.driezy.medlog.data.repository.CareNoteRepository
 import com.driezy.medlog.data.repository.MedicationRepository
+import com.driezy.medlog.data.repository.UserPreferencesRepository
 import com.driezy.medlog.domain.ReminderReconcileReason
 import com.driezy.medlog.domain.model.MedicationId
 import com.driezy.medlog.feature.medications.application.ObserveMedicationAdherence
@@ -48,6 +52,10 @@ data class DetailUiState(
     val zone: ZoneId = ZoneId.systemDefault(),
     /** 就地「相关笔记」：该药为 target 的 CareNote（空则不渲染，docs/care-notes.md §7）。 */
     val relatedNotes: List<CareNote> = emptyList(),
+    /** 该药所属成员当前的作息，用于详情页的偏移预览（只读）。 */
+    val routine: RoutineSchedule? = null,
+    /** B3 启动重算的失败标记；只用于展示横幅，**不参与任何判定**。 */
+    val startupRecomputeFailed: Boolean = false,
 )
 
 sealed interface DetailUiAction {
@@ -71,6 +79,8 @@ class MedicationDetailViewModel @Inject constructor(
     private val transactions: TransactionRunner,
     private val careNoteRepository: CareNoteRepository,
     private val setMedicationStatus: SetMedicationStatusUseCase,
+    private val preferences: UserPreferencesRepository,
+    private val startupMarker: StartupRecomputeMarker,
 ) : BaseViewModel() {
 
     private val _uiState = MutableStateFlow(DetailUiState())
@@ -99,10 +109,14 @@ class MedicationDetailViewModel @Inject constructor(
                 .catch { _uiState.update { it.copy(isLoading = false, error = true) } }
                 .collect { summary ->
                     val medication = summary.medications.firstOrNull()
+                    val routine = medication?.let { med ->
+                        runCatching { preferences.routineScheduleFor(med.careRecipientId) }.getOrNull()
+                    }
                     _uiState.update {
                         it.copy(
                             zone = summary.zone,
                             medication = medication,
+                            routine = routine,
                             logs = summary.logs.sortedByDescending { log ->
                                 log.scheduledTimeMs
                             },
@@ -120,6 +134,12 @@ class MedicationDetailViewModel @Inject constructor(
                         )
                     }
                 }
+        }
+        // B3 的启动重算标记：**只**用于一条展示横幅，不 gate 任何东西（docs/… §3.6）。
+        viewModelScope.launch {
+            val failed = runCatching { startupMarker.latest() }.getOrNull()
+                ?.status == StartupRecomputeStatus.FAILED
+            _uiState.update { it.copy(startupRecomputeFailed = failed) }
         }
         // 就地「相关笔记」：与该药关联的笔记（只读呈现，空则不渲染）。
         notesObservation?.cancel()

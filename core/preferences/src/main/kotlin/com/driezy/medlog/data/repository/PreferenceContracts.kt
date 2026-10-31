@@ -44,6 +44,12 @@ data class ReminderPreferenceState(
 
 interface ReminderPreferences {
     val reminders: Flow<ReminderPreferenceState>
+
+    /**
+     * 指定成员的作息；写入路径（编辑器保存）按**该药所属成员**取基线，而不是当前成员，
+     * 避免成员切换竞态把别人的作息当成校验依据。
+     */
+    suspend fun routineScheduleFor(recipientId: Long): RoutineSchedule
     suspend fun updatePersistentReminder(enabled: Boolean)
     suspend fun updatePersistentInterval(minutes: Int)
     suspend fun updateRoutineTime(slot: RoutineTimeSlot, time: RoutineTime)

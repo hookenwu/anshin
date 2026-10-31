@@ -485,7 +485,7 @@ class UserPreferencesRepository @Inject constructor(
     }
 
     /** 指定成员的作息；供提醒重排等"非当前成员"场景使用（成员键缺失时回落旧全局键）。 */
-    suspend fun routineScheduleFor(recipientId: Long): RoutineSchedule {
+    override suspend fun routineScheduleFor(recipientId: Long): RoutineSchedule {
         val prefs = dataStore.data.first()
         val base = RoutineSchedule()
         fun time(hourKey: Preferences.Key<Int>, minuteKey: Preferences.Key<Int>, fallback: RoutineTime) = RoutineTime(

@@ -1014,4 +1014,16 @@ Path: Settings → Privacy → Permissions → Desktop shortcut → MedLog → A
     <string name="recipients_switcher_title">Switch family member</string>
     <string name="recipients_switcher_action">Switch member</string>
     <string name="recipients_switcher_manage">Manage family members</string>
+    <!-- Per-medication time offset (docs/medication-time-offset.md §5.1/§5.2/§7, B11) -->
+    <string name="time_offset_section_title">Reminder time adjustment</string>
+    <string name="time_offset_stepper_label">Offset from routine</string>
+    <string name="time_offset_preview_format">%1$s %2$s → %3$s</string>
+    <string name="time_offset_disclaimer">Adjusts reminder and scheduling times only. It does not change the prescribed dosing times — always follow your doctor\'s orders.</string>
+    <string name="time_offset_cross_midnight_hint_later">%1$s later by %2$d minutes would cross midnight — not available in this version</string>
+    <string name="time_offset_cross_midnight_hint_earlier">%1$s earlier by %2$d minutes would cross midnight — not available in this version</string>
+    <string name="time_offset_illegal_stored">The saved offset crosses midnight with the current routine. Please choose another.</string>
+    <string name="time_offset_wrapped_anchor_hint">%1$s already resolves across midnight; offsets aren\'t available for this medication in this version</string>
+    <string name="time_offset_minutes_format">%1$s min</string>
+    <string name="editor_save_offset_rejected">Can\'t save: an offset of %2$s for %1$s would cross midnight (resolves to %3$s). This isn\'t supported in this version — choose another step.</string>
+    <string name="time_offset_startup_banner">The reminder-time recompute didn\'t finish at the last start, so reminders may still follow the old routine. If a time looks wrong, open the medication and check its reminder time.</string>
 </resources>

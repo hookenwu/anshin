@@ -3,9 +3,9 @@ package com.driezy.medlog.data.local
 import androidx.room.*
 import com.driezy.medlog.data.model.Medication
 import com.driezy.medlog.data.model.MedicationPlanRevision
-import com.driezy.medlog.data.model.PlanBoundaryNotAdvancedException
+import com.driezy.medlog.data.model.PlanWriteDecision
 import com.driezy.medlog.data.model.PlanWriteResult
-import com.driezy.medlog.data.model.planRevision
+import com.driezy.medlog.data.model.decidePlanWrite
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -91,22 +91,17 @@ interface MedicationDao {
     @Transaction
     suspend fun updatePlan(medication: Medication, changedAt: Long): PlanWriteResult {
         val previous = getMedicationById(medication.id) ?: return PlanWriteResult.NoOp
-        val previousPlan = previous.planRevision(changedAt)
-        val nextPlan = medication.planRevision(changedAt).copy(effectiveFromMs = previous.planEffectiveFromMs)
-        if (previousPlan == nextPlan) {
-            updateMedication(medication.copy(planEffectiveFromMs = previous.planEffectiveFromMs))
-            return PlanWriteResult.NoOp
+        return when (val decision = decidePlanWrite(previous, medication, changedAt)) {
+            is PlanWriteDecision.Unchanged -> {
+                updateMedication(medication.copy(planEffectiveFromMs = decision.effectiveFromMs))
+                PlanWriteResult.NoOp
+            }
+            is PlanWriteDecision.Advance -> {
+                insertPlanRevision(decision.previousPlan)
+                updateMedication(medication.copy(planEffectiveFromMs = decision.changedAt))
+                PlanWriteResult.Advanced
+            }
         }
-        if (changedAt <= previous.planEffectiveFromMs) {
-            throw PlanBoundaryNotAdvancedException(
-                medicationId = medication.id,
-                boundaryMs = previous.planEffectiveFromMs,
-                requestedMs = changedAt,
-            )
-        }
-        insertPlanRevision(previousPlan)
-        updateMedication(medication.copy(planEffectiveFromMs = changedAt))
-        return PlanWriteResult.Advanced
     }
 
     @Delete

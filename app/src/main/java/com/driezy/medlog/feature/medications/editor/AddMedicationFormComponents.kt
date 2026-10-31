@@ -395,7 +395,9 @@ private const val WIZARD_STEP_COUNT = 3
 
 @Composable
 private fun MedicationFormError(state: AddMedicationUiState) {
-    val message = state.errorRes?.let { stringResource(it) } ?: state.error
+    val message = state.errorRes?.let { res ->
+        stringResource(res, *state.errorArgs.toTypedArray())
+    } ?: state.error
     if (state.isLoading || state.isSaving) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
     if (message != null) MedicationMessageCard(message, isError = true)
 }

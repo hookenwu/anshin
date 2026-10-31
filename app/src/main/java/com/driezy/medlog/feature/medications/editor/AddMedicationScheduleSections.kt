@@ -287,6 +287,12 @@ internal fun MedicationReminderScheduleSection(
                         iconContentColor = MaterialTheme.colorScheme.secondary,
                     ),
                 )
+                uiState.offsetStepper?.let { stepper ->
+                    MedicationOffsetSection(
+                        stepper = stepper,
+                        onOffsetSelected = { onAction(AddMedicationUiAction.OffsetChanged(it)) },
+                    )
+                }
             }
         }
         // 精确时间模式：用户手动设置多个提醒时间 + 可选间隔给药
@@ -358,3 +364,131 @@ internal fun MedicationReminderScheduleSection(
         }
     }
 }
+
+/**
+ * 提醒时间微调步进器（docs/medication-time-offset.md §5.1 / B11）。
+ *
+ * - 9 档全部渲染（-60..+60，步长 15），跨零点档位 `enabled = false` 并在下方**常驻**原因文案；
+ * - 任一时段基线已回绕 ⇒ 整条禁用 + `time_offset_wrapped_anchor_hint`；
+ * - 预览与写库走同一个 resolver（[OffsetStepperModel.preview]），这里不做任何算术；
+ * - 免责声明常驻：只调整提醒/排期时间，医嘱优先。
+ */
+@Composable
+private fun MedicationOffsetSection(stepper: OffsetStepperModel, onOffsetSelected: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small)) {
+        HorizontalDivider(Modifier.padding(vertical = MedLogSpacing.Tiny))
+        Text(
+            stringResource(R.string.time_offset_section_title),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            stringResource(R.string.time_offset_stepper_label),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        val decreaseSlot = stepper.selectedMinutes - TIME_OFFSET_STEP_MINUTES
+        val increaseSlot = stepper.selectedMinutes + TIME_OFFSET_STEP_MINUTES
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
+        ) {
+            IconButton(
+                onClick = { onOffsetSelected(decreaseSlot) },
+                enabled = stepper.stepperEnabled &&
+                    stepper.options.any { it.minutes == decreaseSlot && it.enabled },
+            ) {
+                Text("−", style = MaterialTheme.typography.titleLarge)
+            }
+            Text(
+                stringResource(R.string.time_offset_minutes_format, signedOffsetText(stepper.selectedMinutes)),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            IconButton(
+                onClick = { onOffsetSelected(increaseSlot) },
+                enabled = stepper.stepperEnabled &&
+                    stepper.options.any { it.minutes == increaseSlot && it.enabled },
+            ) {
+                Text("+", style = MaterialTheme.typography.titleLarge)
+            }
+        }
+        Row(
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Tiny),
+        ) {
+            stepper.options.forEach { option ->
+                FilterChip(
+                    selected = stepper.selectedMinutes == option.minutes,
+                    onClick = { onOffsetSelected(option.minutes) },
+                    enabled = stepper.stepperEnabled && option.enabled,
+                    label = {
+                        Text(
+                            stringResource(R.string.time_offset_minutes_format, signedOffsetText(option.minutes)),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    },
+                )
+            }
+        }
+        val wrapped = stepper.wrappedAnchor
+        if (wrapped != null) {
+            OffsetReasonText(
+                stringResource(R.string.time_offset_wrapped_anchor_hint, stringResource(wrapped.labelRes)),
+            )
+        } else {
+            stepper.options.forEach { option ->
+                val unavailable = option.unavailable
+                if (!option.enabled && unavailable is OffsetUnavailable.CrossMidnight) {
+                    val key = if (unavailable.minutes > 0) {
+                        R.string.time_offset_cross_midnight_hint_later
+                    } else {
+                        R.string.time_offset_cross_midnight_hint_earlier
+                    }
+                    OffsetReasonText(
+                        stringResource(
+                            key,
+                            stringResource(unavailable.period.labelRes),
+                            unavailable.minutes,
+                        ),
+                    )
+                }
+            }
+        }
+        if (stepper.storedRejected) {
+            OffsetReasonText(stringResource(R.string.time_offset_illegal_stored))
+        }
+        if (stepper.preview.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                stepper.preview.forEach { row ->
+                    Text(
+                        stringResource(
+                            R.string.time_offset_preview_format,
+                            stringResource(row.period.labelRes),
+                            row.base.format(OFFSET_TIME_FORMATTER),
+                            row.resolved.format(OFFSET_TIME_FORMATTER),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+        Text(
+            stringResource(R.string.time_offset_disclaimer),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun OffsetReasonText(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+}
+
+/** `0` 中性、非 0 带符号（+15 / -30）；只做展示，不参与运算。 */
+private fun signedOffsetText(minutes: Int): String = if (minutes > 0) "+$minutes" else minutes.toString()
+
+private val OFFSET_TIME_FORMATTER: java.time.format.DateTimeFormatter =
+    java.time.format.DateTimeFormatter.ofPattern("HH:mm")

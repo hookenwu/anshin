@@ -1003,4 +1003,16 @@
     <string name="recipients_switcher_title">가족 구성원 전환</string>
     <string name="recipients_switcher_action">구성원 전환</string>
     <string name="recipients_switcher_manage">가족 구성원 관리</string>
+    <!-- 약별 알림 시간 오프셋 (docs/medication-time-offset.md §5.1/§5.2/§7, B11) -->
+    <string name="time_offset_section_title">알림 시간 미세 조정</string>
+    <string name="time_offset_stepper_label">생활 시간 대비 오프셋</string>
+    <string name="time_offset_preview_format">%1$s %2$s → %3$s</string>
+    <string name="time_offset_disclaimer">알림과 일정 시간만 조정합니다. 처방된 복용 시간은 바뀌지 않으며, 항상 의사의 지시를 따르세요.</string>
+    <string name="time_offset_cross_midnight_hint_later">%1$s을(를) %2$d분 늦추면 자정을 넘어가므로 이 버전에서는 선택할 수 없습니다</string>
+    <string name="time_offset_cross_midnight_hint_earlier">%1$s을(를) %2$d분 앞당기면 자정을 넘어가므로 이 버전에서는 선택할 수 없습니다</string>
+    <string name="time_offset_illegal_stored">저장된 오프셋이 현재 생활 시간에서 자정을 넘습니다. 다시 선택해 주세요.</string>
+    <string name="time_offset_wrapped_anchor_hint">%1$s의 시간 계산이 이미 자정을 넘어가므로 이 버전에서는 이 약에 오프셋을 설정할 수 없습니다</string>
+    <string name="time_offset_minutes_format">%1$s분</string>
+    <string name="editor_save_offset_rejected">저장할 수 없습니다: %1$s의 오프셋 %2$s은(는) 자정을 넘습니다(%3$s). 이 버전에서는 지원하지 않으니 다른 단계를 선택하세요.</string>
+    <string name="time_offset_startup_banner">지난번 시작 시 알림 시간 재계산이 끝나지 않았습니다. 현재 알림이 이전 생활 시간을 따를 수 있습니다. 시간이 맞지 않으면 약을 열어 알림 시간을 확인하세요.</string>
 </resources>

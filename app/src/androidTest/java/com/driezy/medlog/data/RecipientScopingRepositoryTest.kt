@@ -65,6 +65,7 @@ class RecipientScopingRepositoryTest {
             transactions,
             activeRecipient,
             Clock.systemDefaultZone(),
+            UserPreferencesRepository(context, activeRecipient),
         )
         logs = LogRepositoryImpl(database.medicationLogDao(), activeRecipient)
         health = HealthRepositoryImpl(database.healthRecordDao(), activeRecipient)

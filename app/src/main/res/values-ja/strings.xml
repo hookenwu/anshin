@@ -1000,4 +1000,16 @@
     <string name="recipients_switcher_title">ご家族を切り替え</string>
     <string name="recipients_switcher_action">メンバー切替</string>
     <string name="recipients_switcher_manage">ご家族を管理</string>
+    <!-- 薬ごとのリマインダー時刻のずれ（docs/medication-time-offset.md §5.1/§5.2/§7, B11） -->
+    <string name="time_offset_section_title">リマインダー時刻の微調整</string>
+    <string name="time_offset_stepper_label">生活時間からのずれ</string>
+    <string name="time_offset_preview_format">%1$s %2$s → %3$s</string>
+    <string name="time_offset_disclaimer">通知と予定の時刻のみを調整します。処方された服用時刻は変わりません。必ず医師の指示に従ってください。</string>
+    <string name="time_offset_cross_midnight_hint_later">%1$s を %2$d 分遅らせると日付をまたぐため、この版では選べません</string>
+    <string name="time_offset_cross_midnight_hint_earlier">%1$s を %2$d 分早めると日付をまたぐため、この版では選べません</string>
+    <string name="time_offset_illegal_stored">保存されたずれは現在の生活時間で日付をまたぎます。選び直してください。</string>
+    <string name="time_offset_wrapped_anchor_hint">%1$s の時刻計算がすでに日付をまたいでいるため、この版ではこの薬にずれを設定できません</string>
+    <string name="time_offset_minutes_format">%1$s 分</string>
+    <string name="editor_save_offset_rejected">保存できません：%1$s のずれ %2$s は日付をまたぎます（%3$s）。この版では未対応です。別の段階を選んでください。</string>
+    <string name="time_offset_startup_banner">前回の起動時にリマインダー時刻の再計算が完了していません。現在のリマインダーは古い生活時間のままかもしれません。時刻が違う場合は、薬を開いて確認してください。</string>
 </resources>

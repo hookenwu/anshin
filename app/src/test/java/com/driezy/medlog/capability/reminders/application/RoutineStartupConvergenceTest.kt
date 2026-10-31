@@ -372,7 +372,7 @@ class RoutineStartupConvergenceTest {
         whenever(activeRecipient.current()).thenReturn(recipientId)
         val preferences: UserPreferencesRepository = mock()
         whenever(preferences.routineScheduleFor(recipientId)).thenReturn(schedule)
-        val repository = MedicationRepositoryImpl(dao, store, activeRecipient, TickingClock())
+        val repository = MedicationRepositoryImpl(dao, store, activeRecipient, TickingClock(), mock())
         val reconciler = RecordingReconciler()
         val queue = RecordingQueue()
         val reconcile = ReconcileRemindersUseCase(reconciler, queue)
