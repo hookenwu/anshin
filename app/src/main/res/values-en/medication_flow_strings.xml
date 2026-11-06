@@ -101,4 +101,13 @@
     <!-- Reminder offset inside the 我的药品 row (B12): sign and unit live here, %1$d is the absolute value -->
     <string name="medication_row_offset_later">reminder +%1$d min</string>
     <string name="medication_row_offset_earlier">reminder −%1$d min</string>
+    <!-- Medication list: period grouping view (docs/medication-grouping.md); %1$s = group, %2$d = count -->
+    <string name="medication_view_all">All</string>
+    <string name="medication_view_by_period">By time of day</string>
+    <string name="medication_group_header">%1$s · %2$d</string>
+    <string name="medication_group_morning">Morning</string>
+    <string name="medication_group_noon">Noon</string>
+    <string name="medication_group_evening">Evening</string>
+    <string name="medication_group_bedtime">Bedtime</string>
+    <string name="medication_group_without_period">No fixed time</string>
 </resources>

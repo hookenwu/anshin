@@ -73,13 +73,16 @@ internal fun MyMedicationsContent(
     today: LocalDate = LocalDate.now(),
 ) {
     var archived by rememberSaveable { mutableStateOf(false) }
+    var groupedByPeriod by rememberSaveable { mutableStateOf(false) }
     var selectionMode by rememberSaveable { mutableStateOf(false) }
-    val selected = remember { mutableStateListOf<Long>() }
+
+    /** 选择集是 `Set<Long>`：同一药在两个时段组里只可能有一个 id（docs/medication-grouping.md D4）。 */
+    var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
     var pendingKind by remember { mutableStateOf<String?>(null) }
     val visible = remember(state.medications, archived) { state.medications.filter { it.isArchived == archived } }
 
     fun toggleSelection(id: Long) {
-        if (id in selected) selected.remove(id) else selected.add(id)
+        selectedIds = toggledSelection(selectedIds, id)
     }
 
     MedLogScreenScaffold(
@@ -138,7 +141,7 @@ internal fun MyMedicationsContent(
                             selected = selectionMode,
                             onClick = {
                                 selectionMode = !selectionMode
-                                if (!selectionMode) selected.clear()
+                                if (!selectionMode) selectedIds = emptySet()
                             },
                             label = { Text(stringResource(R.string.medication_batch)) },
                         )
@@ -173,9 +176,31 @@ internal fun MyMedicationsContent(
                             )
                         }
                     }
+                    // 视图模式：全部 / 按时段（docs/medication-grouping.md D3）。放在筛选块最后一行，
+                    // 上面所有 chip 与排序行的位置一律不动，屏幕保持可辨认。
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        listOf(false, true).forEachIndexed { index, groupByPeriod ->
+                            SegmentedButton(
+                                selected = groupedByPeriod == groupByPeriod,
+                                onClick = { groupedByPeriod = groupByPeriod },
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+                                label = {
+                                    Text(
+                                        stringResource(
+                                            if (groupByPeriod) {
+                                                R.string.medication_view_by_period
+                                            } else {
+                                                R.string.medication_view_all
+                                            },
+                                        ),
+                                    )
+                                },
+                            )
+                        }
+                    }
                     if (selectionMode) {
                         Text(
-                            stringResource(R.string.medication_batch_selected, selected.size),
+                            stringResource(R.string.medication_batch_selected, selectedIds.size),
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Text(
@@ -204,70 +229,49 @@ internal fun MyMedicationsContent(
                     )
                 }
             }
-            items(visible, key = { it.id }, contentType = { "medication" }) { med ->
-                Card(
-                    onClick = { if (selectionMode) toggleSelection(med.id) else onOpen(med.id) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                ) {
-                    Row(
-                        Modifier.padding(MedLogSpacing.Large),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Medium),
-                    ) {
-                        if (selectionMode) {
-                            Checkbox(
-                                checked = med.id in selected,
-                                onCheckedChange = { toggleSelection(med.id) },
-                            )
-                        }
-                        Column(
-                            Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
-                        ) {
-                            Text(med.name, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                listOfNotNull(
-                                    "${med.doseDisplayText()} · ${scheduleLabel(med)}",
-                                    med.offsetRowText(),
-                                ).joinToString(" · "),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            statusBadgeLabel(state.statusKinds[med.id])?.let { badge ->
-                                Text(
-                                    badge,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.tertiary,
-                                )
-                            }
-                            med.stock?.let { stock ->
-                                Text(
-                                    stringResource(R.string.medication_stock_value, stock.formatDose(), med.doseUnit),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (stock <= (med.refillThreshold ?: 0.0)) {
-                                        MaterialTheme.colorScheme.error
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                )
-                            }
-                            Text(
-                                stringResource(
-                                    if (archived) {
-                                        R.string.medication_archived_hint
-                                    } else {
-                                        R.string.medication_manage_hint
-                                    },
-                                ),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+            if (groupedByPeriod) {
+                // 按时段：多时段药会出现在多个组里，行 key 必须带组前缀，否则同一 id 的重复 key 会让
+                // LazyColumn 崩溃；行本身仍是同一个实体（docs/medication-grouping.md D4）。
+                visible.groupedByDosePeriod().forEach { section ->
+                    item(key = "group:${section.group.name}", contentType = "group_header") {
+                        Text(
+                            stringResource(
+                                R.string.medication_group_header,
+                                stringResource(section.group.labelRes),
+                                section.medications.size,
+                            ),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    items(section.medications, key = {
+                        "${section.group.name}:${it.id}"
+                    }, contentType = { "medication" }) { med ->
+                        MedicationRow(
+                            med = med,
+                            statusKind = state.statusKinds[med.id],
+                            archived = archived,
+                            selectionMode = selectionMode,
+                            isSelected = med.id in selectedIds,
+                            onClick = { if (selectionMode) toggleSelection(med.id) else onOpen(med.id) },
+                            onToggleSelection = { toggleSelection(med.id) },
+                        )
                     }
                 }
+            } else {
+                items(visible, key = { it.id }, contentType = { "medication" }) { med ->
+                    MedicationRow(
+                        med = med,
+                        statusKind = state.statusKinds[med.id],
+                        archived = archived,
+                        selectionMode = selectionMode,
+                        isSelected = med.id in selectedIds,
+                        onClick = { if (selectionMode) toggleSelection(med.id) else onOpen(med.id) },
+                        onToggleSelection = { toggleSelection(med.id) },
+                    )
+                }
             }
-            if (selectionMode && selected.isNotEmpty()) {
+            if (selectionMode && selectedIds.isNotEmpty()) {
                 item(key = "batch_actions", contentType = "batch_actions") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -292,12 +296,91 @@ internal fun MyMedicationsContent(
         BatchStatusDialog(
             today = today,
             onConfirm = { date, reason ->
-                onBatchStatusChange(selected.toSet(), kind, date, reason)
+                onBatchStatusChange(selectedIds, kind, date, reason)
                 pendingKind = null
-                selected.clear()
+                selectedIds = emptySet()
             },
             onDismiss = { pendingKind = null },
         )
+    }
+}
+
+/**
+ * 列表行的唯一实现（docs/medication-grouping.md D3/D4）。
+ *
+ * `全部` 与 `按时段` 两个视图都渲染这一个 composable，因此重复显示不可能出现两份不同的行：
+ * 状态角标、库存、偏移片段都由入参的同一个 `Medication` 决定，动作只带 `med.id`。
+ */
+@Composable
+private fun MedicationRow(
+    med: Medication,
+    statusKind: String?,
+    archived: Boolean,
+    selectionMode: Boolean,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onToggleSelection: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Row(
+            Modifier.padding(MedLogSpacing.Large),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(MedLogSpacing.Medium),
+        ) {
+            if (selectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelection() },
+                )
+            }
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(MedLogSpacing.Small),
+            ) {
+                Text(med.name, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    listOfNotNull(
+                        "${med.doseDisplayText()} · ${scheduleLabel(med)}",
+                        med.offsetRowText(),
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                statusBadgeLabel(statusKind)?.let { badge ->
+                    Text(
+                        badge,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
+                med.stock?.let { stock ->
+                    Text(
+                        stringResource(R.string.medication_stock_value, stock.formatDose(), med.doseUnit),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (stock <= (med.refillThreshold ?: 0.0)) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+                Text(
+                    stringResource(
+                        if (archived) {
+                            R.string.medication_archived_hint
+                        } else {
+                            R.string.medication_manage_hint
+                        },
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

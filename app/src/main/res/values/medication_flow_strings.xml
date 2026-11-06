@@ -100,4 +100,13 @@
     <!-- 我的药品行内「提醒偏移」（B12）：符号与单位在此，%1$d 只接绝对值 -->
     <string name="medication_row_offset_later">提醒 +%1$d 分钟</string>
     <string name="medication_row_offset_earlier">提醒 −%1$d 分钟</string>
+    <!-- 我的药品：按时段分组视图（docs/medication-grouping.md）；组头格式 %1$s = 组名，%2$d = 药数 -->
+    <string name="medication_view_all">全部</string>
+    <string name="medication_view_by_period">按时段</string>
+    <string name="medication_group_header">%1$s · %2$d 种</string>
+    <string name="medication_group_morning">早</string>
+    <string name="medication_group_noon">午</string>
+    <string name="medication_group_evening">晚</string>
+    <string name="medication_group_bedtime">睡前</string>
+    <string name="medication_group_without_period">无固定时段</string>
 </resources>

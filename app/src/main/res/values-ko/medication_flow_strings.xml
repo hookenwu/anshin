@@ -100,4 +100,13 @@
     <!-- 내 약 목록 행의 알림 오프셋 (B12): 부호와 단위는 여기, %1$d 는 절댓값 -->
     <string name="medication_row_offset_later">알림 +%1$d분</string>
     <string name="medication_row_offset_earlier">알림 −%1$d분</string>
+    <!-- 복약 목록: 시간대별 보기(docs/medication-grouping.md). %1$s = 그룹 이름, %2$d = 개수 -->
+    <string name="medication_view_all">전체</string>
+    <string name="medication_view_by_period">시간대별</string>
+    <string name="medication_group_header">%1$s · %2$d개</string>
+    <string name="medication_group_morning">아침</string>
+    <string name="medication_group_noon">점심</string>
+    <string name="medication_group_evening">저녁</string>
+    <string name="medication_group_bedtime">취침 전</string>
+    <string name="medication_group_without_period">시간대 없음</string>
 </resources>
